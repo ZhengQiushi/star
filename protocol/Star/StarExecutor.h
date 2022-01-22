@@ -20,6 +20,8 @@
 
 namespace star {
 
+
+
 template <class Workload> class StarExecutor : public Worker {
 public:
   using WorkloadType = Workload;
@@ -51,13 +53,18 @@ public:
         n_started_workers(n_started_workers),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
-
+    /**
+     * 准备好
+    */
     for (auto i = 0u; i < context.coordinator_num; i++) {
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
 
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
+
+      record_messages.emplace_back(std::make_unique<Message>());
+      init_message(record_messages[i].get(), i);
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
@@ -226,7 +233,7 @@ public:
         auto result = transaction->execute(id);
         if (result == TransactionResult::READY_TO_COMMIT) {
           bool commit =
-              protocol.commit(*transaction, sync_messages, async_messages);
+              protocol.commit(*transaction, sync_messages, async_messages, record_messages);
           n_network_size.fetch_add(transaction->network_size);
           if (commit) {
             n_commit.fetch_add(1);
@@ -247,11 +254,14 @@ public:
         }
       } while (retry_transaction);
 
+      
       if (i % phase_context.batch_flush == 0) {
         flush_async_messages();
+        flush_record_messages();
       }
     }
     flush_async_messages();
+    flush_record_messages();
   }
 
   void onExit() override {
@@ -265,7 +275,9 @@ public:
     }
   }
 
-  void push_message(Message *message) override { in_queue.push(message); }
+  void push_message(Message *message) override { 
+    in_queue.push(message); 
+  }
 
   Message *pop_message() override {
     if (out_queue.empty())
@@ -353,6 +365,9 @@ private:
 
   void flush_async_messages() { flush_messages(async_messages); }
 
+  void flush_record_messages() { flush_messages(record_messages); }
+
+
   void init_message(Message *message, std::size_t dest_node_id) {
     message->set_source_node_id(coordinator_id);
     message->set_dest_node_id(dest_node_id);
@@ -373,7 +388,8 @@ private:
   std::unique_ptr<TransactionType> transaction;
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
-  std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
+  std::vector<std::unique_ptr<Message>> sync_messages, async_messages,
+                                        record_messages;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
                                  TransactionType *)>>
       messageHandlers;

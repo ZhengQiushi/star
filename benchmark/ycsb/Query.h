@@ -7,7 +7,7 @@
 #include "benchmark/ycsb/Context.h"
 #include "benchmark/ycsb/Random.h"
 #include "common/Zipf.h"
-
+#include "benchmark/ycsb/Database.h"
 namespace star {
 namespace ycsb {
 
@@ -18,9 +18,10 @@ template <std::size_t N> struct YCSBQuery {
 
 template <std::size_t N> class makeYCSBQuery {
 public:
+  using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
-                          Random &random) const {
-
+                          Random &random, DatabaseType& db) const {
+    // 
     YCSBQuery<N> query;
     int readOnly = random.uniform_dist(1, 100);
     int crossPartition = random.uniform_dist(1, 100);
@@ -46,23 +47,37 @@ public:
       do {
         retry = false;
 
-        if (context.isUniform) {
-          key = random.uniform_dist(
-              0, static_cast<int>(context.keysPerPartition) - 1);
-        } else {
-          key = Zipf::globalZipf().value(random.next_double());
-        }
+        // if (context.isUniform) {
+        key = random.uniform_dist(
+              0, static_cast<int>(context.keysPerPartition * context.partition_num) - 1);
+        // } else {
+        //   key = Zipf::globalZipf().value(random.next_double());
+        // }
+        auto getKeyPartitionID_ = [&](int key_) { 
+            size_t i = 0;
+            for( ; i < context.partition_num; i ++ ){
+              ITable *table = db.tbl_ycsb_vec[i].get();
+              bool is_exist = table->contains((void*)& key_);
+              if(is_exist)
+                break;
+            }
+            DCHECK(i != context.partition_num);
 
+            return i;
+        }; 
+
+        auto newPartitionID = getKeyPartitionID_(key);
         if (crossPartition <= context.crossPartitionProbability &&
             context.partition_num > 1) {
-          auto newPartitionID = partitionID;
+          // 跨分区
           while (newPartitionID == partitionID) {
-            newPartitionID = random.uniform_dist(0, context.partition_num - 1);
+            key = random.uniform_dist(
+              0, static_cast<int>(context.keysPerPartition * context.partition_num) - 1);
+            newPartitionID = getKeyPartitionID_(key);
           }
-          query.Y_KEY[i] = context.getGlobalKeyID(key, newPartitionID);
-        } else {
-          query.Y_KEY[i] = context.getGlobalKeyID(key, partitionID);
-        }
+        } 
+
+        query.Y_KEY[i] = key;
 
         for (auto k = 0u; k < i; k++) {
           if (query.Y_KEY[k] == query.Y_KEY[i]) {
@@ -71,9 +86,38 @@ public:
           }
         }
       } while (retry);
+
+      // LOG(INFO) << query.Y_KEY[i] << " ";
     }
+    // LOG(INFO) << "\n"
     return query;
   }
+  // std::size_t getGlobalKeyID(std::size_t key, std::size_t partitionID, DatabaseType& db){
+  //   ITable *table = db.tbl_ycsb_vec[partitionID].get();
+  //   return table->get_global_key(key);
+  // }
+
+  std::size_t getKeyPartitionID(std::size_t key,const Context &context, DatabaseType& db){
+    /**
+     * @brief 全局key
+    */
+    size_t i = 0;
+    for( ; i < context.partition_num; i ++ ){
+      ITable *table = db.tbl_ycsb_vec[i].get();
+      bool is_exist = table->contains((void*)& key);
+      if(is_exist)
+        break;
+    }
+    DCHECK(i != context.partition_num);
+
+    return i;
+  }
+
+  std::size_t getTableKeys(std::size_t partitionID, DatabaseType& db) {
+    ITable *table = db.tbl_ycsb_vec[partitionID].get();
+    return table->table_record_num();
+  }
+
 };
 } // namespace ycsb
 } // namespace star

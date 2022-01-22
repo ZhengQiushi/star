@@ -20,8 +20,14 @@
 
 namespace star {
 namespace ycsb {
+
+static constexpr std::size_t keys_num = 10;
+
+
+
 class Database {
 public:
+
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = Context;
   using RandomType = Random;
@@ -102,7 +108,6 @@ public:
   void apply_operation(const Operation &operation) {
     CHECK(false); // not supported
   }
-
 private:
   void ycsbInit(const Context &context, std::size_t partitionID) {
 
@@ -165,7 +170,7 @@ private:
     }
   }
 
-private:
+public:
   std::vector<std::vector<ITable *>> tbl_vecs;
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec;
 };

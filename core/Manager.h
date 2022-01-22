@@ -238,27 +238,29 @@ public:
   void push_message(Message *message) override {
 
     // message will only be of type signal, C_PHASE_ACK or S_PHASE_ACK
-
-    CHECK(message->get_message_count() == 1);
-
     MessagePiece messagePiece = *(message->begin());
 
     auto message_type =
-        static_cast<ControlMessage>(messagePiece.get_message_type());
+    static_cast<ControlMessage>(messagePiece.get_message_type());
 
-    switch (message_type) {
-    case ControlMessage::SIGNAL:
-      signal_in_queue.push(message);
-      break;
-    case ControlMessage::ACK:
-      ack_in_queue.push(message);
-      break;
-    case ControlMessage::STOP:
-      stop_in_queue.push(message);
-      break;
-    default:
-      CHECK(false) << "Message type: " << static_cast<uint32_t>(message_type);
-      break;
+    if (message_type != ControlMessage::COUNT){
+      CHECK(message->get_message_count() == 1);
+      switch (message_type) {
+      case ControlMessage::SIGNAL:
+        signal_in_queue.push(message);
+        break;
+      case ControlMessage::ACK:
+        ack_in_queue.push(message);
+        break;
+      case ControlMessage::STOP:
+        stop_in_queue.push(message);
+        break;
+      default:
+        CHECK(false) << "Message type: " << static_cast<uint32_t>(message_type);
+        break;
+      }
+    } else {
+        txn_queue.push(message);
     }
   }
 
@@ -313,7 +315,8 @@ protected:
   const Context &context;
   std::atomic<bool> &stopFlag;
   LockfreeQueue<Message *> ack_in_queue, signal_in_queue, stop_in_queue,
-      out_queue;
+      out_queue, 
+      txn_queue; // 记录事务的queue
   std::vector<std::unique_ptr<Message>> messages;
 
 public:

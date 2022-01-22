@@ -14,7 +14,10 @@ enum class TPCCWorkloadType { NEW_ORDER_ONLY, PAYMENT_ONLY, MIXED };
 class Context : public star::Context {
 public:
   TPCCWorkloadType workloadType = TPCCWorkloadType::NEW_ORDER_ONLY;
-
+  std::size_t getPartitionID(std::size_t key) const{
+    // TODO
+    return 0;
+  }
   Context get_single_partition_context() const {
     Context c = *this;
     c.newOrderCrossPartitionProbability = 0;

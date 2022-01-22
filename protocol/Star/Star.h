@@ -61,7 +61,8 @@ public:
 
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &syncMessages,
-              std::vector<std::unique_ptr<Message>> &asyncMessages) {
+              std::vector<std::unique_ptr<Message>> &asyncMessages,
+              std::vector<std::unique_ptr<Message>> &recordMessages) {
     // lock write set
     if (lock_write_set(txn)) {
       abort(txn);
@@ -79,6 +80,8 @@ public:
     // write and replicate
     write_and_replicate(txn, commit_tid, syncMessages, asyncMessages);
 
+    // 记录txn的record情况
+    async_txn_to_manager(txn, recordMessages);
     return true;
   }
 
@@ -198,7 +201,20 @@ private:
 
     return next_tid;
   }
+  void async_txn_to_manager(TransactionType &txn, std::vector<std::unique_ptr<Message>> &recordMessages) {
+    /**
+     * @brief 发给每个coordinator的manager， 统计txn的record关联度情况
+     * @add by truth 22-01-12
+    */
+    const std::vector<int32_t> record_key_in_this_txn = txn.get_query();
 
+    for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
+      // 给每一个coordinator都发送该信息
+        txn.network_size +=
+            MessageFactoryType::new_async_txn_of_record_message(
+                *recordMessages[k], record_key_in_this_txn);
+    }
+  }
   void
   write_and_replicate(TransactionType &txn, uint64_t commit_tid,
                       std::vector<std::unique_ptr<Message>> &syncMessages,
@@ -269,6 +285,7 @@ private:
           if (k == txn.coordinator_id) {
             continue;
           }
+          
           if (context.star_sync_in_single_master_phase) {
             txn.pendingResponses++;
             txn.network_size +=

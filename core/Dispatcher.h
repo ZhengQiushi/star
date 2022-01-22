@@ -69,6 +69,12 @@ public:
           continue;
         }
 
+        if (is_record_txn_message_for_manager(message.get())){
+          // 最后一个是manager
+          workers[numWorkers - 1]->push_message(message.release());
+          continue;
+        }
+
         auto workerId = message->get_worker_id();
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
@@ -84,6 +90,13 @@ public:
     return (*(message->begin())).get_message_type() ==
            static_cast<uint32_t>(ControlMessage::STATISTICS);
   }
+
+  bool is_record_txn_message_for_manager(Message *message) {
+    uint32_t tmp = (*(message->begin())).get_message_type();
+    return tmp ==
+           static_cast<uint32_t>(ControlMessage::COUNT);
+  }
+
 
   std::unique_ptr<Message> fetchMessage(Socket &socket) { return nullptr; }
 

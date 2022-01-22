@@ -262,6 +262,11 @@ public:
     query = makeNewOrderQuery()(context, partition_id, random);
   }
 
+  const std::vector<int32_t> get_query() override{
+    std::vector<int32_t> record_keys;
+    /**TODO**/
+    return record_keys;
+  }
 private:
   DatabaseType &db;
   const ContextType &context;
@@ -438,7 +443,11 @@ public:
   void reset_query() override {
     query = makePaymentQuery()(context, partition_id, random);
   }
-
+  const std::vector<int32_t> get_query() override{
+    std::vector<int32_t> record_keys;
+    /**TODO**/
+    return record_keys;
+  }
 private:
   DatabaseType &db;
   const ContextType &context;

@@ -44,6 +44,9 @@ public:
   }
 
   StringPiece toStringPiece() {
+    /**
+     * @brief 只保留data
+     */
     return StringPiece(stringPiece.data() + get_header_size(),
                        get_message_length() - get_header_size());
   }

@@ -9,6 +9,9 @@
 #include <vector>
 
 namespace star {
+
+enum class PartitionStrategy { RANGE, ROUND_ROBIN };
+
 class Context {
 
 public:
@@ -22,8 +25,9 @@ public:
       partitioner = "StarC";
     }
   }
-
+  virtual std::size_t getPartitionID(std::size_t key) const = 0;
 public:
+
   std::size_t coordinator_id = 0;
   std::size_t partition_num = 0;
   std::size_t worker_num = 0;
@@ -64,5 +68,8 @@ public:
   bool operation_replication = false;
 
   std::vector<std::string> peers;
+
+  PartitionStrategy strategy = PartitionStrategy::RANGE;
+
 };
 } // namespace star

@@ -20,6 +20,7 @@ enum class StarMessage {
   SYNC_VALUE_REPLICATION_REQUEST,
   SYNC_VALUE_REPLICATION_RESPONSE,
   OPERATION_REPLICATION_REQUEST,
+  // ASYNC_RECORD_TXN_REQUEST,
   NFIELDS
 };
 
@@ -83,6 +84,37 @@ public:
     return message_size;
   }
 
+
+  static std::size_t new_async_txn_of_record_message(Message &message,
+                                                     const std::vector<int32_t> record_key_in_this_txn){
+    /**
+     * @brief 记录txn的record
+     * 
+    */
+    auto key_size = sizeof(int32_t);
+
+    int32_t total_key_len = (int32_t)record_key_in_this_txn.size();
+
+    auto message_size = MessagePiece::get_header_size() +
+                        key_size + 
+                        key_size * total_key_len;
+
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(ControlMessage::COUNT),
+        message_size, 0, 0);
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    
+    encoder.write_n_bytes((void*)&total_key_len, key_size);
+    for (size_t i = 0 ; i < record_key_in_this_txn.size(); i ++ ){
+      auto key = record_key_in_this_txn[i];
+      encoder.write_n_bytes((void*)&key, key_size);
+    }
+    message.flush();
+    // LOG(INFO) << "message.get_message_count(): " << message.get_message_count() << "\n";
+    return message_size;
+  }
   static std::size_t
   new_operation_replication_message(Message &message,
                                     const Operation &operation) {
@@ -160,6 +192,17 @@ public:
       SiloHelper::unlock(tid);
     }
   }
+
+
+  // static void async_record_txn_request_handler(MessagePiece inputPiece,
+  //                                                     Message &responseMessage,
+  //                                                     Database &db,
+  //                                                     Transaction *txn) {
+
+  //   DCHECK(inputPiece.get_message_type() ==
+  //          static_cast<uint32_t>(StarMessage::ASYNC_RECORD_TXN_REQUEST));
+  //   /*Doing Nothing*/
+  // }
 
   static void sync_value_replication_request_handler(MessagePiece inputPiece,
                                                      Message &responseMessage,
@@ -274,6 +317,8 @@ public:
     v.push_back(StarMessageHandler::sync_value_replication_request_handler);
     v.push_back(StarMessageHandler::sync_value_replication_response_handler);
     v.push_back(StarMessageHandler::operation_replication_request_handler);
+    // v.push_back(StarMessageHandler::async_record_txn_request_handler);
+
     return v;
   }
 };

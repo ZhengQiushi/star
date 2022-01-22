@@ -41,6 +41,11 @@ public:
   virtual std::size_t tableID() = 0;
 
   virtual std::size_t partitionID() = 0;
+
+  virtual std::size_t table_record_num() = 0;
+
+  virtual bool contains(const void *key) = 0;
+
 };
 
 template <std::size_t N, class KeyType, class ValueType>
@@ -79,6 +84,13 @@ public:
     std::get<1>(row) = v;
   }
 
+  bool contains(const void *key) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    return map_.contains(k);
+  }
+  // std::KeyType get_global_key(std::size_t key_local) override {
+  //   return map_.get_global_key(key_local);
+  // }
   void update(const void *key, const void *value) override {
     const auto &k = *static_cast<const KeyType *>(key);
     const auto &v = *static_cast<const ValueType *>(value);
@@ -107,7 +119,9 @@ public:
 
     DCHECK(enc.size() - size == ClassOf<ValueType>::size());
   }
-
+  std::size_t table_record_num() override {
+    return map_.size();
+  }
   std::size_t key_size() override { return sizeof(KeyType); }
 
   std::size_t value_size() override { return sizeof(ValueType); }
@@ -119,7 +133,9 @@ public:
   std::size_t partitionID() override { return partitionID_; }
 
 private:
+  // 不失为一种优化方法
   HashMap<N, KeyType, std::tuple<MetaDataType, ValueType>> map_;
+
   std::size_t tableID_;
   std::size_t partitionID_;
 };

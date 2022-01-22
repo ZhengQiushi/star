@@ -10,7 +10,10 @@
 #include <unordered_map>
 
 namespace star {
-
+/**
+ * 先hash，再map，减小树的大小！
+ * 
+*/
 template <std::size_t N, class KeyType, class ValueType> class HashMap {
 public:
   using hasher = typename std::unordered_map<KeyType, ValueType>::hasher;
@@ -68,6 +71,34 @@ public:
     _map([](std::unordered_map<KeyType, ValueType> &map) { map.clear(); });
   }
 
+  const KeyType get_global_key(const int32_t &local_key) {
+    /**
+     * @brief 返回当前分区，第local_key个数据的全局key
+    */
+    int32_t count = 0;
+    KeyType result;
+    for(size_t i = 0 ; i < N ; i ++ ){
+      locks_[i].lock();
+
+      std::unordered_map<KeyType, ValueType> &cur_maps = maps_[i];
+      typename std::unordered_map<KeyType, ValueType>::iterator it = cur_maps.begin();
+      while(it != cur_maps.end()){
+        // 
+        if(count == local_key){
+          break;
+        } else {
+          count ++;
+        }
+      }
+      locks_[i].unlock();
+      if(count == local_key){
+        result = it->first;
+        break;
+      }
+    }
+  
+    return result;
+  }
 private:
   template <class ApplyFunc>
   auto &_applyAtRef(ApplyFunc applyFunc, std::size_t i) {

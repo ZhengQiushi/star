@@ -7,14 +7,15 @@ port = int(sys.argv[2])
 
 
 protocols = ["Star"]
-ns = [16, 14, 12, 10, 8, 7, 6, 5, 4, 3, 2]
+ns = [2]
 ps = [1, 5, 10, 15]
 
 for n in ns:
   if id >= n:
     break
-  ins = [line.split("\t")[0] for line in ips[0:n]]
-  outs = [line.split("\t")[1] for line in ips[0:n]]
+  ins = [line.split(" ")[0] for line in ips[0:n]]
+  outs = [line.split(" ")[1] for line in ips[0:n]]
+  print(ins, outs)
   for p in ps:
     for i in range(3):
       cmd = ""

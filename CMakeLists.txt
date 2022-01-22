@@ -3,7 +3,11 @@ project(star)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -O2")
 set(CMAKE_CXX_STANDARD 14)
+IF(CMAKE_COMPILER_IS_GNUCC)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
 find_library(jemalloc_lib jemalloc) # jemalloc 5.0
 
 # additional target to perform clang-format run, requires clang-format

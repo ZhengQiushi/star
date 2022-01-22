@@ -11,11 +11,11 @@
 namespace star {
 namespace ycsb {
 
-enum class PartitionStrategy { RANGE, ROUND_ROBIN };
 
 class Context : public star::Context {
+
 public:
-  std::size_t getPartitionID(std::size_t key) const {
+  std::size_t getPartitionID(std::size_t key) const override {
     DCHECK(key >= 0 && key < partition_num * keysPerPartition);
 
     if (strategy == PartitionStrategy::ROUND_ROBIN) {
@@ -26,6 +26,12 @@ public:
   }
 
   std::size_t getGlobalKeyID(std::size_t key, std::size_t partitionID) const {
+    /**
+     * @param key 某个分区上的ID
+     * @param partitionID 第几个分区
+     * @return 全局的key
+     * @note 重写，原来默认每个分区只有5000个，现在需要可以数据迁移
+     */
     DCHECK(key >= 0 && key < keysPerPartition && partitionID >= 0 &&
            partitionID < partition_num);
 
@@ -65,7 +71,6 @@ public:
 
   bool isUniform = true;
 
-  PartitionStrategy strategy = PartitionStrategy::ROUND_ROBIN;
 };
 } // namespace ycsb
 } // namespace star

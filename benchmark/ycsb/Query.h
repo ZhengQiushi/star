@@ -26,6 +26,21 @@ public:
     int readOnly = random.uniform_dist(1, 100);
     int crossPartition = random.uniform_dist(1, 100);
 
+    int32_t key;
+    // 
+    int32_t key_range = partitionID;
+    // generate a key in a partition
+    if (crossPartition <= context.crossPartitionProbability &&
+          context.partition_num > 1) {
+        // 跨分区
+        key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0, 0.2 * (static_cast<int>(context.keysPerPartition) - 1));
+    } else {
+      // 单分区
+        key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0.8 * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
+    }
+
     for (auto i = 0u; i < N; i++) {
       // read or write
 
@@ -40,43 +55,44 @@ public:
         }
       }
 
-      int32_t key;
 
-      // generate a key in a partition
       bool retry;
       do {
         retry = false;
 
-        // if (context.isUniform) {
-        key = random.uniform_dist(
-              0, static_cast<int>(context.keysPerPartition * context.partition_num) - 1);
-        // } else {
-        //   key = Zipf::globalZipf().value(random.next_double());
-        // }
-        auto getKeyPartitionID_ = [&](int key_) { 
-            size_t i = 0;
-            for( ; i < context.partition_num; i ++ ){
-              ITable *table = db.tbl_ycsb_vec[i].get();
-              bool is_exist = table->contains((void*)& key_);
-              if(is_exist)
-                break;
-            }
-            DCHECK(i != context.partition_num);
+        // auto getKeyPartitionID_ = [&](int key_) { 
+        //   // 返回这个key所在的partition
+        //     size_t i = 0;
+        //     for( ; i < context.partition_num; i ++ ){
+        //       ITable *table = db.tbl_ycsb_vec[i].get();
+        //       bool is_exist = table->contains((void*)& key_);
+        //       if(is_exist)
+        //         break;
+        //     }
+        //     DCHECK(i != context.partition_num);
 
-            return i;
-        }; 
+        //     return i;
+        // }; 
 
-        auto newPartitionID = getKeyPartitionID_(key);
+        // auto newPartitionID = getKeyPartitionID_(key);
         if (crossPartition <= context.crossPartitionProbability &&
             context.partition_num > 1) {
           // 跨分区
-          while (newPartitionID == partitionID) {
-            key = random.uniform_dist(
-              0, static_cast<int>(context.keysPerPartition * context.partition_num) - 1);
-            newPartitionID = getKeyPartitionID_(key);
+          int32_t key_range_tmp;
+          key_range_tmp = random.uniform_dist(
+                                0, static_cast<int>(context.partition_num) - 1);
+          while(key_range_tmp == key_range){
+            key_range_tmp = random.uniform_dist(
+                                0, static_cast<int>(context.partition_num) - 1);
           }
-        } 
-
+          key = key_range_tmp * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0, 0.2 * (static_cast<int>(context.keysPerPartition) - 1));
+          // newPartitionID = getKeyPartitionID_(key);
+        } else {
+          // 单分区
+          key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0.8 * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
+        }
         query.Y_KEY[i] = key;
 
         for (auto k = 0u; k < i; k++) {
@@ -87,9 +103,7 @@ public:
         }
       } while (retry);
 
-      // LOG(INFO) << query.Y_KEY[i] << " ";
-    }
-    // LOG(INFO) << "\n"
+    } // end for
     return query;
   }
   // std::size_t getGlobalKeyID(std::size_t key, std::size_t partitionID, DatabaseType& db){

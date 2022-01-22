@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
   google::ParseCommandLineFlags(&argc, &argv, true);
-
+  star::ycsb::Database db;
   star::ycsb::Context context;
   SETUP_CONTEXT(context);
 
@@ -35,9 +35,11 @@ int main(int argc, char *argv[]) {
     context.isUniform = false;
     star::Zipf::globalZipf().init(context.keysPerPartition, FLAGS_zipf);
   }
-
-  star::ycsb::Database db;
+  
+  
   db.initialize(context);
+  
+  // context.set_db(&db);
 
   star::Coordinator c(FLAGS_id, db, context);
   c.connectToPeers();

@@ -29,7 +29,10 @@ public:
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = Context;
   using RandomType = Random;
-
+  std::size_t getPartitionID(const star::Context &context, std::size_t key) const{
+    // TODO
+    return 0;
+  }
   ITable *find_table(std::size_t table_id, std::size_t partition_id) {
     DCHECK(table_id < tbl_vecs.size());
     DCHECK(partition_id < tbl_vecs[table_id].size());

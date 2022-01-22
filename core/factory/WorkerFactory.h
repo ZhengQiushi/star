@@ -108,8 +108,8 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<StarManager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+      auto manager = std::make_shared<StarManager<WorkloadType>>(
+          coordinator_id, context.worker_num, db, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<StarExecutor<WorkloadType>>(

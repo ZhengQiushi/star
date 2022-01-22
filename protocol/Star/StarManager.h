@@ -9,6 +9,8 @@
 #include "common/Percentile.h"
 #include "core/Manager.h"
 
+#include "benchmark/ycsb/Database.h"
+
 #include <iostream>
 #include <map>
 namespace star {
@@ -20,13 +22,22 @@ struct Node {
   int on_same_coordi;
 };
 
-class StarManager : public star::Manager {
+template <class Workload> class StarManager : public star::Manager {
 public:
   using base_type = star::Manager;
+  using WorkloadType = Workload;
+  using DatabaseType = typename WorkloadType::DatabaseType;
+  // using StorageType = typename WorkloadType::StorageType;
+  // using TransactionType = SiloTransaction;
+  // static_assert(std::is_same<typename WorkloadType::TransactionType,
+  //                            TransactionType>::value,
+  //               "Transaction types do not match.");
+  // using ContextType = typename DatabaseType::ContextType;
+  // using RandomType = typename DatabaseType::RandomType;
 
-  StarManager(std::size_t coordinator_id, std::size_t id,
+  StarManager(std::size_t coordinator_id, std::size_t id, DatabaseType& db,
               const Context &context, std::atomic<bool> &stopFlag)
-      : base_type(coordinator_id, id, context, stopFlag) {
+      : base_type(coordinator_id, id, context, stopFlag),db(db) {
 
     batch_size = context.batch_size;
   }
@@ -78,9 +89,9 @@ public:
     /**
      * @brief 统计txn涉及的record关联度
      */
-
     auto key_size = sizeof(int32_t);
     while(!txn_queue.empty()){
+      // 遍历 message
       std::unique_ptr<Message> message(txn_queue.front());
       bool ok = txn_queue.pop();
       CHECK(ok);
@@ -288,7 +299,7 @@ private:
         if (itt == it->second.end()){
           Node n;
           n.degree = 0; 
-          n.on_same_coordi = 0; // context.getPartitionID(key_one) == context.getPartitionID(key_two); // context.;
+          n.on_same_coordi =  db.getPartitionID(context, key_one) == db.getPartitionID(context, key_two); // context.;
           it->second.insert(std::pair<int32_t, Node>(key_two, n));
           itt = it->second.find(key_two);
         }
@@ -316,5 +327,8 @@ private:
     }
     outfile.close();
   }
+
+public:
+  DatabaseType &db;
 };
 } // namespace star

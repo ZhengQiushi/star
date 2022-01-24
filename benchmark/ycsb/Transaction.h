@@ -111,6 +111,9 @@ public:
   }
 
   const std::vector<int32_t> get_query() override{
+    /**
+     * @brief 获得query的所有keys
+    */
     std::vector<int32_t> record_keys;
 
     for (auto i = 0u; i < keys_num; i++) {

@@ -19,7 +19,7 @@
 #include <queue>
 
 namespace star {
-
+// executor -> manager ? 
 
 
 template <class Workload> class StarExecutor : public Worker {
@@ -100,6 +100,9 @@ public:
       // commit transaction in s_phase;
       commit_transactions();
 
+      // 准备transaction
+      // prepare_transactions_to_run();
+
       // c_phase
 
       if (coordinator_id == 0) {
@@ -153,6 +156,88 @@ public:
     }
   }
 
+  void prepare_transactions_to_run(){
+    /** 
+     * @brief 准备需要的txns
+     * @note add by truth 22-01-24
+     */
+    std::size_t query_num = 0;
+    Partitioner *partitioner = nullptr;
+    ContextType phase_context;
+
+    std::vector<ExecutorStatus> cur_status;
+    cur_status.push_back(ExecutorStatus::C_PHASE);
+    cur_status.push_back(ExecutorStatus::S_PHASE);
+
+    for(int i = 0; i < 2 ; i ++ ){
+      // 当前状态
+      auto status = cur_status[i];
+
+      if (coordinator_id != 0 && status == ExecutorStatus::C_PHASE) {
+        // TODO: 暂时不考虑部分副本处理跨分区事务...
+        continue;
+      }
+      if (status == ExecutorStatus::C_PHASE) {
+        partitioner = c_partitioner.get();
+        query_num =
+            StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+        phase_context = context.get_cross_partition_context();
+      } else if (status == ExecutorStatus::S_PHASE) {
+        partitioner = s_partitioner.get();
+        query_num =
+            StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+        phase_context = context.get_single_partition_context();
+      } else {
+        CHECK(false);
+      }   
+
+      // 
+      ProtocolType protocol(db, phase_context, *partitioner);
+      WorkloadType workload(coordinator_id, db, random, *partitioner);
+
+      StorageType storage;
+
+      uint64_t last_seed = 0;
+
+
+      for (auto i = 0u; i < query_num; i++) {
+
+        bool retry_transaction = false;
+
+        std::size_t partition_id = get_partition_id(status);
+        transaction = workload.next_transaction(context, partition_id, storage);
+        // 甄别一下？
+        auto query_keys = transaction->get_query();
+        
+        int32_t first_key;
+        size_t first_key_partition_id;//  = db.getPartitionID(context, )
+        bool is_cross_txn = false;
+        for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+          //
+          if(j == 0){
+            first_key = query_keys[j];
+            first_key_partition_id = db.getPartitionID(context, first_key);
+          } else {
+            auto cur_key = query_keys[j];
+            auto cur_key_partition_id = db.getPartitionID(context, cur_key);
+            if(cur_key_partition_id != first_key_partition_id){
+              is_cross_txn = true;
+              break;
+            }
+          }
+        }
+
+        if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
+          c_transactions_queue.push(std::move(transaction));
+        } else {
+          s_transactions_queue.push(std::move(transaction));
+        }
+      }
+    }
+    return;
+  }
+
+
   void commit_transactions() {
     while (!q.empty()) {
       auto &ptr = q.front();
@@ -185,6 +270,12 @@ public:
   }
 
   void run_transaction(ExecutorStatus status) {
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    // std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
 
     std::size_t query_num = 0;
 
@@ -197,11 +288,15 @@ public:
       query_num =
           StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
       phase_context = context.get_cross_partition_context();
+
+      // cur_transactions_queue = &c_transactions_queue;
     } else if (status == ExecutorStatus::S_PHASE) {
       partitioner = s_partitioner.get();
       query_num =
           StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
       phase_context = context.get_single_partition_context();
+
+      // cur_transactions_queue = &s_transactions_queue;
     } else {
       CHECK(false);
     }
@@ -212,8 +307,11 @@ public:
     StorageType storage;
 
     uint64_t last_seed = 0;
-
+    // auto i = 0u;
     for (auto i = 0u; i < query_num; i++) {
+       // && !cur_transactions_queue->empty()
+    // while(!cur_transactions_queue->empty()){
+      // ++ i;
 
       bool retry_transaction = false;
 
@@ -227,6 +325,10 @@ public:
           std::size_t partition_id = get_partition_id(status);
           transaction =
               workload.next_transaction(phase_context, partition_id, storage);
+          // auto hi = transaction.get(); std::move(cur_transactions_queue->front()); //
+          
+          // cur_transactions_queue->pop();
+              //           cur_transactions_queue->pop_back();
           setupHandlers(*transaction, protocol);
         }
 
@@ -344,6 +446,9 @@ private:
   }
 
   void flush_messages(std::vector<std::unique_ptr<Message>> &messages) {
+
+    // 对于record信息，全部都需要send 
+    // 每个messages相当于一个通道，对应一个coordinator
     for (auto i = 0u; i < messages.size(); i++) {
       if (i == coordinator_id) {
         continue;
@@ -394,5 +499,7 @@ private:
                                  TransactionType *)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue;
+  
+  std::queue<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue; 
 };
 } // namespace star

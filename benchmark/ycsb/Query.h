@@ -18,6 +18,7 @@ template <std::size_t N> struct YCSBQuery {
 
 template <std::size_t N> class makeYCSBQuery {
 public:
+  const double my_threshold = 0.0002;
   using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
                           Random &random, DatabaseType& db) const {
@@ -27,18 +28,19 @@ public:
     int crossPartition = random.uniform_dist(1, 100);
 
     int32_t key;
+    int32_t first_key; // 一开始的key
     // 
     int32_t key_range = partitionID;
     // generate a key in a partition
     if (crossPartition <= context.crossPartitionProbability &&
           context.partition_num > 1) {
         // 跨分区
-        key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0, 0.2 * (static_cast<int>(context.keysPerPartition) - 1));
+        first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
     } else {
       // 单分区
-        key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0.8 * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
+        first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist((1 - my_threshold) * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
     }
 
     for (auto i = 0u; i < N; i++) {
@@ -55,6 +57,10 @@ public:
         }
       }
 
+      if(i == 0){
+        query.Y_KEY[i] = first_key;
+        continue;
+      }
 
       bool retry;
       do {
@@ -78,20 +84,36 @@ public:
         if (crossPartition <= context.crossPartitionProbability &&
             context.partition_num > 1) {
           // 跨分区
-          int32_t key_range_tmp;
-          key_range_tmp = random.uniform_dist(
-                                0, static_cast<int>(context.partition_num) - 1);
-          while(key_range_tmp == key_range){
-            key_range_tmp = random.uniform_dist(
-                                0, static_cast<int>(context.partition_num) - 1);
+          // int32_t key_range_tmp;
+          // key_range_tmp = (key_range + 1)% context.partition_num;
+                          // random.uniform_dist(
+                          //      0, static_cast<int>(context.partition_num) - 1);
+          // while(key_range_tmp == key_range){
+          //   key_range_tmp = random.uniform_dist(
+          //                       0, static_cast<int>(context.partition_num) - 1);
+          // }
+          if(i < N / 2){
+            key = (first_key + static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1)));
+              if(key >= static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num)){
+                key -= static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
+              }
+          } else {
+            key = (first_key - static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1)));
+              //% static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
+            if(key < 0){
+              key += static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
+            }
           }
-          key = key_range_tmp * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0, 0.2 * (static_cast<int>(context.keysPerPartition) - 1));
           // newPartitionID = getKeyPartitionID_(key);
         } else {
           // 单分区
-          key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0.8 * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
+          key = first_key + // key_range * static_cast<int32_t>(context.keysPerPartition) + 
+              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+          if(key >= static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num)){
+            key = static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num) - 1;
+          }
         }
         query.Y_KEY[i] = key;
 

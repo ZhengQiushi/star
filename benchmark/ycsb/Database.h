@@ -110,7 +110,10 @@ public:
   }
 
   std::size_t getPartitionID(const star::Context &context, std::size_t key) const{
-    // 返回这个key所在的partition
+    /**
+     * @brief 返回这个key所在的partition 
+    */
+    // 
     size_t i = 0;
     for( ; i < context.partition_num; i ++ ){
       ITable *table = tbl_ycsb_vec[i].get();

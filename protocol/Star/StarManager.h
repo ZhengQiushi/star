@@ -101,7 +101,11 @@ public:
         MessagePiece messagePiece = *(iter);
         auto message_type =
         static_cast<ControlMessage>(messagePiece.get_message_type());
+        // 一个通道里可能有多种类型的message！
         CHECK(message_type == ControlMessage::COUNT);
+        // if (message_type != ControlMessage::COUNT){
+        //   continue;
+        // }
 
         auto stringPiece = messagePiece.toStringPiece();
 
@@ -183,7 +187,8 @@ public:
       record_txn_appearance();
     }
     // // for debug
-    show_for_degree_set();
+    if(context.coordinator_id == 0)
+      show_for_degree_set();
     
     signal_worker(ExecutorStatus::EXIT);
 
@@ -307,7 +312,7 @@ private:
         cur_node.degree ++ ;
       }
     }
-    return ;
+    return ; 
   }
 
   void show_for_degree_set(){

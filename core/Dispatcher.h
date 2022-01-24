@@ -69,6 +69,7 @@ public:
           continue;
         }
 
+        // 接其他coordinator 发过来的count包
         if (is_record_txn_message_for_manager(message.get())){
           // 最后一个是manager
           workers[numWorkers - 1]->push_message(message.release());
@@ -145,9 +146,11 @@ public:
         CHECK(ok);
         sendMessage(message.get());
       }
-
+      
+      // size_t manager_id = numWorkers - 1;
       for (auto i = group_id; i < numWorkers; i += io_thread_num) {
         dispatchMessage(workers[i]);
+        //dispatchMessage(workers, i, manager_id);
       }
       std::this_thread::yield();
     }
@@ -166,8 +169,11 @@ public:
 
     network_size += message->get_message_length();
   }
+void dispatchMessage(const std::shared_ptr<Worker> &worker) {
+  //void dispatchMessage(const std::vector<std::shared_ptr<Worker>> &workers, size_t cur_id, size_t manager_id) {
 
-  void dispatchMessage(const std::shared_ptr<Worker> &worker) {
+    //bool from_exe_to_man = cur_id != manager_id; // ){
+    //const std::shared_ptr<Worker> worker = workers[cur_id];
 
     Message *raw_message = worker->pop_message();
     if (raw_message == nullptr) {
@@ -175,8 +181,18 @@ public:
     }
     // wrap the message with a unique pointer.
     std::unique_ptr<Message> message(raw_message);
+    // auto cur_message = message.release();
+
+    // if(from_exe_to_man){
+    //       // 是executor, 需要送到本地的manager
+    //       if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
+    //         // 是 count ， 给本地发一个
+    //         workers[manager_id]->push_message(cur_message);
+    //       }
+    // }
     // send the message
     sendMessage(message.get());
+    //cur_message);
   }
 
 private:

@@ -6,9 +6,15 @@ set(CMAKE_CXX_STANDARD 14)
 IF(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
-
 ENDIF(CMAKE_COMPILER_IS_GNUCC)
-find_library(jemalloc_lib jemalloc) # jemalloc 5.0
+
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
+
+set(JEMALLOC_ROOT_DIR, "/Users/lion/homebrew/Cellar/jemalloc/5.2.1_1/lib")
+find_library(jemalloc_lib 
+jemalloc
+REQUIRED) # jemalloc 5.0
 
 # additional target to perform clang-format run, requires clang-format
 

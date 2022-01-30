@@ -4,7 +4,7 @@
 
 DEFINE_int32(read_write_ratio, 80, "read write ratio");
 DEFINE_int32(read_only_ratio, 0, "read only transaction ratio");
-DEFINE_int32(cross_ratio, 0, "cross partition transaction ratio");
+DEFINE_int32(cross_ratio, 30, "cross partition transaction ratio");
 DEFINE_int32(keys, 200000, "keys in a partition.");
 DEFINE_double(zipf, 0, "skew factor");
 
@@ -19,6 +19,10 @@ int main(int argc, char *argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  // FLAGS_log_dir = "/Users/lion/project/01_star/star/logs/";
+  // FLAGS_alsologtostderr = 1;
+  // FLAGS_logtostderr = 0;
 
   star::ycsb::Context context;
   SETUP_CONTEXT(context);
@@ -42,5 +46,8 @@ int main(int argc, char *argv[]) {
   star::Coordinator c(FLAGS_id, db, context);
   c.connectToPeers();
   c.start();
+
+  google::ShutdownGoogleLogging();
+
   return 0;
 }

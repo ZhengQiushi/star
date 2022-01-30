@@ -32,8 +32,8 @@ public:
   using MessageFactoryType = StarMessageFactory;
   using MessageHandlerType = StarMessageHandler<DatabaseType>;
 
-  Star(DatabaseType &db, const ContextType &context, Partitioner &partitioner)
-      : db(db), context(context), partitioner(partitioner) {}
+  Star(DatabaseType &db, const ContextType &context, Partitioner &partitioner, size_t id)
+      : db(db), context(context), partitioner(partitioner), id(id) {}
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
                   const void *key, void *value) const {
@@ -44,10 +44,15 @@ public:
     return SiloHelper::read(row, value, value_bytes);
   }
 
-  void abort(TransactionType &txn) {
+  void abort(TransactionType &txn, const size_t& cur_ptr) {
     auto &writeSet = txn.writeSet;
     // unlock locked records
-    for (auto i = 0u; i < writeSet.size(); i++) {
+    size_t limits = writeSet.size(); // min(size, cur_ptr) 防止把别人刚刚锁上的内容给解锁了....
+    if(cur_ptr < limits){
+      limits = cur_ptr;
+    }
+
+    for (auto i = 0u; i < limits; i++) {
       auto &writeKey = writeSet[i];
 
       auto tableId = writeKey.get_table_id();
@@ -55,40 +60,58 @@ public:
       auto table = db.find_table(tableId, partitionId);
       auto key = writeKey.get_key();
       std::atomic<uint64_t> &tid = table->search_metadata(key);
-      SiloHelper::unlock(tid);
+      // only unlock the one operated by itself!
+      SiloHelper::unlock_if_locked(tid);
     }
   }
 
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &syncMessages,
-              std::vector<std::unique_ptr<Message>> &asyncMessages) {
+              std::vector<std::unique_ptr<Message>> &asyncMessages,
+              std::vector<std::unique_ptr<Message>> &recordMessages) {
     // lock write set
-    if (lock_write_set(txn)) {
-      abort(txn);
+    // LOG(INFO) << "StarExecutor: "<< id << " " << "lock_write_set";
+    size_t cur_ptr = 0;
+
+    if (lock_write_set(txn, cur_ptr)) {
+      abort(txn, cur_ptr);
       return false;
     }
+
+    // LOG(INFO) << "StarExecutor: "<< id << " " << "validate_read_set";
+
     // commit phase 2, read validation
     if (!validate_read_set(txn)) {
-      abort(txn);
+      abort(txn, cur_ptr);
       return false;
     }
 
     // generate tid
     uint64_t commit_tid = generateTid(txn);
 
+    // LOG(INFO) << "StarExecutor: "<< id << " " << "write_and_replicate";
+
     // write and replicate
     write_and_replicate(txn, commit_tid, syncMessages, asyncMessages);
 
+
+    // LOG(INFO) << "StarExecutor: "<< id << " " << "async_txn_to_recorder";
+
+    // 记录txn的record情况
+    async_txn_to_recorder(txn, recordMessages);
     return true;
   }
 
 private:
-  bool lock_write_set(TransactionType &txn) {
+  bool lock_write_set(TransactionType &txn, size_t& cur_ptr) {
 
     auto &readSet = txn.readSet;
     auto &writeSet = txn.writeSet;
+    // 正常退出，cur_ptr == 本身
+    cur_ptr = writeSet.size();
 
     for (auto i = 0u; i < writeSet.size(); i++) {
+      // 发现后面的被其他人锁了咋办？
       auto &writeKey = writeSet[i];
       auto tableId = writeKey.get_table_id();
       auto partitionId = writeKey.get_partition_id();
@@ -99,9 +122,9 @@ private:
 
       bool success;
       uint64_t latestTid = SiloHelper::lock(tid, success);
-
       if (!success) {
         txn.abort_lock = true;
+        cur_ptr = i;
         break;
       }
 
@@ -118,7 +141,6 @@ private:
 
       writeKey.set_tid(latestTid);
     }
-
     return txn.abort_lock;
   }
 
@@ -147,6 +169,7 @@ private:
       auto key = readKey.get_key();
       uint64_t tid = table->search_metadata(key).load();
 
+      // already been modified by other write txn, abort!
       if (SiloHelper::remove_lock_bit(tid) != readKey.get_tid()) {
         txn.abort_read_validation = true;
         return false;
@@ -198,7 +221,20 @@ private:
 
     return next_tid;
   }
+  void async_txn_to_recorder(TransactionType &txn, std::vector<std::unique_ptr<Message>> &recordMessages) {
+    /**
+     * @brief 发给每个coordinator的recorder， 统计txn的record关联度情况
+     * @add by truth 22-01-12
+    */
+    const std::vector<int32_t> record_key_in_this_txn = txn.get_query();
 
+    for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
+      // 给每一个coordinator都发送该信息
+        txn.network_size +=
+            MessageFactoryType::new_async_txn_of_record_message(
+                *recordMessages[k], record_key_in_this_txn);
+    }
+  }
   void
   write_and_replicate(TransactionType &txn, uint64_t commit_tid,
                       std::vector<std::unique_ptr<Message>> &syncMessages,
@@ -221,6 +257,11 @@ private:
       auto value = writeKey.get_value();
 
       std::atomic<uint64_t> &tid = table->search_metadata(key);
+      if(!SiloHelper::is_locked(tid.load())){
+        DCHECK(false);
+      }
+      // 1000057
+      // 200002
       tids.push_back(&tid);
       table->update(key, value);
     }
@@ -229,6 +270,7 @@ private:
 
     // operation replication optimization in the partitioned phase
     if (context.operation_replication) {
+      //! TODO: not finished yet
       txn.operation.set_tid(commit_tid);
       auto partition_id = txn.operation.partition_id;
 
@@ -288,7 +330,13 @@ private:
     }
 
     for (auto i = 0u; i < tids.size(); i++) {
-      SiloHelper::unlock(*tids[i], commit_tid);
+      auto tmp = tids[i]->load();
+      if(SiloHelper::is_locked(tmp)){
+        SiloHelper::unlock(*tids[i], commit_tid);
+      } else {
+        DCHECK(false);
+      }
+      
     }
   }
 
@@ -306,6 +354,10 @@ private:
   const ContextType &context;
   Partitioner &partitioner;
   uint64_t max_tid = 0;
+
+public:
+  size_t id;
+
 };
 
 } // namespace star

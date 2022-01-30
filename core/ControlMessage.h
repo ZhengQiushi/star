@@ -10,7 +10,8 @@
 
 namespace star {
 
-enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, NFIELDS };
+enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, COUNT, NFIELDS };
+// COUNT means 统计事务涉及到的record关联性
 
 class ControlMessageFactory {
 

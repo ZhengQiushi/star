@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+
 namespace star {
 
 class Socket {
@@ -22,6 +23,12 @@ public:
   Socket() : quick_ack(false) {
     fd = socket(AF_INET, SOCK_STREAM, 0);
     DCHECK(fd >= 0);
+    
+    int optval = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0) 
+    {
+      perror("setsockopt error");
+    }
   }
 
   Socket(int fd) : quick_ack(false), fd(fd) {}

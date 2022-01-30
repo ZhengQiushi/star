@@ -41,6 +41,10 @@ public:
   virtual std::size_t tableID() = 0;
 
   virtual std::size_t partitionID() = 0;
+
+  virtual std::size_t table_record_num() = 0;
+
+  virtual bool contains(const void *key) = 0;
 };
 
 template <std::size_t N, class KeyType, class ValueType>
@@ -118,6 +122,13 @@ public:
 
   std::size_t partitionID() override { return partitionID_; }
 
+  bool contains(const void *key) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    return map_.contains(k);
+  }
+  std::size_t table_record_num() override {
+    return map_.size();
+  }
 private:
   HashMap<N, KeyType, std::tuple<MetaDataType, ValueType>> map_;
   std::size_t tableID_;

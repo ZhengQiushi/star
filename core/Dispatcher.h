@@ -69,6 +69,12 @@ public:
           continue;
         }
 
+        if (is_record_txn_message_for_recorder(message.get())){
+          // 最后一个是manager
+          workers[numWorkers - 1]->push_message(message.release());
+          continue;
+        }
+
         auto workerId = message->get_worker_id();
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
@@ -85,6 +91,13 @@ public:
            static_cast<uint32_t>(ControlMessage::STATISTICS);
   }
 
+  bool is_record_txn_message_for_recorder(Message *message) {
+    // worker -> recorder 的 COUNT message
+    uint32_t tmp = (*(message->begin())).get_message_type();
+    return tmp ==
+           static_cast<uint32_t>(ControlMessage::COUNT);
+  }
+  
   std::unique_ptr<Message> fetchMessage(Socket &socket) { return nullptr; }
 
 private:
@@ -133,8 +146,9 @@ public:
         sendMessage(message.get());
       }
 
+      size_t recorder_id = numWorkers - 1;
       for (auto i = group_id; i < numWorkers; i += io_thread_num) {
-        dispatchMessage(workers[i]);
+        dispatchMessage(workers, i, recorder_id); // dispatchMessage(workers[i]);// 
       }
       std::this_thread::yield();
     }
@@ -154,7 +168,14 @@ public:
     network_size += message->get_message_length();
   }
 
-  void dispatchMessage(const std::shared_ptr<Worker> &worker) {
+  // void dispatchMessage(const std::shared_ptr<Worker> &worker) {
+  void dispatchMessage(const std::vector<std::shared_ptr<Worker>> &workers, size_t cur_id, size_t recorder_id) {
+    /**
+     * @brief 
+     * @note modified by truth 本地worker同步txn到recorder
+     */
+    bool from_exe_to_man = cur_id != recorder_id;
+    const std::shared_ptr<Worker> worker = workers[cur_id];
 
     Message *raw_message = worker->pop_message();
     if (raw_message == nullptr) {
@@ -162,8 +183,20 @@ public:
     }
     // wrap the message with a unique pointer.
     std::unique_ptr<Message> message(raw_message);
+
+    auto cur_message = message.release();
+
+    if(from_exe_to_man){
+          // 是executor, 需要送到本地的manager
+          if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
+            // 是 count ， 给本地发一个
+            workers[recorder_id]->push_message(cur_message);
+          }
+    }
     // send the message
-    sendMessage(message.get());
+    sendMessage(cur_message);
+    // message.get());
+    // 
   }
 
 private:

@@ -83,6 +83,36 @@ public:
     return message_size;
   }
 
+  static std::size_t new_async_txn_of_record_message(Message &message,
+                                                     const std::vector<int32_t> record_key_in_this_txn){
+    /**
+     * @brief 记录txn的record
+     * 
+    */
+    auto key_size = sizeof(int32_t);
+
+    int32_t total_key_len = (int32_t)record_key_in_this_txn.size();
+
+    auto message_size = MessagePiece::get_header_size() +
+                        key_size + 
+                        key_size * total_key_len;
+
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(ControlMessage::COUNT),
+        message_size, 0, 0);
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+
+    encoder.write_n_bytes((void*)&total_key_len, key_size);
+    for (size_t i = 0 ; i < record_key_in_this_txn.size(); i ++ ){
+      auto key = record_key_in_this_txn[i];
+      encoder.write_n_bytes((void*)&key, key_size);
+    }
+    message.flush();
+    // LOG(INFO) << "message.get_message_count(): " << message.get_message_count() << "\n";
+    return message_size;
+  }
   static std::size_t
   new_operation_replication_message(Message &message,
                                     const Operation &operation) {
@@ -151,12 +181,20 @@ public:
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
 
-    uint64_t last_tid = SiloHelper::lock(tid);
-
+    bool success = false;
+    uint64_t last_tid = SiloHelper::lock(tid, success);
+    while(success != true){
+      std::this_thread::yield();
+      // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
+      last_tid = SiloHelper::lock(tid, success);
+    }
+    const auto &k = *static_cast<const int32_t *>(key);
+    // LOG(WARNING) << "KEY: " << k << " TID: " << tid;
     if (commit_tid > last_tid) {
       table.deserialize_value(key, valueStringPiece);
       SiloHelper::unlock(tid, commit_tid);
     } else {
+      // if(SiloHelper::is_locked(tid)){
       SiloHelper::unlock(tid);
     }
   }
@@ -200,7 +238,14 @@ public:
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
 
-    uint64_t last_tid = SiloHelper::lock(tid);
+    bool success = false;
+    uint64_t last_tid = SiloHelper::lock(tid, success);
+    while(success != true){
+      std::this_thread::yield();
+      // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
+      last_tid = SiloHelper::lock(tid, success);
+    }
+
     DCHECK(last_tid < commit_tid);
     table.deserialize_value(key, valueStringPiece);
     SiloHelper::unlock(tid, commit_tid);

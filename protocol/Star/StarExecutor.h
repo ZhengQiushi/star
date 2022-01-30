@@ -58,6 +58,9 @@ public:
 
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
+
+      record_messages.emplace_back(std::make_unique<Message>());
+      init_message(record_messages[i].get(), i);
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
@@ -85,7 +88,7 @@ public:
         if (status == ExecutorStatus::EXIT) {
           // commit transaction in s_phase;
           commit_transactions();
-          LOG(INFO) << "Executor " << id << " exits.";
+          LOG(WARNING) << "Executor " << id << " exits.";
           return;
         }
       } while (status != ExecutorStatus::C_PHASE);
@@ -93,33 +96,42 @@ public:
       // commit transaction in s_phase;
       commit_transactions();
 
+      // 准备transaction
+      // prepare_transactions_to_run();
+
       // c_phase
-
+      // LOG(WARNING) << "worker " << id << " c_phase";
       if (coordinator_id == 0) {
-
+        // LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
         run_transaction(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
+        // LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       } else {
         n_started_workers.fetch_add(1);
+        // LOG(WARNING) << "worker " << id << " ready to process_request";
 
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
                ExecutorStatus::C_PHASE) {
           process_request();
         }
-
+        // LOG(WARNING) << "worker " << id << " finish to process_request";
+        // LOG(WARNING) << "worker " << id << " ready to process_request for replication";
         // process replication request after all workers stop.
         process_request();
         n_complete_workers.fetch_add(1);
+        // LOG(WARNING) << "worker " << id << " finish process_request for replication";
       }
 
       // wait to s_phase
+      // LOG(WARNING) << "worker " << id << " wait to s_phase";
 
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
         std::this_thread::yield();
       }
+      // LOG(WARNING) << "worker " << id << " s_phase";
 
       // commit transaction in c_phase;
       commit_transactions();
@@ -127,10 +139,13 @@ public:
       // s_phase
 
       n_started_workers.fetch_add(1);
+      // LOG(WARNING) << "worker " << id << " ready to run_transaction";
 
       run_transaction(ExecutorStatus::S_PHASE);
 
       n_complete_workers.fetch_add(1);
+
+      // LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       // once all workers are stop, we need to process the replication
       // requests
@@ -140,12 +155,96 @@ public:
         process_request();
       }
 
+      // LOG(WARNING) << "worker " << id << " finish process_request";
+
       // n_complete_workers has been cleared
       process_request();
       n_complete_workers.fetch_add(1);
+      // LOG(WARNING) << "worker " << id << " finish process_request for replication";
+
     }
   }
 
+  void prepare_transactions_to_run(){
+    /** 
+     * @brief 准备需要的txns
+     * @note add by truth 22-01-24
+     */
+    std::size_t query_num = 0;
+    Partitioner *partitioner = nullptr;
+    ContextType phase_context;
+
+    std::vector<ExecutorStatus> cur_status;
+    cur_status.push_back(ExecutorStatus::C_PHASE);
+    cur_status.push_back(ExecutorStatus::S_PHASE);
+
+    for(int i = 0; i < 2 ; i ++ ){
+      // 当前状态
+      auto status = cur_status[i];
+
+      if (coordinator_id != 0 && status == ExecutorStatus::C_PHASE) {
+        // TODO: 暂时不考虑部分副本处理跨分区事务...
+        continue;
+      }
+      if (status == ExecutorStatus::C_PHASE) {
+        partitioner = c_partitioner.get();
+        query_num =
+            StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+        phase_context = context.get_cross_partition_context();
+      } else if (status == ExecutorStatus::S_PHASE) {
+        partitioner = s_partitioner.get();
+        query_num =
+            StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+        phase_context = context.get_single_partition_context();
+      } else {
+        CHECK(false);
+      }   
+
+      // 
+      ProtocolType protocol(db, phase_context, *partitioner);
+      WorkloadType workload(coordinator_id, db, random, *partitioner);
+
+      StorageType storage;
+
+      uint64_t last_seed = 0;
+
+
+      for (auto i = 0u; i < query_num; i++) {
+
+        bool retry_transaction = false;
+
+        std::size_t partition_id = get_partition_id(status);
+        transaction = workload.next_transaction(context, partition_id, storage);
+        // 甄别一下？
+        auto query_keys = transaction->get_query();
+
+        int32_t first_key;
+        size_t first_key_partition_id;//  = db.getPartitionID(context, )
+        bool is_cross_txn = false;
+        for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+          //
+          if(j == 0){
+            first_key = query_keys[j];
+            first_key_partition_id = db.getPartitionID(context, first_key);
+          } else {
+            auto cur_key = query_keys[j];
+            auto cur_key_partition_id = db.getPartitionID(context, cur_key);
+            if(cur_key_partition_id != first_key_partition_id){
+              is_cross_txn = true;
+              break;
+            }
+          }
+        }
+
+        if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
+          c_transactions_queue.push(std::move(transaction));
+        } else {
+          s_transactions_queue.push(std::move(transaction));
+        }
+      }
+    }
+    return;
+  }
   void commit_transactions() {
     while (!q.empty()) {
       auto &ptr = q.front();
@@ -178,39 +277,56 @@ public:
   }
 
   void run_transaction(ExecutorStatus status) {
-
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
     std::size_t query_num = 0;
 
     Partitioner *partitioner = nullptr;
 
     ContextType phase_context;
 
+    if(id == 0){
+      // LOG(INFO) << "hi, i'm thread 0";
+    }
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = c_partitioner.get();
       query_num =
           StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
       phase_context = context.get_cross_partition_context();
+
+      cur_transactions_queue = &c_transactions_queue;
+
     } else if (status == ExecutorStatus::S_PHASE) {
       partitioner = s_partitioner.get();
       query_num =
           StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
       phase_context = context.get_single_partition_context();
+
+      cur_transactions_queue = &s_transactions_queue;
     } else {
       CHECK(false);
     }
 
-    ProtocolType protocol(db, phase_context, *partitioner);
+    ProtocolType protocol(db, phase_context, *partitioner, id);
     WorkloadType workload(coordinator_id, db, random, *partitioner);
 
     StorageType storage;
 
     uint64_t last_seed = 0;
 
+    auto i = 0u;
+    // while(!cur_transactions_queue->empty()){
     for (auto i = 0u; i < query_num; i++) {
 
       bool retry_transaction = false;
 
+      // LOG(INFO) << "StarExecutor: "<< id << " " << in_queue.read_available() << " " << out_queue.read_available();
       do {
+        // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request";
         process_request();
         last_seed = random.get_seed();
 
@@ -219,14 +335,17 @@ public:
         } else {
           std::size_t partition_id = get_partition_id(status);
           transaction =
+              // std::move(cur_transactions_queue->front());
               workload.next_transaction(phase_context, partition_id, storage);
+          // cur_transactions_queue->pop();
           setupHandlers(*transaction, protocol);
         }
+        // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute";
 
         auto result = transaction->execute(id);
         if (result == TransactionResult::READY_TO_COMMIT) {
           bool commit =
-              protocol.commit(*transaction, sync_messages, async_messages);
+              protocol.commit(*transaction, sync_messages, async_messages, record_messages);
           n_network_size.fetch_add(transaction->network_size);
           if (commit) {
             n_commit.fetch_add(1);
@@ -248,10 +367,12 @@ public:
       } while (retry_transaction);
 
       if (i % phase_context.batch_flush == 0) {
-        flush_async_messages();
+        flush_async_messages(); 
+        flush_record_messages();
       }
     }
     flush_async_messages();
+    flush_record_messages();
   }
 
   void onExit() override {
@@ -353,6 +474,8 @@ private:
 
   void flush_async_messages() { flush_messages(async_messages); }
 
+  void flush_record_messages() { flush_messages(record_messages); }
+
   void init_message(Message *message, std::size_t dest_node_id) {
     message->set_source_node_id(coordinator_id);
     message->set_dest_node_id(dest_node_id);
@@ -373,10 +496,12 @@ private:
   std::unique_ptr<TransactionType> transaction;
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
-  std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
+  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
                                  TransactionType *)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue;
+
+  std::queue<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue;
 };
 } // namespace star

@@ -249,6 +249,12 @@ public:
                partitionNum, threadsNum, partitioner.get());
   }
 
+  std::size_t getPartitionID(const star::Context &context, std::size_t key) const{
+    // 返回这个key所在的partition
+    size_t i = 0;
+    // TODO
+    return i;
+  }
   void apply_operation(const Operation &operation) {
 
     Decoder dec(operation.data);

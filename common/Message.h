@@ -195,7 +195,7 @@ private:
   }
 
   void set_message_count(uint64_t message_count) {
-    DCHECK(message_count < (1 << 15));
+    DCHECK(message_count < (1 << 20));
     clear_message_count();
     get_header_ref() |= (message_count << MESSAGE_COUNT_OFFSET);
   }

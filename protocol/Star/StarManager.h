@@ -79,16 +79,25 @@ public:
       int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
       auto c_start = std::chrono::steady_clock::now();
       // start c-phase
-      // LOG(INFO) << "start C-Phase";
+      LOG(INFO) << "start C-Phase";
 
       n_completed_workers.store(0);
       n_started_workers.store(0);
       batch_size_percentile.add(batch_size);
       signal_worker(merge_value_to_signal(batch_size, ExecutorStatus::C_PHASE));
+      
+      // LOG(INFO) << "wait_all_workers_start";
+
       wait_all_workers_start();
+
+      // LOG(INFO) << "wait_all_workers_finish";
+      
       wait_all_workers_finish();
       set_worker_status(ExecutorStatus::STOP);
       broadcast_stop();
+
+      // LOG(INFO) << "wait_ack";
+
       wait4_ack();
 
       {
@@ -101,19 +110,33 @@ public:
       auto s_start = std::chrono::steady_clock::now();
       // start s-phase
 
-      // LOG(INFO) << "start S-Phase";
+      LOG(INFO) << "start S-Phase";
 
       n_completed_workers.store(0);
       n_started_workers.store(0);
       signal_worker(ExecutorStatus::S_PHASE);
       wait_all_workers_start();
+      
+      // LOG(INFO) << "wait_all_workers_finish";
+
       wait_all_workers_finish();
+      
+      // LOG(INFO) << "wait_all_workers_finish";
+
       broadcast_stop();
       wait4_stop(n_coordinators - 1);
+
+      // LOG(INFO) << "wait_all_workers_finish";
+
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
+      
+      // LOG(INFO) << "wait4_ack";
+
       wait4_ack();
+
+      // LOG(INFO) << "finished";
       {
         auto now = std::chrono::steady_clock::now();
 
@@ -126,9 +149,9 @@ public:
                 .count();
 
         all_percentile.add(all_time);
-        if (context.star_dynamic_batch_size) {
-          update_batch_size(all_time);
-        }
+        // if (context.star_dynamic_batch_size) {
+        //   update_batch_size(all_time);
+        // }
       }
     }
 
@@ -156,7 +179,7 @@ public:
         break;
       }
 
-      // LOG(INFO) << "start C-Phase";
+      //LOG(INFO) << "start C-Phase";
 
       // start c-phase
 
@@ -164,14 +187,28 @@ public:
       n_completed_workers.store(0);
       n_started_workers.store(0);
       set_worker_status(ExecutorStatus::C_PHASE);
+      
+      // LOG(INFO) << "wait_all_workers_start";
+
       wait_all_workers_start();
+      
+      // LOG(INFO) << "wait4_stop";
+
       wait4_stop(1);
+      
+      
       set_worker_status(ExecutorStatus::STOP);
+      
+      // LOG(INFO) << "wait_all_workers_finish";
+
       wait_all_workers_finish();
+
+      //LOG(INFO) << "send_ack";
+
       send_ack();
 
-      // LOG(INFO) << "start S-Phase";
-
+      //LOG(INFO) << "start S-Phase";
+      
       // start s-phase
 
       signal = wait4_signal();
@@ -179,17 +216,28 @@ public:
       n_completed_workers.store(0);
       n_started_workers.store(0);
       set_worker_status(ExecutorStatus::S_PHASE);
+      // LOG(INFO) << "wait_all_workers_start";
       wait_all_workers_start();
+      // LOG(INFO) << "wait_all_workers_finish";
       wait_all_workers_finish();
       broadcast_stop();
+      // LOG(INFO) << "wait4_stop";
       wait4_stop(n_coordinators - 1);
+      // n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
+      // LOG(INFO) << "wait_all_workers_finish";
       wait_all_workers_finish();
+      // LOG(INFO) << "send_ack";
+
       send_ack();
+      // LOG(INFO) << "finished";
+
     }
   }
 
 public:
   uint32_t batch_size;
+
+  std::atomic<uint32_t> recorder_status;
 };
 } // namespace star

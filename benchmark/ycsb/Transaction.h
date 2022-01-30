@@ -49,10 +49,10 @@ public:
       auto key = query.Y_KEY[i];
       storage.ycsb_keys[i].Y_KEY = key;
       if (query.UPDATE[i]) {
-        this->search_for_update(ycsbTableID, context.getPartitionID(key),
+        this->search_for_update(ycsbTableID, db.getPartitionID(context, key),
                                 storage.ycsb_keys[i], storage.ycsb_values[i]);
       } else {
-        this->search_for_read(ycsbTableID, context.getPartitionID(key),
+        this->search_for_read(ycsbTableID, db.getPartitionID(context, key),
                               storage.ycsb_keys[i], storage.ycsb_values[i]);
       }
     }
@@ -89,7 +89,7 @@ public:
               local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         }
 
-        this->update(ycsbTableID, context.getPartitionID(key),
+        this->update(ycsbTableID, db.getPartitionID(context, key),
                      storage.ycsb_keys[i], storage.ycsb_values[i]);
       }
     }
@@ -109,7 +109,16 @@ public:
   void reset_query() override {
     query = makeYCSBQuery<keys_num>()(context, partition_id, random);
   }
+  
+  const std::vector<int32_t> get_query() override{
+    std::vector<int32_t> record_keys;
 
+    for (auto i = 0u; i < keys_num; i++) {
+      auto key = query.Y_KEY[i];
+      record_keys.push_back(key);
+    }
+    return record_keys;
+  }
 private:
   DatabaseType &db;
   const ContextType &context;

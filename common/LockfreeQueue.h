@@ -3,9 +3,16 @@
 //
 
 #pragma once
-
+#include <thread>
 #include "glog/logging.h"
 #include <boost/lockfree/spsc_queue.hpp>
+// #include <immintrin.h>
+
+#if defined(__i386__) || defined(__x86_64__)
+#  define SPINLOCK_YIELD __asm volatile("pause" : :)
+#else
+#  define SPINLOCK_YIELD std::this_thread::yield()
+#endif
 
 namespace star {
 
@@ -45,6 +52,10 @@ public:
   auto capacity() { return N; }
 
 private:
-  void nop_pause() { __asm volatile("pause" : :); }
+  void nop_pause() { 
+    // SPINLOCK_YIELD;
+    __asm__ volatile("nop" : :);
+     }
 };
 } // namespace star
+

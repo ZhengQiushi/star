@@ -113,6 +113,7 @@ public:
       auto manager = std::make_shared<StarManager>(
           coordinator_id, context.worker_num, context, stop_flag);
 
+      // add recorder for data-transformation
       auto recorder = std::make_shared<StarRecorder<WorkloadType>>(
           coordinator_id, context.worker_num + 1, context, stop_flag, db,
           manager->recorder_status, manager->n_completed_workers, manager->n_started_workers);

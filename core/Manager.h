@@ -207,6 +207,8 @@ public:
     }
 
     flush_messages();
+    LOG(INFO) << "send stop from " << coordinator_id << " to the other..."; 
+
   }
 
   void send_ack() {
@@ -251,9 +253,11 @@ public:
       signal_in_queue.push(message);
       break;
     case ControlMessage::ACK:
+      LOG(INFO) << "ACK " << id; 
       ack_in_queue.push(message);
       break;
     case ControlMessage::STOP:
+      LOG(INFO) << "STOP " << id; 
       stop_in_queue.push(message);
       break;
     default:

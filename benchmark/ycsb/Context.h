@@ -65,7 +65,7 @@ public:
 
   bool isUniform = true;
 
-  PartitionStrategy strategy = PartitionStrategy::ROUND_ROBIN;
+  PartitionStrategy strategy = PartitionStrategy::RANGE;
 };
 } // namespace ycsb
 } // namespace star

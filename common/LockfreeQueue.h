@@ -49,6 +49,13 @@ public:
     }
   }
 
+  bool wait_till_non_empty_timeout() {
+    while (base_type::empty()) {
+      nop_pause();
+    }
+    return true;
+  }
+
   auto capacity() { return N; }
 
 private:

@@ -65,22 +65,6 @@ public:
       bool retry;
       do {
         retry = false;
-
-        // auto getKeyPartitionID_ = [&](int key_) { 
-        //   // 返回这个key所在的partition
-        //     size_t i = 0;
-        //     for( ; i < context.partition_num; i ++ ){
-        //       ITable *table = db.tbl_ycsb_vec[i].get();
-        //       bool is_exist = table->contains((void*)& key_);
-        //       if(is_exist)
-        //         break;
-        //     }
-        //     DCHECK(i != context.partition_num);
-
-        //     return i;
-        // }; 
-
-        // auto newPartitionID = getKeyPartitionID_(key);
         if (crossPartition <= context.crossPartitionProbability &&
             context.partition_num > 1) {
           // 跨分区
@@ -109,12 +93,14 @@ public:
           // newPartitionID = getKeyPartitionID_(key);
         } else {
           // 单分区
-          key = first_key + // key_range * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
-          if(key >= static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num)){
-            key = static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num) - 1;
+          auto random_int32 = random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+          key = first_key + random_int32; // key_range * static_cast<int32_t>(context.keysPerPartition) + 
+          
+          if(key >= (key_range + 1) * static_cast<int32_t>(context.keysPerPartition) - 1 ){ // static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num)){
+            key = first_key - random_int32;// static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num) - 1;
           }
         }
+
         query.Y_KEY[i] = key;
 
         for (auto k = 0u; k < i; k++) {

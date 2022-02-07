@@ -66,6 +66,32 @@ public:
     flush_messages();
   }
 
+  bool wait4_ack_time() {
+
+    std::chrono::steady_clock::time_point start;
+
+    // only coordinator waits for ack
+    DCHECK(coordinator_id == 0);
+
+    std::size_t n_coordinators = context.coordinator_num;
+
+    for (auto i = 0u; i < n_coordinators - 1; i++) {
+
+      ack_in_queue.wait_till_non_empty();
+
+      std::unique_ptr<Message> message(ack_in_queue.front());
+      bool ok = ack_in_queue.pop();
+      CHECK(ok);
+
+      CHECK(message->get_message_count() == 1);
+
+      MessagePiece messagePiece = *(message->begin());
+      auto type = static_cast<ControlMessage>(messagePiece.get_message_type());
+      CHECK(type == ControlMessage::ACK);
+    }
+
+    return true;
+  }
   void coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
@@ -86,17 +112,17 @@ public:
       batch_size_percentile.add(batch_size);
       signal_worker(merge_value_to_signal(batch_size, ExecutorStatus::C_PHASE));
       
-      // LOG(INFO) << "wait_all_workers_start";
+      LOG(INFO) << "wait_all_workers_start";
 
       wait_all_workers_start();
 
-      // LOG(INFO) << "wait_all_workers_finish";
+      LOG(INFO) << "wait_all_workers_finish";
       
       wait_all_workers_finish();
       set_worker_status(ExecutorStatus::STOP);
       broadcast_stop();
 
-      // LOG(INFO) << "wait_ack";
+      LOG(INFO) << "wait_ack";
 
       wait4_ack();
 
@@ -179,7 +205,7 @@ public:
         break;
       }
 
-      //LOG(INFO) << "start C-Phase";
+      LOG(INFO) << "start C-Phase";
 
       // start c-phase
 
@@ -188,26 +214,26 @@ public:
       n_started_workers.store(0);
       set_worker_status(ExecutorStatus::C_PHASE);
       
-      // LOG(INFO) << "wait_all_workers_start";
+      LOG(INFO) << "wait_all_workers_start";
 
       wait_all_workers_start();
       
-      // LOG(INFO) << "wait4_stop";
+      LOG(INFO) << "wait4_stop";
 
       wait4_stop(1);
       
       
       set_worker_status(ExecutorStatus::STOP);
       
-      // LOG(INFO) << "wait_all_workers_finish";
+      LOG(INFO) << "wait_all_workers_finish";
 
       wait_all_workers_finish();
 
-      //LOG(INFO) << "send_ack";
+      LOG(INFO) << "send_ack";
 
       send_ack();
 
-      //LOG(INFO) << "start S-Phase";
+      LOG(INFO) << "start S-Phase";
       
       // start s-phase
 
@@ -221,7 +247,7 @@ public:
       // LOG(INFO) << "wait_all_workers_finish";
       wait_all_workers_finish();
       broadcast_stop();
-      // LOG(INFO) << "wait4_stop";
+      LOG(INFO) << "wait4_stop";
       wait4_stop(n_coordinators - 1);
       // n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);

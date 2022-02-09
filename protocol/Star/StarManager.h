@@ -11,6 +11,8 @@
 
 namespace star {
 
+const int data_transform_interval = 50;
+
 class StarManager : public star::Manager {
 public:
   using base_type = star::Manager;
@@ -20,6 +22,7 @@ public:
       : base_type(coordinator_id, id, context, stopFlag) {
 
     batch_size = context.batch_size;
+    recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
   }
 
   ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
@@ -92,6 +95,22 @@ public:
 
     return true;
   }
+
+  void set_record_worker_status(ExecutorStatus status) {
+    recorder_status.store(static_cast<uint32_t>(status));
+  }
+
+  void wait_recorder_worker_finish(){
+    /**
+     * @brief 
+     * 
+     */
+    while(recorder_status.load() != static_cast<int32_t>(ExecutorStatus::STOP)){
+      std::this_thread::yield();
+    }
+  }
+
+
   void coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
@@ -132,6 +151,16 @@ public:
             std::chrono::duration_cast<std::chrono::microseconds>(now - c_start)
                 .count());
       }
+
+      // start data-transform 
+      static int cur_data_transform_num = 0;
+      if (cur_data_transform_num % data_transform_interval == data_transform_interval - 1) {
+        // 开始操作 
+        set_record_worker_status(ExecutorStatus::START);
+        LOG(INFO) << "wait_recorder_worker_finish";
+        wait_recorder_worker_finish();
+      }
+      cur_data_transform_num ++;
 
       auto s_start = std::chrono::steady_clock::now();
       // start s-phase

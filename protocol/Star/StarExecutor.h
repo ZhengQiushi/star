@@ -117,6 +117,7 @@ public:
         // LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       } else {
+        
         n_started_workers.fetch_add(1);
         // LOG(WARNING) << "worker " << id << " ready to process_request";
 
@@ -170,10 +171,10 @@ public:
       n_complete_workers.fetch_add(1);
       // LOG(WARNING) << "worker " << id << " finish process_request for replication";
 
-      if(id == 0){
-      LOG(INFO) << id << " over prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
-        s_transactions_queue.size();
-    }
+    //   if(id == 0){
+    //   LOG(INFO) << id << " over prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
+    //     s_transactions_queue.size();
+    // }
     }
   }
 
@@ -308,6 +309,7 @@ public:
     std::size_t partition_id;
 
     if (status == ExecutorStatus::C_PHASE) {
+      // 从当前线程管的分区里随机选一个
       CHECK(coordinator_id == 0);
       CHECK(context.partition_num % context.worker_num == 0);
       auto partition_num_per_thread =
@@ -315,6 +317,7 @@ public:
       partition_id = id * partition_num_per_thread +
                      random.uniform_dist(0, partition_num_per_thread - 1);
     } else if (status == ExecutorStatus::S_PHASE) {
+      // 
       partition_id = id * context.coordinator_num + coordinator_id;
     } else {
       CHECK(false);
@@ -368,9 +371,9 @@ public:
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue->size();
     
-    if(id == 0 ){
-      LOG(INFO) << query_num << " ";
-    }
+    // if(id == 0 ){
+    //   LOG(INFO) << query_num << " ";
+    // }
     
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
     for (auto i = 0u; i < cur_queue_size; i++) { // query_num

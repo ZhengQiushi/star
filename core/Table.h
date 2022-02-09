@@ -28,6 +28,8 @@ public:
 
   virtual void update(const void *key, const void *value) = 0;
 
+  virtual void delete_(const void *key) = 0;
+
   virtual void deserialize_value(const void *key, StringPiece stringPiece) = 0;
 
   virtual void serialize_value(Encoder &enc, const void *value) = 0;
@@ -88,6 +90,12 @@ public:
     const auto &v = *static_cast<const ValueType *>(value);
     auto &row = map_[k];
     std::get<1>(row) = v;
+  }
+
+  void delete_(const void *key) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    map_.remove(k);
+    LOG(INFO) << "Deleted!";
   }
 
   void deserialize_value(const void *key, StringPiece stringPiece) override {

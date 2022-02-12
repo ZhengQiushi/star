@@ -83,17 +83,27 @@ public:
 
 
 
+  template <typename key_type, typename value_type>
+  static std::size_t new_transmit_message(Message &message, 
+                                          const myMove<key_type, value_type>& move) {
+    /**
+     * @brief 同一个表的迁移
+     * @note 可能为零
+     * 
+     */
+    // int tableId = ycsb::tableID;
 
-  static std::size_t new_transmit_message(Message &message, const myMove& move) {
+    int32_t total_key_len = (int32_t)move.records.size();
+    // DCHECK(move.records.size() >= 0);
 
-    auto key_size = sizeof(int32_t);
-    
-    int32_t total_key_len = (int32_t)move.keys.size();
+    int32_t key_size = sizeof(int32_t);// move.records[0].key_size;
+    int32_t field_size = (total_key_len > 0) ? move.records[0].field_size: 0;
 
-    auto message_size = MessagePiece::get_header_size() +
+    auto message_size = MessagePiece::get_header_size() + 
                         key_size +                 // len of keys
-                        key_size * total_key_len + // keys
-                        key_size + key_size;       // src and dest partition
+                        key_size +                 // field_size
+                        (key_size + key_size + field_size) * total_key_len + // src partition + keys + value 
+                        key_size;       // dest partition
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(ControlMessage::TRANSMIT), message_size, 0, 0);
@@ -101,12 +111,15 @@ public:
     encoder << message_piece_header;
 
     encoder.write_n_bytes((void*)&total_key_len, key_size);
-    for (size_t i = 0 ; i < move.keys.size(); i ++ ){
-      auto key = move.keys[i];
-      encoder.write_n_bytes((void*)&key, key_size);
-    }
+    encoder.write_n_bytes((void*)&field_size, key_size);
 
-    encoder.write_n_bytes((void*)&move.src_partition_id, key_size);
+    for (size_t i = 0 ; i < move.records.size(); i ++ ){
+      // ITable* table = db.find_table(tableId, move.records[i].src_partition_id);
+    
+      encoder.write_n_bytes((void*)&move.records[i].src_partition_id, key_size);
+      encoder.write_n_bytes((void*)&move.records[i].key, key_size);
+      encoder.write_n_bytes((void*)&move.records[i].value, field_size);
+    }
     encoder.write_n_bytes((void*)&move.dest_partition_id, key_size);
 
     message.flush();

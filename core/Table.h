@@ -32,6 +32,8 @@ public:
 
   virtual void deserialize_value(const void *key, StringPiece stringPiece) = 0;
 
+  // virtual void deserialize_value_insert(const void *key, StringPiece stringPiece) = 0;
+
   virtual void serialize_value(Encoder &enc, const void *value) = 0;
 
   virtual std::size_t key_size() = 0;
@@ -99,7 +101,6 @@ public:
   }
 
   void deserialize_value(const void *key, StringPiece stringPiece) override {
-
     std::size_t size = stringPiece.size();
     const auto &k = *static_cast<const KeyType *>(key);
     auto &row = map_[k];
@@ -110,6 +111,29 @@ public:
 
     DCHECK(size - dec.size() == ClassOf<ValueType>::size());
   }
+
+  // void deserialize_value_insert(const void *key, StringPiece stringPiece) override {
+  //   /**
+  //    * @brief update 
+  //    * 
+  //    */
+  //   std::size_t size = stringPiece.size();
+  //   const auto &k = *static_cast<const KeyType *>(key);
+    
+  //   // insert 
+  //   bool ok = map_.contains(k);
+  //   DCHECK(ok == false);
+  //   auto &row = map_[k];
+  //   std::get<0>(row).store(0);
+
+  //   // update
+  //   auto &v = std::get<1>(row);
+
+  //   Decoder dec(stringPiece);
+  //   dec >> v;
+
+  //   DCHECK(size - dec.size() == ClassOf<ValueType>::size());
+  // }
 
   void serialize_value(Encoder &enc, const void *value) override {
 

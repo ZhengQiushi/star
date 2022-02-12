@@ -44,12 +44,20 @@ template <> class InferType<star::tpcc::Context> {
 public:
   template <class Transaction>
   using WorkloadType = star::tpcc::Workload<Transaction>;
+
+  // using KeyType = tpcc::tpcc::key;
+  // using ValueType = tpcc::tpcc::value;
+  using KeyType = ycsb::ycsb::key;
+  using ValueType = ycsb::ycsb::value;
 };
 
 template <> class InferType<star::ycsb::Context> {
 public:
   template <class Transaction>
   using WorkloadType = star::ycsb::Workload<Transaction>;
+
+  using KeyType = ycsb::ycsb::key;
+  using ValueType = ycsb::ycsb::value;
 };
 
 class WorkerFactory {
@@ -109,12 +117,16 @@ public:
       using TransactionType = star::SiloTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
+      using KeyType_ = 
+          typename InferType<Context>::KeyType;
+      using ValueType_ = 
+          typename InferType<Context>::ValueType;
 
       auto manager = std::make_shared<StarManager>(
           coordinator_id, context.worker_num, context, stop_flag);
 
       // add recorder for data-transformation
-      auto recorder = std::make_shared<StarRecorder<WorkloadType>>(
+      auto recorder = std::make_shared<StarRecorder<WorkloadType, KeyType_, ValueType_> >(
           coordinator_id, context.worker_num + 1, context, stop_flag, db,
           manager->recorder_status, manager->n_completed_workers, manager->n_started_workers);
 

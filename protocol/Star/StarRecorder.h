@@ -102,10 +102,13 @@ class fixed_priority_queue : public std::vector<Node> // <T,Sequence,Compare>
     void   operator delete[] (void*);
 };
 
-template <class Workload> class StarRecorder : public Worker {
+template <class Workload, typename key_type, typename value_type> 
+class StarRecorder : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
+  using KeyType = key_type;
+  using ValueType = value_type; 
 
   StarRecorder(std::size_t coordinator_id, std::size_t id, const Context &context,
           std::atomic<bool> &stopFlag, DatabaseType& db,
@@ -130,11 +133,13 @@ public:
 
     worker_status.store(static_cast<uint32_t>(ExecutorStatus::STOP));
   }
-bool prepare_for_transmit(myMove& move) {
+
+bool prepare_for_transmit(myMove<KeyType, ValueType>& move) {
     /**
      * @brief 找最大的策略... 最简单的策略
      * 
      */
+    int tableId = ycsb::ycsb::tableID;
     if(big_node_heap.size() == 0)
       return false;
     auto max = big_node_heap[0]; 
@@ -146,27 +151,44 @@ bool prepare_for_transmit(myMove& move) {
       return false;
     }
     // LOG(INFO) << max.from << " " << max.to; 
-    move.src_partition_id = partitionFrom;
+    MoveRecord<ycsb::ycsb::key, ycsb::ycsb::value> move_record;
     move.dest_partition_id = partitionEnd;
-    move.keys.push_back(max.from);
 
+    // get ycsb key
+    move_record.key.Y_KEY = max.from;
+    move_record.src_partition_id = partitionFrom;
+    
+
+    // get ycsb value
+    ITable *src_table = db.find_table(tableId, move_record.src_partition_id);
+    auto value = src_table->search_value(&move_record.key);
+    move_record.value = *((ycsb::ycsb::value*) value);
+    move_record.field_size = src_table->field_size();
+    move_record.key_size = src_table->key_size();
+
+    move.records.push_back(move_record);
+    
+    move_in_history.push_back(move); // For Debug
+
+    
     return true;
   }
-
-  void transmit_record(const myMove& move){
+  
+  void transmit_record(const myMove<KeyType, ValueType>& move){
     //!TODO: 应该将tableID通过msg传过来
     int tableId = ycsb::ycsb::tableID;
-    ITable *src_table = db.find_table(tableId, move.src_partition_id);
     ITable *dest_table = db.find_table(tableId, move.dest_partition_id);
 
-    for(size_t i = 0 ; i < move.keys.size(); i ++ ){
-      ycsb::ycsb::key ycsb_keys;
-      ycsb_keys.Y_KEY = move.keys[i];
-      auto value = src_table->search_value(&ycsb_keys);
-      
+    for(size_t i = 0 ; i < move.records.size(); i ++ ){
+      ITable *src_table = db.find_table(tableId, move.records[i].src_partition_id);
+
+      ycsb::ycsb::key ycsb_keys = move.records[i].key;
+      ycsb::ycsb::value ycsb_value = move.records[i].value;
+
+      // auto value = src_table->search_value(&ycsb_keys);
       // ycsb::ycsb::value ycsb_value = *((ycsb::ycsb::value*) value );
       
-      dest_table->insert(&ycsb_keys, value);
+      dest_table->insert(&ycsb_keys, &ycsb_value);
       src_table->delete_(&ycsb_keys);
     }
     // LOG(INFO) << dest_table->table_record_num() << " " << src_table->table_record_num();
@@ -175,7 +197,7 @@ bool prepare_for_transmit(myMove& move) {
     
   }
 
-  void signal_recorder(const myMove& move) {
+  void signal_recorder(const myMove<KeyType, ValueType>& move) {
     // only the coordinator node calls this function
     DCHECK(coordinator_id == 0);
 
@@ -184,7 +206,18 @@ bool prepare_for_transmit(myMove& move) {
       if (i == coordinator_id) {
         continue;
       }
-      ControlMessageFactory::new_transmit_message(*messages[i], move);
+      //!TODO 只发给有partition_id的副本
+      myMove<KeyType, ValueType> cur_move;
+      cur_move.dest_partition_id = move.dest_partition_id;
+
+      for(size_t j = 0 ; j < move.records.size(); j ++ ){
+        if(c_partitioner->is_partition_replicated_on(move.records[j].src_partition_id, i)){
+          // partition在副本上
+          cur_move.records.push_back(move.records[j]);
+        }
+      }
+      
+      ControlMessageFactory::new_transmit_message(*messages[i], cur_move);
     }
     flush_messages();
   }
@@ -221,7 +254,7 @@ bool prepare_for_transmit(myMove& move) {
         // do data transforming 
         // std::this_thread::sleep_for(std::chrono::seconds(1));
         
-        myMove move;
+        myMove<KeyType, ValueType> move;
         bool is_ready = prepare_for_transmit(move);
         if(is_ready == true) {
           // 全副本节点开始准备迁移
@@ -245,6 +278,10 @@ bool prepare_for_transmit(myMove& move) {
           c_percentile.add(all_time);
         }
         // finish data transforming
+        
+        record_degree.clear();
+        txn_queue.clear();
+
         recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
       }
       else {
@@ -265,6 +302,10 @@ bool prepare_for_transmit(myMove& move) {
       }
       }
     }
+    for(int i = 0 ; i < 12; i ++ ){
+      ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+      LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+    }
     
     show_for_degree_set();
 
@@ -283,7 +324,7 @@ bool prepare_for_transmit(myMove& move) {
               // << " us, average batch size " << batch_size_percentile.nth(50)
               << " .";
   }
-  void remove_on_secondary_coordinator(const myMove& move) {
+  void remove_on_secondary_coordinator(const myMove<KeyType, ValueType>& move) {
     /**
      * @brief 注意当前是c—phase
      * 
@@ -294,30 +335,25 @@ bool prepare_for_transmit(myMove& move) {
     // TODO
 
     // insert 
-    // if(c_partitioner.is_partition_replicated_on(move.dest_partition_id, coordinator_id)){
-    //   // 说明partition 在这个上面
-    //   ITable *dest_table = db.find_table(tableId, move.dest_partition_id);
-
-    //   for(size_t i = 0 ; i < move.keys.size(); i ++ ){
-    //     ycsb::ycsb::key ycsb_keys;
-    //     ycsb_keys.Y_KEY = move.keys[i];
-    //     auto value = src_table->search_value(&ycsb_keys);
-
-    //     dest_table->insert(&ycsb_keys, value);
-    //   }
-    // } 
-
-    // remove
-    if(c_partitioner->is_partition_replicated_on(move.src_partition_id, coordinator_id)){
+    if(c_partitioner->is_partition_replicated_on(move.dest_partition_id, coordinator_id)){
       // 说明partition 在这个上面
-      ITable *src_table = db.find_table(tableId, move.src_partition_id);
-      for(size_t i = 0 ; i < move.keys.size(); i ++ ){
-        ycsb::ycsb::key ycsb_keys;
-        ycsb_keys.Y_KEY = move.keys[i];
-        src_table->delete_(&ycsb_keys);
+      ITable *dest_table = db.find_table(tableId, move.dest_partition_id);
+
+      for(size_t i = 0 ; i < move.records.size(); i ++ ){
+        dest_table->insert(&move.records[i].key, &move.records[i].value);
       }
     } 
-     
+
+    for(size_t i = 0 ; i < move.records.size(); i ++ ){
+      // remove
+      if(c_partitioner->is_partition_replicated_on(move.records[i].src_partition_id, coordinator_id)){
+        // 说明partition 在这个上面
+        ITable *src_table = db.find_table(tableId, move.records[i].src_partition_id);
+        ycsb::ycsb::key ycsb_keys = move.records[i].key;
+        src_table->delete_(&ycsb_keys);
+      } 
+    }
+
   }
   void non_coordinator_start()  {
     std::size_t n_workers = context.worker_num;
@@ -325,7 +361,7 @@ bool prepare_for_transmit(myMove& move) {
     while (!stopFlag.load()) { 
       // 
       // std::this_thread::yield();
-      myMove move;
+      myMove<KeyType, ValueType> move;
       // 防止退不出来
       bool has_move = wait4_move(move);
       if(has_move == false){
@@ -334,11 +370,20 @@ bool prepare_for_transmit(myMove& move) {
       }
       // 
       LOG(INFO) << "move comes!";
-      remove_on_secondary_coordinator(move);
+      if(move.records.size() > 0){
+        remove_on_secondary_coordinator(move);
+      }
       
       LOG(INFO) << "send_ack!";
       send_ack();
 
+    }
+
+    for(int i = 0 ; i < 12; i ++ ){
+      if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+        ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+        LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+      }
     }
     // ExecutorStatus status = wait4_signal();
     // DCHECK(status == ExecutorStatus::START);
@@ -466,7 +511,7 @@ bool prepare_for_transmit(myMove& move) {
     }
   }
 
-  void get_move_decode(myMove& move, star::StringPiece& stringPiece){
+  void get_move_decode(myMove<KeyType, ValueType>& move, star::StringPiece& stringPiece){
     /**
      * @brief 
      *  key_size
@@ -478,29 +523,52 @@ bool prepare_for_transmit(myMove& move) {
 
     const void *total_len_size = stringPiece.data();
     const auto &total_len = *static_cast<const int32_t *>(total_len_size);
-
     stringPiece.remove_prefix(key_size);
+
+    if(total_len == 0)
+      return;
+
+    const void *field_size_ = stringPiece.data();
+    const auto &field_size = *static_cast<const int32_t *>(field_size_);
+    stringPiece.remove_prefix(key_size);
+
     // 单个的key
     for(int32_t i = 0 ; i < total_len; i ++ ){
-      /** 解压得到单个的key */
-      const void *record_key = stringPiece.data();    
-      stringPiece.remove_prefix(key_size);
+      MoveRecord<KeyType, ValueType> move_rec;
+      move_rec.key_size = key_size;
+      move_rec.field_size = field_size;
 
-      const auto &k = *static_cast<const int32_t *>(record_key);
-      move.keys.push_back(k);
+      /** 解压得到key的source_partition_id */
+      const void *src_partition_id_ptr = stringPiece.data();  
+      const auto &src_partition_id = *static_cast<const int32_t *>(src_partition_id_ptr);  
+      stringPiece.remove_prefix(key_size);
+      move_rec.src_partition_id = src_partition_id;
+
+      /** 解压得到单个的key */
+      const void *record_key = stringPiece.data();  
+      const auto &k = *static_cast<const KeyType *>(record_key);  
+      stringPiece.remove_prefix(key_size);
+      move_rec.key = k;
+
+      /** key 的value */
+      const void *record_value = stringPiece.data();
+      const auto &v = *static_cast<const ValueType *>(record_value);  
+      stringPiece.remove_prefix(field_size);
+      move_rec.value = v;
+      // Decoder dec(valueStringPiece);
+      // dec >> move_rec.value;
+      move.records.push_back(move_rec);
     }
-    const void *src_partition_id = stringPiece.data();    
-    stringPiece.remove_prefix(key_size);
-    move.src_partition_id = *static_cast<const int32_t *>(src_partition_id);
 
     const void *dest_partition_id = stringPiece.data();    
     stringPiece.remove_prefix(key_size);
     move.dest_partition_id = *static_cast<const int32_t *>(dest_partition_id);
-
+    // Decoder dec(stringPiece);
+    // dec >> move.dest_partition_id;
     return;
   }
 
-  bool wait4_move(myMove& move) {
+  bool wait4_move(myMove<KeyType, ValueType>& move) {
     std::chrono::steady_clock::time_point start;
 
     // only secondary-coordinator waits for ack
@@ -718,6 +786,8 @@ private:
   void update_record_degree_set(const std::vector<int32_t>& record_keys){
     /**
      * @brief 更新权重
+     * @param record_keys 递增的key
+     * @note 双向图
     */
 
     for(size_t i = 0; i < record_keys.size(); i ++ ){
@@ -726,31 +796,43 @@ private:
       // std::this_thread::sleep_for(std::chrono::seconds(1));
       it = record_degree.find(key_one);
       if (it == record_degree.end()){
-        // LOG(INFO) << "NOT FIND " << key_one;
+        // [key_one -> [key_two, Node]]
         std::unordered_map<int32_t, Node> tmp;
         record_degree.insert(std::make_pair(key_one, tmp));
         it = record_degree.find(key_one);
       }
-      for(size_t j = i + 1; j < record_keys.size(); j ++ ){
+      for(size_t j = 0; j < record_keys.size(); j ++ ){
+        // j = i + 1
+        if(j == i)
+          continue;
         std::unordered_map<int32_t, Node>::iterator itt;
         int32_t key_two = record_keys[j];
 
         itt = it->second.find(key_two);
         if (itt == it->second.end()){
+          // [key_one -> [key_two, Node]]
           Node n;
           n.degree = 0; 
           n.on_same_coordi = db.getPartitionID(context, key_one) == db.getPartitionID(context, key_two); // context.;
           it->second.insert(std::pair<int32_t, Node>(key_two, n));
           itt = it->second.find(key_two);
         }
+
         Node& cur_node = record_degree[key_one][key_two];
         cur_node.from = key_one; 
         cur_node.to = key_two;
+        cur_node.degree ++ ;
 
         big_node_heap.push_back(cur_node);
-
-        cur_node.degree ++ ;
       }
+    
+      auto cur_key = hottest_tuple.find(key_one);
+      if(cur_key == hottest_tuple.end()){
+        hottest_tuple.insert(std::make_pair(key_one, 1));
+      } else {
+        cur_key->second ++;
+      }
+    
     }
     return ;
   }
@@ -770,9 +852,21 @@ private:
           outfile << "[" << it->first << ", " << itt_begin->first << "]: " << itt_begin->second.degree << " " << itt_begin->second.on_same_coordi << "\n";
         }
     }
+    outfile << "-----------------------\n";
+
+    for(size_t i = 0; i < move_in_history.size(); i ++ ){
+      myMove<KeyType, ValueType>& cur = move_in_history[i];
+      outfile << "move " << i << " -> P" << cur.dest_partition_id << "\n";
+      for(size_t j = 0 ; j < cur.records.size(); j ++ ){
+        MoveRecord<KeyType, ValueType>& cur_rec = cur.records[j];
+        outfile << "   " << *(int32_t*)&cur_rec.key << " from " << cur_rec.src_partition_id << "\n"; 
+      }
+    }
     outfile.close();
   }
 
+private:
+  std::vector<myMove<KeyType, ValueType>> move_in_history;
 
 protected:
   const Context &context;
@@ -796,6 +890,7 @@ public:
   fixed_priority_queue big_node_heap;
 
   std::unordered_map<int32_t, std::unordered_map<int32_t, Node>> record_degree;
+  std::unordered_map<int32_t, size_t> hottest_tuple;
 
   std::unique_ptr<Partitioner> c_partitioner; //  s_partitioner,
 };

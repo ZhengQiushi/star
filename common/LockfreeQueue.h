@@ -42,7 +42,13 @@ public:
     bool ok = base_type::push(value);
     CHECK(ok);
   }
-
+  void clear() {
+    auto cur_size = base_type::read_available();
+    size_t i = 0;
+    while(i ++ < cur_size) {
+      base_type::pop();
+    }
+  }
   void wait_till_non_empty() {
     while (base_type::empty()) {
       nop_pause();

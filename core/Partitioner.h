@@ -209,7 +209,9 @@ public:
     if(partition_id % coordinator_num == 0){
       return coordinator_id == (partition_id / coordinator_num) % (coordinator_num - 1) + 1;
     } else {
-      return coordinator_id == ((partition_id - 1) % (coordinator_num - 1)) + 1;
+      return coordinator_id == partition_id % coordinator_num;
+                              //partition_id % (coordinator_num - 1) + 1; 
+                              //((partition_id - 1) % (coordinator_num - 1)) + 1;
     }
   }
 

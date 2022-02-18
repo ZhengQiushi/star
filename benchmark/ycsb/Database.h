@@ -105,7 +105,11 @@ public:
   }
 
   std::size_t getPartitionID(const star::Context &context, std::size_t key) const{
-    // 返回这个key所在的partition
+    /**
+     * @brief 返回这个key所在的partition
+     * @note key 如果不在local 副本，则返回context.partition_num
+     * 
+     */
     size_t i = 0;
     for( ; i < context.partition_num; i ++ ){
       ITable *table = tbl_ycsb_vec[i].get();
@@ -113,7 +117,7 @@ public:
       if(is_exist)
         break;
     }
-    DCHECK(i != context.partition_num);
+    // DCHECK(i != context.partition_num);
     return i;
   }
 

@@ -154,7 +154,7 @@ public:
 
       // start data-transform 
       static int cur_data_transform_num = 0;
-      if (cur_data_transform_num % data_transform_interval == data_transform_interval - 1) {
+      if (context.enable_data_transfer == true && cur_data_transform_num % data_transform_interval == data_transform_interval - 1) {
         // 开始操作 
         set_record_worker_status(ExecutorStatus::START);
         LOG(INFO) << "wait_recorder_worker_finish";

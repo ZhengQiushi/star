@@ -98,7 +98,9 @@ public:
     // LOG(INFO) << "StarExecutor: "<< id << " " << "async_txn_to_recorder";
 
     // 记录txn的record情况
-    async_txn_to_recorder(txn, recordMessages);
+    if(context.enable_data_transfer == true){
+      async_txn_to_recorder(txn, recordMessages);
+    }
     return true;
   }
 

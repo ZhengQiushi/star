@@ -178,7 +178,7 @@ public:
     }
   }
 
-  bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction){
+  bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction, bool& success){
     /**
      * @brief 判断是不是跨分区事务
      * @return true/false
@@ -193,9 +193,17 @@ public:
           if(j == 0){
             first_key = query_keys[j];
             first_key_partition_id = db.getPartitionID(context, first_key);
+            if(first_key_partition_id == context.partition_num){
+              success = false;
+              break;
+            }
           } else {
             auto cur_key = query_keys[j];
             auto cur_key_partition_id = db.getPartitionID(context, cur_key);
+            if(cur_key_partition_id == context.partition_num) {
+              success = false;
+              break;
+            }
             if(cur_key_partition_id != first_key_partition_id){
               is_cross_txn = true;
               break;
@@ -223,7 +231,6 @@ public:
       auto status = cur_status[round];
 
       // WorkloadType* workload = nullptr; // (coordinator_id, db, random, *partitioner);
-
       if (status == ExecutorStatus::C_PHASE) {
         partitioner = c_partitioner.get();
         query_num =
@@ -273,16 +280,20 @@ public:
           cur_transaction = s_workload.next_transaction(s_context, partition_id, storage);
         }
         // 甄别一下？
-        bool is_cross_txn = check_cross_txn(cur_transaction);
+        bool is_success = true;
+        bool is_cross_txn = check_cross_txn(cur_transaction, is_success);
 
-        if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
-          if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
-            // TODO: 暂时不考虑部分副本处理跨分区事务...
-            c_transactions_queue.push(std::move(cur_transaction));
+        if(is_success){
+          if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
+            if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
+              // TODO: 暂时不考虑部分副本处理跨分区事务...
+              c_transactions_queue.push(std::move(cur_transaction));
+            }
+          } else {
+            s_transactions_queue.push(std::move(cur_transaction));
           }
-        } else {
-          s_transactions_queue.push(std::move(cur_transaction));
         }
+
       } // END FOR
     }
     if(id == 0){

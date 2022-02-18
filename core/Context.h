@@ -44,6 +44,7 @@ public:
 
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;
+  bool enable_data_transfer = true;
 
   bool cpu_affinity = true;
 

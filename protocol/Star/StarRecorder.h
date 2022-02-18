@@ -238,11 +238,13 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
 
       for(size_t j = 0 ; j < move.records.size(); j ++ ){
         if(c_partitioner->is_partition_replicated_on(move.records[j].src_partition_id, i)){
+          cur_move.records.push_back(move.records[j]);
+        } else if (c_partitioner->is_partition_replicated_on(move.dest_partition_id, i)) {
           // partition在副本上
           cur_move.records.push_back(move.records[j]);
         }
       }
-      
+      LOG(INFO) << "to " << i;
       ControlMessageFactory::new_transmit_message(*messages[i], cur_move);
     }
     flush_messages();

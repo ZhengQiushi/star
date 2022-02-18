@@ -222,16 +222,12 @@ public:
       // 当前状态, 依次遍历两个phase
       auto status = cur_status[round];
 
-      if (coordinator_id != 0 && status == ExecutorStatus::C_PHASE) {
-        // TODO: 暂时不考虑部分副本处理跨分区事务...
-        continue;
-      }
       // WorkloadType* workload = nullptr; // (coordinator_id, db, random, *partitioner);
 
       if (status == ExecutorStatus::C_PHASE) {
         partitioner = c_partitioner.get();
         query_num =
-            StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+             StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
         phase_context = context.get_cross_partition_context(); // c_context; // 
         // if(c_workload.get()==nullptr){
           
@@ -280,7 +276,10 @@ public:
         bool is_cross_txn = check_cross_txn(cur_transaction);
 
         if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
-          c_transactions_queue.push(std::move(cur_transaction));
+          if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
+            // TODO: 暂时不考虑部分副本处理跨分区事务...
+            c_transactions_queue.push(std::move(cur_transaction));
+          }
         } else {
           s_transactions_queue.push(std::move(cur_transaction));
         }
@@ -310,8 +309,9 @@ public:
 
     if (status == ExecutorStatus::C_PHASE) {
       // 从当前线程管的分区里随机选一个
-      CHECK(coordinator_id == 0);
-      CHECK(context.partition_num % context.worker_num == 0);
+
+      // CHECK(coordinator_id == 0);
+      // CHECK(context.partition_num % context.worker_num == 0);
       auto partition_num_per_thread =
           context.partition_num / context.worker_num;
       partition_id = id * partition_num_per_thread +

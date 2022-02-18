@@ -95,9 +95,9 @@ public:
 
     
     int32_t total_key_len = (int32_t)move.records.size();
-    // if(total_key_len > 30){
-    //   total_key_len = 30;
-    // }
+    if(total_key_len > 30){
+      LOG(INFO) << "too large";
+    }
     // DCHECK(move.records.size() >= 0);
 
     int32_t key_size = sizeof(int32_t);// move.records[0].key_size;
@@ -108,6 +108,8 @@ public:
                         key_size +                 // field_size
                         (key_size + key_size + field_size) * total_key_len + // src partition + keys + value 
                         key_size;       // dest partition
+
+    LOG(INFO) << "message_size: " << message_size << " = " << field_size << " * " << total_key_len;
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(ControlMessage::TRANSMIT), message_size, 0, 0);

@@ -64,7 +64,7 @@ public:
 
   auto capacity() { return N; }
 
-private:
+
   void nop_pause() { 
     // SPINLOCK_YIELD;
     __asm__ volatile("nop" : :);

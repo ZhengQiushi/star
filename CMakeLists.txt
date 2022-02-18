@@ -30,19 +30,27 @@ include_directories(${CMAKE_SOURCE_DIR})
 file(GLOB_RECURSE COMMON_SOURCE_FILES common/*.cpp)
 add_library(common STATIC ${COMMON_SOURCE_FILES})
 
+include_directories(absl_DIR /usr/local/include)
+
+# find_package(absl REQUIRED)
+
 if(APPLE)
     find_package(glog REQUIRED)
     find_package(gflags REQUIRED)
-    target_link_libraries(common ${jemalloc_lib} glog::glog gflags)
+    target_link_libraries(common ${jemalloc_lib} glog::glog gflags)# absl::flat_hash_map)
 else()
-    target_link_libraries(common ${jemalloc_lib} glog gflags)
+    target_link_libraries(common ${jemalloc_lib} glog gflags) # absl::flat_hash_map)
 endif()
 
-include_directories(google_DIR /usr/local/include/google)
+# include_directories(absl_DIR /usr/local/include) 
 
+# Process Abseil's CMake build system
+# add_subdirectory(3rd/abseil-cpp)
 
 add_executable(bench_tpcc bench_tpcc.cpp)
 target_link_libraries(bench_tpcc common)
 
 add_executable(bench_ycsb bench_ycsb.cpp)
 target_link_libraries(bench_ycsb common)
+
+# target_link_libraries(bench_ycsb absl::flat_hash_map)

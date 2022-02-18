@@ -7,7 +7,6 @@
 #include <map>
 
 #include <glog/logging.h>
-#include <sparsehash/dense_hash_map>
 
 namespace star
 {
@@ -93,66 +92,6 @@ namespace star
     // template<typename T,
     //          typename Sequence = std::vector<T>,
     //          typename Compare = std::less<typename Sequence::value_type> > priority_queue<Node, std::vector<Node>, NodeCompare>
-    // class fixed_priority_queue : public std::vector<Node> // <T,Sequence,Compare>
-    // {
-    //     /* 固定大小的大顶堆 */
-    // public:
-    //     fixed_priority_queue(unsigned int size = 20) : fixed_size(size) {}
-    //     void push_back(const Node &x)
-    //     {   
-    //         // 
-    //         // If we've reached capacity, find the FIRST smallest object and replace
-    //         // it if 'x' is larger
-    //         if (fixed_size != 0 && this->size() == fixed_size)
-    //         {
-    //             // 'c' is the container used by priority_queue and is a protected member.
-    //             size_t num = this->size();
-    //             auto beg = this->begin();
-    //             auto end = this->end();
-    //             auto cur = this->begin();
-
-    //             size_t i;
-    //             for ( i = 0; i < num; i++)
-    //             {
-    //                 cur = beg + i;
-    //                 if (cur->from == x.from || cur->from == x.to)
-    //                 {
-    //                     // 找到了
-    //                     cur->degree = x.degree;
-    //                     break;
-    //                 }
-    //             }
-
-    //             if (i == num)
-    //             {
-    //                 // 没找到
-    //                 auto min = beg + num - 1;
-    //                 if (x.degree > min->degree)
-    //                 {
-    //                     min->from = x.from;
-    //                     min->degree = x.degree;
-    //                 }
-    //             }
-    //         }
-    //         // Otherwise just push the new item.
-    //         else
-    //         {
-    //             std::vector<Node>::push_back(x);
-    //         }
-    //         std::sort(this->begin(), this->end(), nodecompare);
-    //     }
-
-    // private:
-    //     // fixed_priority_queue() {} // Construct with size only.
-    //     const unsigned int fixed_size;
-    //     // Prevent heap allocation
-    //     void *operator new(size_t);
-    //     void *operator new[](size_t);
-    //     void operator delete(void *);
-    //     void operator delete[](void *);
-    // };
-
-
     class fixed_priority_queue : public std::vector<myTuple> // <T,Sequence,Compare>
     {
         /* 固定大小的大顶堆 */
@@ -201,13 +140,10 @@ namespace star
         void operator delete[](void *);
     };
 
-
     template <typename KeyType, typename ValueType>
     class Clay
     {
     public: // unordered_  unordered_
-    //   std::unordered_map<int32_t, std::unordered_map<int32_t, Node> > record_degree;
-
         Clay(std::unordered_map<int32_t, std::unordered_map<int32_t, Node> >& record_d):
         record_degree(record_d){
         }
@@ -242,11 +178,6 @@ namespace star
                     if (cur_node_ptr == big_node_heap[overloaded_partition_id].end())
                     { // find next hottest edge!
                         
-                        // moves.push_back(C_move);
-                        // C_move.reset();
-                        if(moves.size() == 0){
-                            LOG(INFO) << "why none";
-                        }
                         break;
                     }
 
@@ -273,18 +204,6 @@ namespace star
                         key = cur_node.key;
                         rec.set_key(cur_node.key, cur_node.p_id);
                     }
-
-                    // if (cur_node.from_p_id == overloaded_partition_id)
-                    // {
-                    //     key = cur_node.from;
-                    //     rec.set_key(cur_node.from, cur_node.from_p_id);
-                    // }
-                    // else
-                    // {
-                    //     key = cur_node.to;
-                    //     rec.set_key(cur_node.to, cur_node.to_p_id);
-                    // }
-
                     tmp_move.records.push_back(rec);
                     tmp_move.dest_partition_id = overloaded_partition_id;
 
@@ -345,10 +264,6 @@ namespace star
                     continue;
                 }
             }
-            
-            if(moves.size() == 0){
-                            LOG(INFO) << "why none";
-                        }
             return;
         }
         
@@ -486,7 +401,6 @@ namespace star
             for(auto it = move.records.begin(); it != move.records.end(); it ++ ){
                 // 遍历每一条record
                 int32_t key = *(int32_t*)& it->key;
-                // std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
                 std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto itt = all_edges.begin(); itt != all_edges.end(); itt ++ ) {
@@ -634,7 +548,6 @@ namespace star
                 auto key = *(int32_t*)&cur.key;
                 // 点权重
                 cost += hottest_tuple[key];
-                // std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
                 std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto it = all_edges.begin(); it != all_edges.end(); it ++ ) {
@@ -665,7 +578,6 @@ namespace star
                 }
                 // 点权重
                 cost -= hottest_tuple[key];
-                // std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
                 std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto it = all_edges.begin(); it != all_edges.end(); it ++ ) {
@@ -711,9 +623,7 @@ namespace star
         std::unordered_map<int32_t, int32_t> hottest_tuple; // <key, frequency>
         std::map<int32_t, int32_t> load_partition; // <partition_id, load>
 
-        std::unordered_map<int32_t, std::unordered_map<int32_t, Node> >& record_degree;
-
-        // std::unordered_map<int32_t, std::unordered_map<int32_t, Node> >& record_degree; // unordered_ unordered_
+        std::unordered_map<int32_t, std::unordered_map<int32_t, Node> >& record_degree; // unordered_ unordered_
 
     };
 }

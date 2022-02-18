@@ -38,6 +38,9 @@ else()
     target_link_libraries(common ${jemalloc_lib} glog gflags)
 endif()
 
+include_directories(google_DIR /usr/local/include/google)
+
+
 add_executable(bench_tpcc bench_tpcc.cpp)
 target_link_libraries(bench_tpcc common)
 

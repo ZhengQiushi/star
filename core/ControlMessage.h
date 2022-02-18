@@ -93,7 +93,11 @@ public:
      */
     // int tableId = ycsb::tableID;
 
+    
     int32_t total_key_len = (int32_t)move.records.size();
+    // if(total_key_len > 30){
+    //   total_key_len = 30;
+    // }
     // DCHECK(move.records.size() >= 0);
 
     int32_t key_size = sizeof(int32_t);// move.records[0].key_size;
@@ -113,7 +117,7 @@ public:
     encoder.write_n_bytes((void*)&total_key_len, key_size);
     encoder.write_n_bytes((void*)&field_size, key_size);
 
-    for (size_t i = 0 ; i < move.records.size(); i ++ ){
+    for (size_t i = 0 ; i < static_cast<size_t>(total_key_len); i ++ ){
       // ITable* table = db.find_table(tableId, move.records[i].src_partition_id);
     
       encoder.write_n_bytes((void*)&move.records[i].src_partition_id, key_size);

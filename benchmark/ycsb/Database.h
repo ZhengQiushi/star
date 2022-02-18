@@ -17,6 +17,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <set> 
 
 namespace star {
 namespace ycsb {
@@ -114,6 +115,20 @@ public:
     }
     DCHECK(i != context.partition_num);
     return i;
+  }
+
+  std::set<int32_t> getPartitionIDs(const star::Context &context, std::size_t key) const{
+    // 返回这个key所在的partition
+    std::set<int32_t> res;
+    size_t i = 0;
+    for( ; i < context.partition_num; i ++ ){
+      ITable *table = tbl_ycsb_vec[i].get();
+      bool is_exist = table->contains((void*)& key);
+      if(is_exist){
+        res.insert(i);
+      }
+    }
+    return res;
   }
 private:
   void ycsbInit(const Context &context, std::size_t partitionID) {

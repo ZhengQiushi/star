@@ -97,7 +97,7 @@ public:
   void delete_(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
     map_.remove(k);
-    LOG(INFO) << "Deleted!";
+    // LOG(INFO) << "Deleted!";
   }
 
   void deserialize_value(const void *key, StringPiece stringPiece) override {

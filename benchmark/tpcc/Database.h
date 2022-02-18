@@ -11,6 +11,7 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <set>
 
 #include "benchmark/tpcc/Context.h"
 #include "benchmark/tpcc/Random.h"
@@ -255,6 +256,12 @@ public:
     // TODO
     return i;
   }
+  std::set<int32_t> getPartitionIDs(const star::Context &context, std::size_t key) const
+  {
+    std::set<int32_t> res;
+    return res;
+  }
+
   void apply_operation(const Operation &operation) {
 
     Decoder dec(operation.data);

@@ -35,13 +35,17 @@ public:
     if (crossPartition <= context.crossPartitionProbability &&
           context.partition_num > 1) {
         // 跨分区
-        first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+        // 保障跨分区 key0 -> partition even
+        first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
               random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
     } else {
       // 单分区
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
               random.uniform_dist((1 - my_threshold) * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
     }
+
+    // forward or backward
+    // int forward_or_backward = random.uniform_dist(1, 100);
 
     for (auto i = 0u; i < N; i++) {
       // read or write
@@ -76,20 +80,23 @@ public:
           //   key_range_tmp = random.uniform_dist(
           //                       0, static_cast<int>(context.partition_num) - 1);
           // }
-          if(i < N / 2){
-            key = (first_key + static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1)));
-              if(key >= static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num)){
-                key -= static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
-              }
-          } else {
-            key = (first_key - static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1)));
-              //% static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
-            if(key < 0){
-              key += static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
-            }
-          }
+          // if(forward_or_backward < 100 / 2){
+          int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition);
+          int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition);
+
+          key = (key_partition_num + 1) * static_cast<int32_t>(context.keysPerPartition) + key_num * N + i;
+          
+          // if(key >= static_cast<int32_t>(context.keysPerPartition) * static_cast<int32_t>(context.partition_num)){
+          //   key -= static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
+          // }
+          // } else {
+          //   key = (first_key - static_cast<int32_t>(context.keysPerPartition) + 
+          //     random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1)));
+          //     //% static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
+          //   if(key < 0){
+          //     key += static_cast<int32_t>(context.keysPerPartition) * (context.partition_num);
+          //   }
+          // }
           // newPartitionID = getKeyPartitionID_(key);
         } else {
           // 单分区

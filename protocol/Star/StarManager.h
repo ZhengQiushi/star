@@ -11,7 +11,7 @@
 
 namespace star {
 
-const int data_transform_interval = 50;
+const int data_transform_interval = 5;
 
 class StarManager : public star::Manager {
 public:

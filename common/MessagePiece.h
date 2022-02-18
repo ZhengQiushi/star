@@ -11,7 +11,7 @@ namespace star {
 /*
  * MessagePiece header format
  *
- * | Message type (7 => 128) | Message length (12 => 4096) | table id (5 => 32)
+ * | Message type (7 => 128) | Message length (13 => 4096 * 2) | table id (5 => 32)
  * | partition id (8 => 256) |
  *
  * Note that, the header is included in the message length.
@@ -72,7 +72,7 @@ public:
                                                  std::size_t table_id,
                                                  std::size_t partition_id) {
     DCHECK(message_type < (1u << 7));
-    DCHECK(message_length < (1u << 12));
+    DCHECK(message_length < (1u << 14)); // (1u << 12));
     DCHECK(table_id < (1u << 5));
     DCHECK(partition_id < (1u << 8));
 

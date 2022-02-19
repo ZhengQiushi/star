@@ -122,8 +122,8 @@ public:
       using ValueType_ = 
           typename InferType<Context>::ValueType;
 
-      auto manager = std::make_shared<StarManager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+      auto manager = std::make_shared<StarManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
       auto recorder = std::make_shared<StarRecorder<WorkloadType, KeyType_, ValueType_> >(

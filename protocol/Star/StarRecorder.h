@@ -148,8 +148,11 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       if(hash_for_index.find(move.dest_partition_id) == hash_for_index.end()){
         // have not inserted 
         hash_for_index.insert(std::make_pair(move.dest_partition_id, int32_t(moves_merged.size())));
-        moves_merged.push_back(move);
-      } else {
+        myMove<KeyType, ValueType> tmp;
+        tmp.dest_partition_id = move.dest_partition_id;
+        moves_merged.push_back(tmp);
+      }
+      
         
         for(auto it = move.records.begin(); it != move.records.end();){
 
@@ -169,7 +172,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
             moves_merged.push_back(tmp);
           }
         }
-      }
+      
       
 
     }
@@ -201,7 +204,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       // auto value = src_table->search_value(&ycsb_keys);
       // ycsb::ycsb::value ycsb_value = *((ycsb::ycsb::value*) value );
       // 
-      LOG(INFO) << *(int*)&(move.records[i].key) << "  " << move.records[i].src_partition_id << " " << move.dest_partition_id;
+      // LOG(INFO) << *(int*)&(move.records[i].key) << "  " << move.records[i].src_partition_id << " " << move.dest_partition_id;
       dest_table->insert(&ycsb_keys, &ycsb_value);
       src_table->delete_(&ycsb_keys);
     }
@@ -244,7 +247,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
           cur_move.records.push_back(move.records[j]);
         }
       }
-      LOG(INFO) << "to " << i;
+      LOG(INFO) << "to " << i; 
       ControlMessageFactory::new_transmit_message(*messages[i], cur_move);
     }
     flush_messages();
@@ -290,6 +293,11 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
               // 部分副本节点开始准备replicate
               signal_recorder(move);
             }
+            ////// for debug 
+            // for(int i = 0 ; i < 12; i ++ ){
+            //   ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+            //   LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+            // }
             LOG(INFO) << "RECORDER wait4_ack"; 
             wait4_ack(moves_merged.size());
             LOG(INFO) << "CONTINUE wait4_ack"; 
@@ -342,11 +350,11 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       }
       }
     }
-    for(int i = 0 ; i < 12; i ++ ){
-      ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-      LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-    }
-    
+    // for(int i = 0 ; i < 12; i ++ ){
+    //   ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+    //   LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+    // }
+    recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
     broadcast_stop();
 
     LOG(INFO) << "Average record-update length " << all_percentile.nth(50)
@@ -376,6 +384,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         std::set<int32_t> id = db.getPartitionIDs(context, *(int32_t*)& move.records[i].key);
         if(id.find(move.dest_partition_id) == id.end()){
           dest_table->insert(&move.records[i].key, &move.records[i].value);
+          LOG(INFO) << "INSERT " << *(int*)& move.records[i].key << "-> P" << move.dest_partition_id; 
         } else {
           LOG(INFO) << "ERROR";
         }
@@ -389,6 +398,8 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         ITable *src_table = db.find_table(tableId, move.records[i].src_partition_id);
         ycsb::ycsb::key ycsb_keys = move.records[i].key;
         src_table->delete_(&ycsb_keys);
+        LOG(INFO) << "DELETE " << *(int*)& move.records[i].key << "x P" << move.records[i].src_partition_id; 
+
       } 
     }
 
@@ -396,7 +407,12 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
   void non_coordinator_start()  {
     std::size_t n_workers = context.worker_num;
     std::size_t n_coordinators = context.coordinator_num;
-    while (!stopFlag.load()) { 
+    
+    while (true) { 
+      if(wait4_stop_nonblock()){
+        break;
+      }
+      
       // 
       // std::this_thread::yield();
       myMove<KeyType, ValueType> move;
@@ -411,18 +427,24 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       if(move.records.size() > 0){
         remove_on_secondary_coordinator(move);
       }
-      
+      // for(int i = 0 ; i < 12; i ++ ){
+      //   if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+      //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+      //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+      //   }
+      // }
       LOG(INFO) << "send_ack!";
       send_ack();
 
     }
 
-    for(int i = 0 ; i < 12; i ++ ){
-      if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-        ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-        LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-      }
-    }
+    
+    // for(int i = 0 ; i < 12; i ++ ){
+    //   if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+    //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+    //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+    //   }
+    // }
     // ExecutorStatus status = wait4_signal();
     // DCHECK(status == ExecutorStatus::START);
     // n_completed_workers.store(0);
@@ -523,7 +545,14 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       CHECK(type == ControlMessage::STOP);
     }
   }
-
+  bool wait4_stop_nonblock(){
+    if(stop_in_queue.empty()){
+      stop_in_queue.nop_pause();
+      return false;
+    } else {
+      return true;
+    }
+  }
   void wait4_ack(size_t num = 1) {
 
     std::chrono::steady_clock::time_point start;

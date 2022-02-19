@@ -74,7 +74,25 @@ public:
     s_context = context.get_single_partition_context();
     c_context = context.get_cross_partition_context();
   }
+  void trace_txn(){
+    if(coordinator_id == 0 && id == 0){
+      std::ofstream outfile_excel;
+      outfile_excel.open("/Users/lion/project/01_star/star/result_tnx.xls", std::ios::trunc); // ios::trunc
 
+      outfile_excel << "cross_partition_txn" << "\t";
+      for(size_t i = 0 ; i < res.size(); i ++ ){
+        std::pair<size_t, size_t> cur = res[i];
+        outfile_excel << cur.first << "\t";
+      }
+      outfile_excel << "\n";
+      outfile_excel << "single_partition_txn" << "\t";
+      for(size_t i = 0 ; i < res.size(); i ++ ){
+        std::pair<size_t, size_t> cur = res[i];
+        outfile_excel << cur.second << "\t";
+      }
+      outfile_excel.close();
+    }
+  }
   void start() override {
 
     LOG(INFO) << "Executor " << id << " starts.";
@@ -92,6 +110,9 @@ public:
           // commit transaction in s_phase;
           commit_transactions();
           LOG(WARNING) << "Executor " << id << " exits.";
+
+          trace_txn();
+
           return;
         }
       } while (status != ExecutorStatus::C_PHASE);
@@ -176,6 +197,8 @@ public:
     //     s_transactions_queue.size();
     // }
     }
+
+
   }
 
   bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction, bool& success){
@@ -231,6 +254,7 @@ public:
       auto status = cur_status[round];
 
       // WorkloadType* workload = nullptr; // (coordinator_id, db, random, *partitioner);
+
       if (status == ExecutorStatus::C_PHASE) {
         partitioner = c_partitioner.get();
         query_num =
@@ -297,6 +321,7 @@ public:
       } // END FOR
     }
     if(id == 0){
+      res.push_back(std::make_pair(c_transactions_queue.size(), s_transactions_queue.size()));
       LOG(INFO) << id << " prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
         s_transactions_queue.size();
     }
@@ -576,5 +601,8 @@ private:
   ContextType s_context, c_context;
 
   std::queue<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue;
+
+  std::vector<std::pair<size_t, size_t> > res; // record tnx
+
 };
 } // namespace star

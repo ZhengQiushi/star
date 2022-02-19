@@ -41,6 +41,7 @@ public:
   std::string log_path;
   std::string cdf_path;
   std::size_t cpu_core_id = 0;
+  std::size_t time_to_run = 25;
 
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;

@@ -18,7 +18,8 @@ template <std::size_t N> struct YCSBQuery {
 
 template <std::size_t N> class makeYCSBQuery {
 public:
-  const double my_threshold = 0.0002;
+  const double my_threshold = 0.0005; // 20 0000 
+                                      // 0.00005 = 10 ...
   using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
                           Random &random) const {

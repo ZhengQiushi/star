@@ -11,15 +11,23 @@
 
 namespace star {
 
-const int data_transform_interval = 5;
+const int data_transform_interval = 1;
 
+template <class Workload>
 class StarManager : public star::Manager {
 public:
   using base_type = star::Manager;
+  using WorkloadType = Workload;
+  using DatabaseType = typename WorkloadType::DatabaseType;
 
   StarManager(std::size_t coordinator_id, std::size_t id,
-              const Context &context, std::atomic<bool> &stopFlag)
-      : base_type(coordinator_id, id, context, stopFlag) {
+              const Context &context, 
+              std::atomic<bool> &stopFlag, 
+              DatabaseType& db)
+      : base_type(coordinator_id, id, context, stopFlag),
+        db(db),
+        c_partitioner(std::make_unique<StarCPartitioner>(
+            coordinator_id, context.coordinator_num)) {
 
     batch_size = context.batch_size;
     recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
@@ -160,6 +168,11 @@ public:
         LOG(INFO) << "wait_recorder_worker_finish";
         wait_recorder_worker_finish();
       }
+                  ////// for debug 
+            for(int i = 0 ; i < 12; i ++ ){
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+            }
       cur_data_transform_num ++;
 
       auto s_start = std::chrono::steady_clock::now();
@@ -261,7 +274,12 @@ public:
       LOG(INFO) << "send_ack";
 
       send_ack();
-
+      for(int i = 0 ; i < 12; i ++ ){
+        if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+          ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+          LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+        }
+      }
       LOG(INFO) << "start S-Phase";
       
       // start s-phase
@@ -292,7 +310,8 @@ public:
 
 public:
   uint32_t batch_size;
-
+  DatabaseType& db;
   std::atomic<uint32_t> recorder_status;
+  std::unique_ptr<Partitioner> c_partitioner;
 };
 } // namespace star

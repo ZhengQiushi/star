@@ -20,9 +20,11 @@ template <std::size_t N> class makeYCSBQuery {
 public:
   const double my_threshold = 0.0005; // 20 0000 
                                       // 0.00005 = 10 ...
+  const double my_single_threshold = 5 * my_threshold;
+
   using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
-                          Random &random) const {
+                          Random &random, DatabaseType &db) const {
     // 
     YCSBQuery<N> query;
     int readOnly = random.uniform_dist(1, 100);
@@ -37,8 +39,20 @@ public:
           context.partition_num > 1) {
         // 跨分区
         // 保障跨分区 key0 -> partition even
-        first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+        // int32_t retry_times = 1; retry_times
+        // while(true) {
+          first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+          // if(db.getPartitionID(context, first_key) != partitionID){
+          //   // 
+          //   retry_times ++;
+          // } else {
+          //   // 
+          //   break;
+          // }
+        // }
+
+        
     } else {
       // 单分区
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 

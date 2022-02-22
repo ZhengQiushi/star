@@ -109,7 +109,7 @@ public:
                         (key_size + key_size + field_size) * total_key_len + // src partition + keys + value 
                         key_size;       // dest partition
 
-    LOG(INFO) << "message_size: " << message_size << " = " << field_size << " * " << total_key_len;
+    // LOG(INFO) << "message_size: " << message_size << " = " << field_size << " * " << total_key_len;
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(ControlMessage::TRANSMIT), message_size, 0, 0);

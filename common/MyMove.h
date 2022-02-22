@@ -96,7 +96,7 @@ namespace star
     {
         /* 固定大小的大顶堆 */
     public:
-        fixed_priority_queue(unsigned int size = 20) : fixed_size(size) {}
+        fixed_priority_queue(unsigned int size = 50000) : fixed_size(size) {}
         void push_back(const myTuple &x)
         {   
             // 

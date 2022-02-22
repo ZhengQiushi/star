@@ -35,7 +35,7 @@ public:
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeYCSBQuery<keys_num>()(context, partition_id, random)) {}
+        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db)) {}
 
   virtual ~ReadModifyWrite() override = default;
 
@@ -118,7 +118,7 @@ public:
   }
 
   void reset_query() override {
-    query = makeYCSBQuery<keys_num>()(context, partition_id, random);
+    query = makeYCSBQuery<keys_num>()(context, partition_id, random, db);
   }
   
   const std::vector<int32_t> get_query() override{

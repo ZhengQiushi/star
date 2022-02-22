@@ -209,17 +209,17 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       src_table->delete_(&ycsb_keys);
     }
 
-    if(coordinator_id == 0) {
-      std::ofstream outfile;
-      outfile.open("result.txt", std::ios::app); // ios::trunc
+    // if(coordinator_id == 0) {
+    //   std::ofstream outfile;
+    //   outfile.open("result.txt", std::ios::app); // ios::trunc
 
-      for(size_t i = 0 ; i < limit; i ++ ){
+    //   for(size_t i = 0 ; i < limit; i ++ ){
         
-        outfile << i << "  " << *(int32_t*)& move.records[i].key << " " << move.records[i].src_partition_id << " -> " << move.dest_partition_id << "\n";
+    //     outfile << i << "  " << *(int32_t*)& move.records[i].key << " " << move.records[i].src_partition_id << " -> " << move.dest_partition_id << "\n";
 
-      }
-      outfile.close();
-    }
+    //   }
+    //   outfile.close();
+    // }
 
 
     
@@ -247,7 +247,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
           cur_move.records.push_back(move.records[j]);
         }
       }
-      LOG(INFO) << "to " << i; 
+      // LOG(INFO) << "to " << i; 
       ControlMessageFactory::new_transmit_message(*messages[i], cur_move);
     }
     flush_messages();
@@ -257,7 +257,8 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
     std::size_t n_workers = context.worker_num;
     std::size_t n_coordinators = context.coordinator_num;
 
-    Percentile<int64_t> all_percentile, c_percentile, s_percentile,
+    Percentile<int64_t> all_percentile, 
+        clumpping_percentile, local_percentile, remote_percentile, 
         batch_size_percentile;
 
     while (!stopFlag.load()) {
@@ -268,12 +269,23 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       if(recorder_status.load() == static_cast<int32_t>(ExecutorStatus::START)){
         // 触发了数据迁移
         auto c_start = std::chrono::steady_clock::now();
+        auto cur_head = c_start;
+
         LOG(INFO) << "start Transfroming!";
         // do data transforming 
         std::vector<myMove<KeyType, ValueType> >  moves, moves_merged;
         // show_for_degree_set();
         my_clay->find_clump(moves);
         my_clay->reset();
+        
+        {
+          auto now = std::chrono::steady_clock::now();
+          auto all_time =
+              std::chrono::duration_cast<std::chrono::microseconds>(now - cur_head)
+                  .count();
+          cur_head = now;
+          clumpping_percentile.add(all_time);
+        }
 
         bool is_ready = false;
         if(moves.size() != 0) {
@@ -287,7 +299,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
               myMove<KeyType, ValueType>& move = moves_merged[cur_move];
               DCHECK(move.records.size() > 0);
               // 全副本节点开始准备迁移
-              LOG(INFO) << cur_move ;
+              // LOG(INFO) << cur_move ;
               transmit_record(move);
 
               // 部分副本节点开始准备replicate
@@ -298,28 +310,45 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
             //   ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
             //   LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
             // }
+           
+            {
+              auto now = std::chrono::steady_clock::now();
+              auto all_time =
+                  std::chrono::duration_cast<std::chrono::microseconds>(now - cur_head)
+                      .count();
+              cur_head = now;
+              local_percentile.add(all_time);
+            }
             LOG(INFO) << "RECORDER wait4_ack"; 
             wait4_ack(moves_merged.size());
             LOG(INFO) << "CONTINUE wait4_ack"; 
-
+            {
+              auto now = std::chrono::steady_clock::now();
+              auto all_time =
+                  std::chrono::duration_cast<std::chrono::microseconds>(now - cur_head)
+                      .count();
+              cur_head = now;
+              remote_percentile.add(all_time);
+            }
           }
         }
         
 
 
 
-        auto now = std::chrono::steady_clock::now();
+        
         {
+          auto now = std::chrono::steady_clock::now();
           auto all_time =
               std::chrono::duration_cast<std::chrono::microseconds>(now - c_start)
                   .count();
 
-          c_percentile.add(all_time);
+          all_percentile.add(all_time);
         }
         // finish data transforming
-        
+        LOG(INFO) << "finish data Transfroming!";
         record_degree.clear();
-        // txn_queue.clear();
+        txn_queue.clear();
 
         recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
       }
@@ -341,13 +370,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         }
         // LOG(INFO) << "txn_queue: " << txn_queue.read_available();
         record_txn_appearance();
-        {
-        auto all_time =
-            std::chrono::duration_cast<std::chrono::microseconds>(now - record_start)
-                .count();
 
-        all_percentile.add(all_time);
-      }
       }
     }
     // for(int i = 0 ; i < 12; i ++ ){
@@ -357,11 +380,13 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
     recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
     broadcast_stop();
 
-    LOG(INFO) << "Average record-update length " << all_percentile.nth(50)
-              << " us, average data-transforming length " << c_percentile.nth(50)
+    LOG(INFO) << "Average data-transforming length " << all_percentile.nth(50)
+              << " us, average clumpping length " << clumpping_percentile.nth(50) 
+              << " us, average local length " << local_percentile.nth(50) 
+              << " us, average remote length " << remote_percentile.nth(50) 
               // << " us, average s phase length " << s_percentile.nth(50)
               // << " us, average batch size " << batch_size_percentile.nth(50)
-              << " .";
+              << "us .";
   }
   void remove_on_secondary_coordinator(const myMove<KeyType, ValueType>& move) {
     /**
@@ -384,9 +409,9 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         std::set<int32_t> id = db.getPartitionIDs(context, *(int32_t*)& move.records[i].key);
         if(id.find(move.dest_partition_id) == id.end()){
           dest_table->insert(&move.records[i].key, &move.records[i].value);
-          LOG(INFO) << "INSERT " << *(int*)& move.records[i].key << "-> P" << move.dest_partition_id; 
+          // LOG(INFO) << "INSERT " << *(int*)& move.records[i].key << "-> P" << move.dest_partition_id; 
         } else {
-          LOG(INFO) << "ERROR";
+          // LOG(INFO) << "ERROR";
         }
       }
     } 
@@ -398,7 +423,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         ITable *src_table = db.find_table(tableId, move.records[i].src_partition_id);
         ycsb::ycsb::key ycsb_keys = move.records[i].key;
         src_table->delete_(&ycsb_keys);
-        LOG(INFO) << "DELETE " << *(int*)& move.records[i].key << "x P" << move.records[i].src_partition_id; 
+        // LOG(INFO) << "DELETE " << *(int*)& move.records[i].key << "x P" << move.records[i].src_partition_id; 
 
       } 
     }
@@ -419,11 +444,11 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       // 防止退不出来
       bool has_move = wait4_move(move);
       if(has_move == false){
-        std::this_thread::yield();
+        move_queue.nop_pause();// std::this_thread::yield();
         continue;
       }
       // 
-      LOG(INFO) << "move comes!";
+      // LOG(INFO) << "move comes!";
       if(move.records.size() > 0){
         remove_on_secondary_coordinator(move);
       }
@@ -433,7 +458,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
       //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
       //   }
       // }
-      LOG(INFO) << "send_ack!";
+      // LOG(INFO) << "send_ack!";
       send_ack();
 
     }
@@ -731,7 +756,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         stop_in_queue.push(message);
         break;
       case ControlMessage::TRANSMIT:
-        LOG(INFO) << "TRANSMIT" << id;
+        // LOG(INFO) << "TRANSMIT" << id;
         move_queue.push(message);
         break;
       default:

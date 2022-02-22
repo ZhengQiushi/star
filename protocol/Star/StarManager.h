@@ -11,7 +11,6 @@
 
 namespace star {
 
-const int data_transform_interval = 1;
 
 template <class Workload>
 class StarManager : public star::Manager {
@@ -162,10 +161,19 @@ public:
 
       // start data-transform 
       static int cur_data_transform_num = 0;
-      if (context.enable_data_transfer == true && cur_data_transform_num % data_transform_interval == data_transform_interval - 1) {
+      if (context.enable_data_transfer == true && 
+          cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
+          (cur_data_transform_num / context.data_transform_interval) % 2 == 0) {
         // 开始操作 
         set_record_worker_status(ExecutorStatus::START);
         LOG(INFO) << "wait_recorder_worker_finish";
+        // wait_recorder_worker_finish();
+      }
+      if (context.enable_data_transfer == true && 
+          cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
+          (cur_data_transform_num / context.data_transform_interval) % 2 == 1) {
+        // 开始操作 
+        
         wait_recorder_worker_finish();
       }
                   ////// for debug 

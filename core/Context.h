@@ -42,7 +42,8 @@ public:
   std::string cdf_path;
   std::size_t cpu_core_id = 0;
   std::size_t time_to_run = 25;
-
+  std::size_t data_transform_interval = 5;
+  
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;
   bool enable_data_transfer = true;

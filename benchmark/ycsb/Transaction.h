@@ -49,7 +49,7 @@ public:
       auto key = query.Y_KEY[i];
       storage.ycsb_keys[i].Y_KEY = key;
 
-      auto key_partition_id = db.getPartitionID(context, key);
+      auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
       if(key_partition_id == context.partition_num){
         // 
         return TransactionResult::ABORT;
@@ -95,7 +95,7 @@ public:
           storage.ycsb_values[i].Y_F10.assign(
               local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         }
-        auto key_partition_id = db.getPartitionID(context, key);
+        auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
         if(key_partition_id == context.partition_num){
           // 
           return TransactionResult::ABORT;
@@ -121,15 +121,55 @@ public:
     query = makeYCSBQuery<keys_num>()(context, partition_id, random, db);
   }
   
-  const std::vector<int32_t> get_query() override{
-    std::vector<int32_t> record_keys;
+  const std::vector<u_int64_t> get_query() override{
+    using T = u_int64_t;
+
+    std::vector<T> record_keys;
 
     for (auto i = 0u; i < keys_num; i++) {
-      auto key = query.Y_KEY[i];
+      auto key = static_cast<T>(query.Y_KEY[i]);
       record_keys.push_back(key);
     }
     return record_keys;
   }
+  
+   bool check_cross_txn(bool& success) override{
+    /**
+     * @brief 判断是不是跨分区事务
+     * @return true/false
+     */
+        size_t ycsbTableID = ycsb::ycsb::tableID;
+        auto query_keys = this->get_query();
+
+        int32_t first_key;
+        size_t first_key_partition_id;
+        bool is_cross_txn = false;
+        for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+          // judge if is cross txn
+          if(j == 0){
+            first_key = query_keys[j];
+            first_key_partition_id = db.getPartitionID(context, ycsbTableID, first_key);
+            if(first_key_partition_id == context.partition_num){
+              // cant find this key in current partition
+              success = false;
+              break;
+            }
+          } else {
+            auto cur_key = query_keys[j];
+            auto cur_key_partition_id = db.getPartitionID(context, ycsbTableID, cur_key);
+            if(cur_key_partition_id == context.partition_num) {
+              success = false;
+              break;
+            }
+            if(cur_key_partition_id != first_key_partition_id){
+              is_cross_txn = true;
+              break;
+            }
+          }
+        }
+    return is_cross_txn;
+  }
+  
 private:
   DatabaseType &db;
   const ContextType &context;

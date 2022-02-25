@@ -104,7 +104,8 @@ public:
     CHECK(false); // not supported
   }
 
-  std::size_t getPartitionID(const star::Context &context, std::size_t key) const{
+  template<typename KeyType>
+  std::size_t getPartitionID(const star::Context &context, std::size_t table_id, KeyType key) const{
     /**
      * @brief 返回这个key所在的partition
      * @note key 如果不在local 副本，则返回context.partition_num

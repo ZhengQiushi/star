@@ -67,6 +67,12 @@ public:
       // and rbk = 1 (see Clause 2.4.1.4), then the item number is set to an
       // unused value.
 
+      // Comment: An unused value for an item number is a value not found 
+      // in the database such that its use will produce a "not-found" condition 
+      // within the application program. This condition should result in 
+      // rolling back the current database transaction.
+      //
+
       bool retry;
       do {
         retry = false;

@@ -23,6 +23,9 @@ public:
   using RandomType = Random;
   using StorageType = Storage;
 
+  static std::string which_workload(){
+    return "tpcc";
+  }
   Workload(std::size_t coordinator_id, DatabaseType &db, RandomType &random,
            Partitioner &partitioner)
       : coordinator_id(coordinator_id), db(db), random(random),

@@ -262,11 +262,120 @@ public:
     query = makeNewOrderQuery()(context, partition_id, random);
   }
 
-  const std::vector<int32_t> get_query() override{
-    std::vector<int32_t> record_keys;
-    /**TODO**/
+  const std::vector<u_int64_t> get_query() override{
+    /**
+     * @brief for generate the COUNT message for Recorder!
+     * @add by truth 22-02-24
+     */
+    using T = u_int64_t;
+    std::vector<T> record_keys;
+    // 4bit    | 6bit | 10bit | 15bit | 20bit
+    // tableID | W_id | D_id  | C_id  | Lo_id
+
+    T W_ID = this->partition_id + 1; 
+    T D_ID = query.D_ID;
+    T C_ID = query.C_ID;
+     
+    // 
+    T w_record_key = (static_cast<T>(warehouse::tableID) << RECORD_COUNT_TABLE_ID_OFFSET) + 
+                                                   (W_ID << RECORD_COUNT_W_ID_OFFSET); 
+
+    T d_record_key = (static_cast<T>(district::tableID)  << RECORD_COUNT_TABLE_ID_OFFSET) + 
+                                                   (W_ID << RECORD_COUNT_W_ID_OFFSET) + 
+                                                   (D_ID << RECORD_COUNT_D_ID_OFFSET);
+
+    T c_record_key = (static_cast<T>(customer::tableID)  << RECORD_COUNT_TABLE_ID_OFFSET) + 
+                                                   (W_ID << RECORD_COUNT_W_ID_OFFSET) + 
+                                                   (D_ID << RECORD_COUNT_D_ID_OFFSET) + 
+                                                   (C_ID << RECORD_COUNT_C_ID_OFFSET);
+    record_keys.push_back(w_record_key);
+    record_keys.push_back(d_record_key);
+    record_keys.push_back(c_record_key);
+    
+    auto itemTableID = item::tableID;
+    auto stockTableID = stock::tableID; 
+
+    std::set<T> ol_supply_w_record_keys; // , ol_i_record_keys;
+
+    for (int i = 0; i < query.O_OL_CNT; i++) {
+      T OL_I_ID = query.INFO[i].OL_I_ID;
+      T OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
+      // stock_keys.push_back(stock::key(OL_SUPPLY_W_ID, OL_I_ID));
+      T ol_supply_w_record_key = (static_cast<T>(stock::tableID) << RECORD_COUNT_TABLE_ID_OFFSET) + 
+                                                       (OL_SUPPLY_W_ID << RECORD_COUNT_W_ID_OFFSET) +
+                                                       (OL_I_ID);
+
+      ol_supply_w_record_keys.insert(ol_supply_w_record_key);
+    }
+    for(auto i : ol_supply_w_record_keys){
+      record_keys.push_back(i);
+    }
     return record_keys;
   }
+
+  bool check_cross_txn(bool& success) override{
+    /**
+     * @brief 判断是不是跨分区事务
+     * @return true/false
+     */
+    int32_t W_ID = this->partition_id + 1;
+    int32_t D_ID = query.D_ID;
+    int32_t C_ID = query.C_ID;
+    auto itemTableID = item::tableID;
+    auto stockTableID = stock::tableID;
+
+    auto warehouse_key = warehouse::key(W_ID);
+    auto district_key = district::key(W_ID, D_ID);
+    auto customer_key = customer::key(W_ID, D_ID, C_ID);
+    std::vector<item::key> item_keys;
+    std::vector<stock::key> stock_keys;
+
+    bool is_cross_txn = false; // ret
+
+    get_item_stock_keys_query(item_keys, stock_keys);
+    std::unordered_set<size_t> partition_ids; // if only get one id, then it is single-partition txn
+    size_t ware_partition_id = db.getPartitionID(context, warehouse::tableID, warehouse_key);
+    size_t dist_partition_id = db.getPartitionID(context, district::tableID, district_key);
+    size_t cust_partition_id = db.getPartitionID(context, customer::tableID, customer_key);
+
+    partition_ids.insert(ware_partition_id);
+    partition_ids.insert(dist_partition_id);
+    partition_ids.insert(ware_partition_id);
+    
+    if(ware_partition_id == context.partition_num || 
+       dist_partition_id == context.partition_num || 
+       cust_partition_id == context.partition_num){
+        success = false;
+        return is_cross_txn;
+    }
+    for(size_t i = 0 ; i < item_keys.size(); i ++ ){
+      size_t stock_partition_id = db.getPartitionID(context, stock::tableID, stock_keys[i]);
+      //
+      if(stock_partition_id == context.partition_num){
+        success = false;
+        return is_cross_txn;
+       }
+      partition_ids.insert(stock_partition_id);
+      if(partition_ids.size() > 1){
+        is_cross_txn = true;
+        break;
+      }
+    }
+    return is_cross_txn;
+  }
+private:
+  void get_item_stock_keys_query(std::vector<item::key>& item_keys, std::vector<stock::key>& stock_keys){
+    for (int i = 0; i < query.O_OL_CNT; i++) {
+      int32_t OL_I_ID = query.INFO[i].OL_I_ID;
+      int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
+      int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
+
+      item_keys.push_back(item::key(OL_I_ID));
+      stock_keys.push_back(stock::key(OL_SUPPLY_W_ID, OL_I_ID));
+    }
+    return;
+  }
+
 private:
   DatabaseType &db;
   const ContextType &context;
@@ -443,10 +552,16 @@ public:
   void reset_query() override {
     query = makePaymentQuery()(context, partition_id, random);
   }
-  const std::vector<int32_t> get_query() override{
-    std::vector<int32_t> record_keys;
+  const std::vector<u_int64_t> get_query() override{
+    using T = u_int64_t;
+
+    std::vector<T> record_keys;
     /**TODO**/
     return record_keys;
+  }
+  bool check_cross_txn(bool& success) override{
+    /**TODO**/
+    return false;
   }
 private:
   DatabaseType &db;

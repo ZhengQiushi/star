@@ -32,6 +32,7 @@ public:
   using DatabaseType = typename WorkloadType::DatabaseType;
   using KeyType = key_type;
   using ValueType = value_type; 
+  using record_degree_bit = u_int64_t;
 
   StarRecorder(std::size_t coordinator_id, std::size_t id, const Context &context,
           std::atomic<bool> &stopFlag, DatabaseType& db,
@@ -70,8 +71,9 @@ public:
   }
 
 MoveRecord<KeyType, ValueType> get_move_record(myMove<KeyType, ValueType>& move, const Node& max){
-    auto partitionFrom = db.getPartitionID(context, max.from);
-    auto partitionEnd = db.getPartitionID(context,  max.to);
+    size_t ycsbTableID = ycsb::ycsb::tableID;
+    auto partitionFrom = db.getPartitionID(context, ycsbTableID, max.from);
+    auto partitionEnd = db.getPartitionID(context, ycsbTableID, max.to);
 
 
     MoveRecord<ycsb::ycsb::key, ycsb::ycsb::value> move_record;
@@ -98,16 +100,16 @@ MoveRecord<KeyType, ValueType> get_move_record(myMove<KeyType, ValueType>& move,
     return move_record;
 }
 
-MoveRecord<KeyType, ValueType> get_move_record(uint32_t key, int32_t src_partition_id){
+MoveRecord<KeyType, ValueType> get_move_record(uint32_t key, int32_t table_id, int32_t src_partition_id){
     
     MoveRecord<ycsb::ycsb::key, ycsb::ycsb::value> move_record;
 
-    int tableId = ycsb::ycsb::tableID;
+    // int tableId = ycsb::ycsb::tableID;
     // set ycsb key
     move_record.key.Y_KEY = key;
     move_record.src_partition_id = src_partition_id;
     // get ycsb value
-    ITable *src_table = db.find_table(tableId, src_partition_id);
+    ITable *src_table = db.find_table(table_id, src_partition_id);
     auto value = src_table->search_value(&move_record.key);
     move_record.value = *((ycsb::ycsb::value*) value);
     move_record.field_size = src_table->field_size();
@@ -123,20 +125,23 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
      * @note 单个move 大小不要超过30！ 单个message <= 4k
      * 
      */
+    using T = u_int64_t;
     size_t message_key_threshold = 30;
 
-    std::map<int32_t, int32_t> hash_for_index;
-    std::map<int32_t, std::set<int32_t>> moves_key_unique;
+    std::map<int32_t, int32_t> hash_for_index; // <dest_partition, index in moves_merged>
+    std::map<int32_t, std::set<int32_t>> moves_key_unique; 
 
     for(auto itt = moves.begin(); itt != moves.end(); itt ++) {
       myMove<KeyType, ValueType>& move = *itt;
 
+      // 检查move是否为到本地，并取出其value
       for(auto it = move.records.begin(); it != move.records.end(); ){
         // 本地到本地，就不用迁移了
         if(it->src_partition_id == move.dest_partition_id){
           move.records.erase(it);
         } else {
-          *it = get_move_record(*(int32_t*)& it->key, it->src_partition_id);
+          int32_t table_id = ((*(T*)&it->key) >> RECORD_COUNT_TABLE_ID_OFFSET);
+          *it = get_move_record(*(T*)& it->key, table_id, it->src_partition_id);
           it ++ ;
         } 
       }
@@ -144,7 +149,6 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         continue;
       }
       //  src 和 dest 的放到一个move里，准备merge
-
       if(hash_for_index.find(move.dest_partition_id) == hash_for_index.end()){
         // have not inserted 
         hash_for_index.insert(std::make_pair(move.dest_partition_id, int32_t(moves_merged.size())));
@@ -153,25 +157,24 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
         moves_merged.push_back(tmp);
       }
       
-        
-        for(auto it = move.records.begin(); it != move.records.end();){
+      // 
+      for(auto it = move.records.begin(); it != move.records.end();){
+        int32_t index_ = hash_for_index[move.dest_partition_id];
 
-          int32_t index_ = hash_for_index[move.dest_partition_id];
-
-          if(moves_merged[index_].records.size() < message_key_threshold){
-            moves_merged[index_].records.push_back(*it);
-            it ++ ;
-          } else {
-            // 超过阈值，拆分成多个
-            auto old_it = hash_for_index.find(move.dest_partition_id);
-            hash_for_index.erase(old_it);
-            // 新建映射关系
-            hash_for_index.insert(std::make_pair(move.dest_partition_id, int32_t(moves_merged.size())));
-            myMove<KeyType, ValueType> tmp;
-            tmp.dest_partition_id = move.dest_partition_id;
-            moves_merged.push_back(tmp);
-          }
+        if(moves_merged[index_].records.size() < message_key_threshold){
+          moves_merged[index_].records.push_back(*it);
+          it ++ ;
+        } else {
+          // 超过阈值，拆分成多个
+          auto old_it = hash_for_index.find(move.dest_partition_id);
+          hash_for_index.erase(old_it);
+          // 新建映射关系
+          hash_for_index.insert(std::make_pair(move.dest_partition_id, int32_t(moves_merged.size())));
+          myMove<KeyType, ValueType> tmp;
+          tmp.dest_partition_id = move.dest_partition_id;
+          moves_merged.push_back(tmp);
         }
+      }
       
       
 
@@ -179,7 +182,6 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
 
     for(size_t i = 0 ; i < moves_merged.size() ; i ++ ){
         myMove<KeyType, ValueType>& move = moves_merged[i];
-
         if(!move.records.empty()){
           move_in_history.push_back(move); // For Debug
         }
@@ -289,11 +291,8 @@ bool prepare_for_transmit_clay(std::vector<myMove<KeyType, ValueType> >& moves,
 
         bool is_ready = false;
         if(moves.size() != 0) {
-          
-          //!TODO 先只迁移一个move
           is_ready = prepare_for_transmit_clay(moves, moves_merged);
          
-
           if(is_ready == true && moves_merged.size() > 0) {
             for(size_t cur_move = 0; cur_move < moves_merged.size(); cur_move ++ ){
               myMove<KeyType, ValueType>& move = moves_merged[cur_move];
@@ -817,13 +816,13 @@ protected:
 
 
 private:
-
+  template<typename T = u_int64_t>
   void record_txn_appearance() {
     /**
      * @brief 统计txn涉及的record关联度
      */
 
-    auto key_size = sizeof(int32_t);
+    auto key_size = sizeof(T);
     auto handle_size = txn_queue.read_available();
     size_t i = 0;
     while(i ++ < handle_size){ //  !txn_queue.empty()){ // 
@@ -840,24 +839,24 @@ private:
 
         auto stringPiece = messagePiece.toStringPiece();
 
-        std::vector<int32_t> record_keys;
+        std::vector<T> record_keys;
         // 提前退出
         if(recorder_status.load() == static_cast<int32_t>(ExecutorStatus::START) || stopFlag.load()){
           return;
         }
+        // 
         get_txn_related_record_set(record_keys, stringPiece);
+
         update_record_degree_set(record_keys);
-
-
       }
     }
   }
-
-  void get_txn_related_record_set(std::vector<int32_t>& record_keys, star::StringPiece& stringPiece){
+  template<typename T = u_int64_t>
+  void get_txn_related_record_set(std::vector<T>& record_keys, star::StringPiece& stringPiece){
     /**
      * @brief record_keys 有序的
     */
-    auto key_size = sizeof(int32_t);
+    auto key_size = sizeof(T);
 
     const void *total_len_size = stringPiece.data();
     const auto &total_len = *static_cast<const int32_t *>(total_len_size);
@@ -869,28 +868,99 @@ private:
       const void *record_key = stringPiece.data();    
       stringPiece.remove_prefix(key_size);
 
-      const auto &k = *static_cast<const int32_t *>(record_key);
+      const auto &k = *static_cast<const T *>(record_key);
       record_keys.emplace_back(k);
     }
     sort(record_keys.begin(), record_keys.end());
   }
 
+  struct real_key{
+    int32_t table_id;
+    tpcc::warehouse::key w_key;
+    tpcc::district::key d_key;
+    tpcc::customer::key c_key;
+    tpcc::stock::key s_key;
+    real_key(){
+      table_id = 0;
+      memset(&w_key, 0, sizeof(w_key));
+      memset(&d_key, 0, sizeof(d_key));
+      memset(&c_key, 0, sizeof(c_key));
+      memset(&s_key, 0, sizeof(s_key));
+    }
+  };
 
-  void update_record_degree_set(const std::vector<int32_t>& record_keys){
+  const real_key get_tpcc_real_key(uint64_t record_key){
+    DCHECK(WorkloadType::which_workload() == "tpcc");
+    // void* res = nullptr;
+    real_key ret;
+    
+
+    int32_t table_id = (record_key >> RECORD_COUNT_TABLE_ID_OFFSET);
+    ret.table_id = table_id;
+
+
+    int32_t w_id = (record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+    int32_t d_id = (record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+    int32_t c_id = (record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+    int32_t s_id = (record_key & RECORD_COUNT_OL_ID_VALID);
+    switch (table_id)
+    {
+    case tpcc::warehouse::tableID:
+      ret.w_key = tpcc::warehouse::key(w_id); // res = new tpcc::warehouse::key(content);
+      break;
+    case tpcc::district::tableID:
+      ret.d_key = tpcc::district::key(w_id, d_id);
+      break;
+    case tpcc::customer::tableID:
+      ret.c_key = tpcc::customer::key(w_id, d_id, c_id);
+      break;
+    case tpcc::stock::tableID:
+      ret.s_key = tpcc::stock::key(w_id, s_id);
+      break;
+    default:
+      DCHECK(false);
+      break;
+    }
+    return ret;
+  }
+  int32_t get_partition_id_for_tpcc(const real_key& r_k){
+    int32_t ret = -1;
+    switch (r_k.table_id)
+    {
+    case tpcc::warehouse::tableID:
+      ret = db.getPartitionID(context, r_k.table_id, r_k.w_key);
+      break;
+    case tpcc::district::tableID:
+      ret = db.getPartitionID(context, r_k.table_id, r_k.d_key);
+      break;
+    case tpcc::customer::tableID:
+      ret = db.getPartitionID(context, r_k.table_id, r_k.c_key);
+      break;
+    case tpcc::stock::tableID:
+      ret = db.getPartitionID(context, r_k.table_id, r_k.s_key);
+      break;
+    }
+    return ret;
+  }
+
+
+  template<typename T = u_int64_t> 
+  void update_record_degree_set(const std::vector<T>& record_keys){
     /**
      * @brief 更新权重
      * @param record_keys 递增的key
      * @note 双向图
     */
+    size_t tableID = ycsb::ycsb::tableID;
 
     for(size_t i = 0; i < record_keys.size(); i ++ ){
-      std::unordered_map<int32_t, std::unordered_map<int32_t, Node>>::iterator it;
-      int32_t key_one = record_keys[i];
+      std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node>>::iterator it;
+      auto key_one = record_keys[i];
 
       it = record_degree.find(key_one);
       if (it == record_degree.end()){
         // [key_one -> [key_two, Node]]
-        std::unordered_map<int32_t, Node> tmp;
+        std::unordered_map<record_degree_bit, Node> tmp;
         record_degree.insert(std::make_pair(key_one, tmp));
         it = record_degree.find(key_one);
       }
@@ -898,8 +968,8 @@ private:
         // j = i + 1
         if(j == i)
           continue;
-        std::unordered_map<int32_t, Node>::iterator itt;
-        int32_t key_two = record_keys[j];
+        std::unordered_map<record_degree_bit, Node>::iterator itt;
+        auto key_two = record_keys[j];
 
         itt = it->second.find(key_two);
         if (itt == it->second.end()){
@@ -907,12 +977,24 @@ private:
           Node n;
           n.degree = 0; 
 
-          n.from_p_id = db.getPartitionID(context, key_one);
-          n.to_p_id = db.getPartitionID(context, key_two);
+          int32_t key_one_table_id = key_one >> RECORD_COUNT_TABLE_ID_OFFSET;
+          int32_t key_two_table_id = key_two >> RECORD_COUNT_TABLE_ID_OFFSET;
+          if(WorkloadType::which_workload() == "ycsb"){
+            n.from_p_id = db.getPartitionID(context, key_one_table_id, key_one);
+            n.to_p_id = db.getPartitionID(context, key_two_table_id, key_two);
+          } else if(WorkloadType::which_workload() == "tpcc"){
+            real_key key_one_real = get_tpcc_real_key(key_one); 
+            real_key key_two_real = get_tpcc_real_key(key_two);
+
+            n.from_p_id = get_partition_id_for_tpcc(key_one_real); // ;db.getPartitionID(context, key_one_table_id, key_one_real);
+            n.to_p_id = get_partition_id_for_tpcc(key_two_real); // db.getPartitionID(context, key_two_table_id, key_two_real);
+          } else {
+            DCHECK(false);
+          }
 
           n.on_same_coordi = n.from_p_id == n.to_p_id; // context.;
 
-          it->second.insert(std::pair<int32_t, Node>(key_two, n));
+          it->second.insert(std::pair<T, Node>(key_two, n));
           itt = it->second.find(key_two);
         }
 
@@ -940,10 +1022,10 @@ private:
     */
     std::ofstream outfile;
 	  outfile.open("result.txt", std::ios::app); // ios::trunc
-    for (std::unordered_map<int32_t, std::unordered_map<int32_t, Node>>::iterator it=record_degree.begin(); 
+    for (std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node>>::iterator it=record_degree.begin(); 
          it!=record_degree.end(); ++it){
-        std::unordered_map<int32_t, Node>::iterator itt_begin = it->second.begin();
-        std::unordered_map<int32_t, Node>::iterator itt_end = it->second.end();
+        std::unordered_map<record_degree_bit, Node>::iterator itt_begin = it->second.begin();
+        std::unordered_map<record_degree_bit, Node>::iterator itt_end = it->second.end();
         for(; itt_begin!= itt_end; itt_begin ++ ){
 
           outfile << "[" << it->first << ", " << itt_begin->first << "]: " << itt_begin->second.degree << " [ "<< itt_begin->second.from_p_id << "->" << itt_begin->second.to_p_id <<"] single partition =" << itt_begin->second.on_same_coordi << "\n";
@@ -972,10 +1054,10 @@ private:
       outfile_excel << "from" << "\t" << "to" << "\t" << "degree" << "\t"<< "from_p_id" << "\t" << "to_p_id" <<"\t" << "is_on_same" << "\t" << "round" << "\n";
     }
     round ++ ;
-    for (std::unordered_map<int32_t, std::unordered_map<int32_t, Node>>::iterator it=record_degree.begin(); 
+    for (std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node>>::iterator it=record_degree.begin(); 
          it!=record_degree.end(); ++it){
-        std::unordered_map<int32_t, Node>::iterator itt_begin = it->second.begin();
-        std::unordered_map<int32_t, Node>::iterator itt_end = it->second.end();
+        std::unordered_map<record_degree_bit, Node>::iterator itt_begin = it->second.begin();
+        std::unordered_map<record_degree_bit, Node>::iterator itt_end = it->second.end();
         for(; itt_begin!= itt_end; itt_begin ++ ){
 
           outfile_excel << it->first << "\t" << itt_begin->first << "\t" << itt_begin->second.degree << "\t"<< itt_begin->second.from_p_id << "\t" << itt_begin->second.to_p_id <<"\t" << itt_begin->second.on_same_coordi << "\t" << round << "\n";
@@ -1007,7 +1089,7 @@ public:
   std::atomic<uint32_t>& n_started_workers;
   std::unique_ptr<Delay> delay;  
 
-  std::unordered_map<int32_t, std::unordered_map<int32_t, Node>> record_degree;
+  std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node>> record_degree;
   std::unique_ptr<Partitioner> c_partitioner; //  s_partitioner,
 
   std::unique_ptr<Clay<KeyType, ValueType>> my_clay;

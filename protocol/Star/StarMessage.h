@@ -83,13 +83,14 @@ public:
     return message_size;
   }
 
+  template<typename T = u_int64_t>
   static std::size_t new_async_txn_of_record_message(Message &message,
-                                                     const std::vector<int32_t> record_key_in_this_txn){
+                                                     const std::vector<T> record_key_in_this_txn){
     /**
      * @brief 记录txn的record
-     * 
+     * @note key_size increased from 32bits to 64bits
     */
-    auto key_size = sizeof(int32_t);
+    auto key_size = sizeof(T);
 
     int32_t total_key_len = (int32_t)record_key_in_this_txn.size();
 

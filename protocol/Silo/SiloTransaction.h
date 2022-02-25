@@ -16,6 +16,7 @@
 
 namespace star {
 
+
 class SiloTransaction {
 public:
   using MetaDataType = std::atomic<uint64_t>;
@@ -46,7 +47,10 @@ public:
   virtual TransactionResult execute(std::size_t worker_id) = 0;
 
   virtual void reset_query() = 0;
-  virtual const std::vector<int32_t> get_query() = 0;
+
+  virtual const std::vector<u_int64_t> get_query() = 0;
+
+  virtual bool check_cross_txn(bool& success) = 0;
 
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,
@@ -59,7 +63,7 @@ public:
     readKey.set_key(&key);
     readKey.set_value(&value);
 
-    readKey.set_local_index_read_bit();
+    readKey.set_local_index_read_bit(); // only difference between 'search_for_read'
     readKey.set_read_request_bit();
 
     add_to_read_set(readKey);
@@ -115,7 +119,11 @@ public:
   }
 
   bool process_requests(std::size_t worker_id) {
-
+    /**
+     * @brief get content for read set？
+     * 
+     * @param i 
+     */
     // cannot use unsigned type in reverse iteration
     for (int i = int(readSet.size()) - 1; i >= 0; i--) {
       // early return

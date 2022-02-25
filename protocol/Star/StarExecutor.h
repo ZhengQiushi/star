@@ -170,7 +170,9 @@ public:
 
       n_started_workers.fetch_add(1);
       // LOG(WARNING) << "worker " << id << " ready to run_transaction";
-
+      if(id == 0){
+        LOG(INFO) << "debug";
+      }
       run_transaction(ExecutorStatus::S_PHASE);
 
       n_complete_workers.fetch_add(1);
@@ -201,49 +203,49 @@ public:
 
   }
 
-  bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction, bool& success){
-    /**
-     * @brief 判断是不是跨分区事务
-     * @return true/false
-     */
-        auto query_keys = cur_transaction->get_query();
+  // bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction, bool& success){
+  //   /**
+  //    * @brief 判断是不是跨分区事务
+  //    * @return true/false
+  //    */
+  //       auto query_keys = cur_transaction->get_query();
 
-        int32_t first_key;
-        size_t first_key_partition_id;//  = db.getPartitionID(context, )
-        bool is_cross_txn = false;
-        for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-          // judge if is cross txn
-          if(j == 0){
-            first_key = query_keys[j];
-            first_key_partition_id = db.getPartitionID(context, first_key);
-            if(first_key_partition_id == context.partition_num){
-              success = false;
-              break;
-            }
-          } else {
-            auto cur_key = query_keys[j];
-            auto cur_key_partition_id = db.getPartitionID(context, cur_key);
-            if(cur_key_partition_id == context.partition_num) {
-              success = false;
-              break;
-            }
-            if(cur_key_partition_id != first_key_partition_id){
-              is_cross_txn = true;
-              break;
-            }
-          }
-        }
-    return is_cross_txn;
-  }
+  //       int32_t first_key;
+  //       size_t first_key_partition_id;
+  //       bool is_cross_txn = false;
+  //       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+  //         // judge if is cross txn
+  //         if(j == 0){
+  //           first_key = query_keys[j];
+  //           first_key_partition_id = db.getPartitionID(context, first_key);
+  //           if(first_key_partition_id == context.partition_num){
+  //             success = false;
+  //             break;
+  //           }
+  //         } else {
+  //           auto cur_key = query_keys[j];
+  //           auto cur_key_partition_id = db.getPartitionID(context, cur_key);
+  //           if(cur_key_partition_id == context.partition_num) {
+  //             success = false;
+  //             break;
+  //           }
+  //           if(cur_key_partition_id != first_key_partition_id){
+  //             is_cross_txn = true;
+  //             break;
+  //           }
+  //         }
+  //       }
+  //   return is_cross_txn;
+  // }
+
   void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
     std::size_t query_num = 0;
     Partitioner *partitioner = nullptr;
-    ContextType phase_context; // = c_context;
+    ContextType phase_context; 
 
     std::vector<ExecutorStatus> cur_status;
     cur_status.push_back(ExecutorStatus::C_PHASE);
@@ -253,46 +255,28 @@ public:
       // 当前状态, 依次遍历两个phase
       auto status = cur_status[round];
 
-      // WorkloadType* workload = nullptr; // (coordinator_id, db, random, *partitioner);
-
       if (status == ExecutorStatus::C_PHASE) {
         partitioner = c_partitioner.get();
         query_num =
              StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
-        phase_context = context.get_cross_partition_context(); // c_context; // 
-        // if(c_workload.get()==nullptr){
-          
-        // } else {
-        //   c_workload.reset();
-        // }
-        // c_workload = std::make_unique<WorkloadType> (coordinator_id, db, random, *partitioner);
-        // workload = c_workload.get();
-
+        phase_context = context.get_cross_partition_context(); 
+        if(id == 0){
+          LOG(INFO) << "debug";
+        }
       } else if (status == ExecutorStatus::S_PHASE) {
         partitioner = s_partitioner.get();
         query_num =
             StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
-        phase_context = context.get_single_partition_context(); //  s_context; 
-        // if(s_workload.get()==nullptr){
-          
-        // } else {
-        //   s_workload.reset();
-        // }
-        // s_workload = std::make_unique<WorkloadType> (coordinator_id, db, random, *partitioner);
-        // workload = s_workload.get();
+        phase_context = context.get_single_partition_context(); 
+        if(id == 0){
+          LOG(INFO) << "debug";
+        }
       } else {
         CHECK(false);
       }   
 
-      // 
-      
-      // ProtocolType protocol(db, phase_context, *partitioner, id);
-      
-
       StorageType storage;
-
       uint64_t last_seed = 0;
-
 
       for (auto i = 0u; i < query_num; i++) {
         std::unique_ptr<TransactionType> cur_transaction;
@@ -305,7 +289,8 @@ public:
         }
         // 甄别一下？
         bool is_success = true;
-        bool is_cross_txn = check_cross_txn(cur_transaction, is_success);
+        
+        bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
 
         if(is_success){
           if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
@@ -406,13 +391,9 @@ public:
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue->size();
-    
-    // if(id == 0 ){
-    //   LOG(INFO) << query_num << " ";
-    // }
-    
+        
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
-    for (auto i = 0u; i < cur_queue_size; i++) { // query_num
+    for (auto i = 0u; i < cur_queue_size; i++) {
       if(cur_transactions_queue->empty()){
         break;
       }
@@ -429,7 +410,6 @@ public:
           transaction->reset();
         } else {
           std::size_t partition_id = get_partition_id(status);
-
           setupHandlers(*transaction, protocol);
         }
         // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute";

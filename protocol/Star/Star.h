@@ -37,7 +37,10 @@ public:
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
                   const void *key, void *value) const {
-
+    /**
+     * @brief read value from the key in table[table_id] from partition[partition_id]
+     * 
+     */
     ITable *table = db.find_table(table_id, partition_id);
     auto value_bytes = table->value_size();
     auto row = table->search(key);
@@ -227,8 +230,12 @@ private:
     /**
      * @brief 发给每个coordinator的recorder， 统计txn的record关联度情况
      * @add by truth 22-01-12
+     * @modify by truth 22-02-24
+     * @note std::vector<int32_t> record_key_in_this_txn
+     *      |  4bit    |  28bit  |
+     *      |  tableID |  keyID  |
     */
-    const std::vector<int32_t> record_key_in_this_txn = txn.get_query();
+    const std::vector<u_int64_t> record_key_in_this_txn = txn.get_query();
 
     for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
       // 给每一个coordinator都发送该信息

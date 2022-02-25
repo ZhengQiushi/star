@@ -124,7 +124,8 @@ public:
   }
 
   void initialize(const Context &context) {
-
+    //
+    
     std::size_t coordinator_id = context.coordinator_id;
     std::size_t partitionNum = context.partition_num;
     std::size_t threadsNum = context.worker_num;
@@ -243,17 +244,26 @@ public:
                partitionNum, threadsNum, partitioner.get());
     */
     initTables("item",
-               [this](std::size_t partitionID) { itemInit(partitionID); }, 1, 1,
+               [this](std::size_t partitionID) { itemInit(partitionID); }, 1, 1, // 只需要一个分区, 因为没有写操作... 
                nullptr);
     initTables("stock",
                [this](std::size_t partitionID) { stockInit(partitionID); },
                partitionNum, threadsNum, partitioner.get());
   }
-
-  std::size_t getPartitionID(const star::Context &context, std::size_t key) const{
+  
+  template<typename KeyType>
+  std::size_t getPartitionID(const star::Context &context, std::size_t table_id, KeyType key) const{
     // 返回这个key所在的partition
+    auto which_table = tbl_vecs[table_id];
+
     size_t i = 0;
-    // TODO
+    for( ; i < context.partition_num; i ++ ){
+      ITable *table = which_table[i];
+      bool is_exist = table->contains((void*)& key);
+      if(is_exist)
+        break;
+    }
+    // DCHECK(i != context.partition_num);
     return i;
   }
   std::set<int32_t> getPartitionIDs(const star::Context &context, std::size_t key) const

@@ -29,7 +29,11 @@ namespace star
 
     template <typename key_type, typename value_type>
     struct myMove
-    {
+    {   
+    /**
+     * @brief a bunch of record that needs to be transformed 
+     * 
+     */
         std::vector<MoveRecord<key_type, value_type> > records;
         // may come from different partition but to the same dest
         int32_t dest_partition_id;
@@ -143,14 +147,17 @@ namespace star
     template <typename KeyType, typename ValueType>
     class Clay
     {
+        using record_degree_bit = u_int64_t;
     public: // unordered_  unordered_
-        Clay(std::unordered_map<int32_t, std::unordered_map<int32_t, Node> >& record_d):
+        Clay(std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node> >& record_d):
         record_degree(record_d){
         }
 
         void find_clump(std::vector<myMove<KeyType, ValueType> > &moves)
         {
-            //
+            /***
+             * @brief 
+            */
             average_load = 0;
             int32_t overloaded_partition_id = find_overloaded_partition(average_load);
             if(overloaded_partition_id == -1){
@@ -401,7 +408,7 @@ namespace star
             for(auto it = move.records.begin(); it != move.records.end(); it ++ ){
                 // 遍历每一条record
                 int32_t key = *(int32_t*)& it->key;
-                std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
+                std::unordered_map<record_degree_bit, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto itt = all_edges.begin(); itt != all_edges.end(); itt ++ ) {
                     Node& cur_n = itt->second;
@@ -548,7 +555,7 @@ namespace star
                 auto key = *(int32_t*)&cur.key;
                 // 点权重
                 cost += hottest_tuple[key];
-                std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
+                std::unordered_map<record_degree_bit, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto it = all_edges.begin(); it != all_edges.end(); it ++ ) {
                     if(it->second.to_p_id == dest_partition_id){
@@ -578,7 +585,7 @@ namespace star
                 }
                 // 点权重
                 cost -= hottest_tuple[key];
-                std::unordered_map<int32_t, Node>& all_edges = record_degree[key];
+                std::unordered_map<record_degree_bit, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto it = all_edges.begin(); it != all_edges.end(); it ++ ) {
                     // 
@@ -618,12 +625,12 @@ namespace star
         int32_t cur_load;
     public:
         std::unordered_map<int32_t, fixed_priority_queue> big_node_heap; // <partition_id, big_heap>
-        std::unordered_map<int32_t, std::vector<std::pair<int32_t, Node> > > record_for_neighbor;
-        std::unordered_set<int32_t> move_tuple_id;
-        std::unordered_map<int32_t, int32_t> hottest_tuple; // <key, frequency>
+        std::unordered_map<record_degree_bit, std::vector<std::pair<int32_t, Node> > > record_for_neighbor;
+        std::unordered_set<record_degree_bit> move_tuple_id;
+        std::unordered_map<record_degree_bit, int32_t> hottest_tuple; // <key, frequency>
         std::map<int32_t, int32_t> load_partition; // <partition_id, load>
 
-        std::unordered_map<int32_t, std::unordered_map<int32_t, Node> >& record_degree; // unordered_ unordered_
+        std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node> >& record_degree; // unordered_ unordered_
 
     };
 }

@@ -176,11 +176,15 @@ public:
         
         wait_recorder_worker_finish();
       }
-                  ////// for debug 
-            for(int i = 0 ; i < 12; i ++ ){
-              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-            }
+      
+      //// for debug 
+      if(WorkloadType::which_workload() == "ycsb"){
+        for(int i = 0 ; i < 12; i ++ ){
+          ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+          LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+        }
+      }
+
       cur_data_transform_num ++;
 
       auto s_start = std::chrono::steady_clock::now();
@@ -282,12 +286,15 @@ public:
       LOG(INFO) << "send_ack";
 
       send_ack();
-      for(int i = 0 ; i < 12; i ++ ){
-        if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-          ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-          LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+      if(WorkloadType::which_workload() == "ycsb"){
+        for(int i = 0 ; i < 12; i ++ ){
+          if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+            ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+            LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+          }
         }
       }
+
       LOG(INFO) << "start S-Phase";
       
       // start s-phase

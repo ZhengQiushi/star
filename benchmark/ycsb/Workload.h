@@ -22,9 +22,8 @@ public:
   using ContextType = Context;
   using RandomType = Random;
   using StorageType = Storage;
-  static std::string which_workload(){
-    return "ycsb";
-  }
+  static myTestSet which_workload;
+
   Workload(std::size_t coordinator_id, DatabaseType &db, RandomType &random,
            Partitioner &partitioner)
       : coordinator_id(coordinator_id), db(db), random(random),
@@ -48,6 +47,8 @@ private:
   RandomType &random;
   Partitioner &partitioner;
 };
+template <class Transaction>
+myTestSet Workload<Transaction>::which_workload = myTestSet::YCSB;
 
 } // namespace ycsb
 } // namespace star

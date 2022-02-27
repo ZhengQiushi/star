@@ -1,5 +1,9 @@
 #pragma once
 
+#include "core/Context.h"
+#include "benchmark/ycsb/Schema.h"
+#include "core/Defs.h"
+
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -10,38 +14,247 @@
 
 namespace star
 {
-    template <typename key_type, typename value_type>
-    struct MoveRecord
-    {
-        key_type key;
-        int32_t key_size;
-        value_type value;
-        int32_t field_size;
-        // int32_t commit_tid; 可以不用?
-        // may come from different partition but to the same dest
-        int32_t src_partition_id;
+    // template <typename key_type, typename value_type>
+    // struct MoveRecord
+    // {
+    //     key_type key;
+    //     int32_t key_size;
+    //     value_type value;
+    //     int32_t field_size;
+    //     // int32_t commit_tid; 可以不用?
+    //     // may come from different partition but to the same dest
+    //     int32_t src_partition_id;
 
-        void set_key(key_type k, int32_t src_p_id){
-            key = k;
-            src_partition_id = src_p_id;
+    //     void set_key(key_type k, int32_t src_p_id){
+    //         key = k;
+    //         src_partition_id = src_p_id;
+    //     }
+    // };
+    template <class Workload>
+    struct MoveRecord{
+        using WorkloadType = Workload;
+
+        int32_t table_id;
+        int32_t key_size;
+        int32_t field_size;
+        int32_t src_partition_id;
+        u_int64_t record_key_;
+
+        union key_ {
+            key_(){
+                // can't be default
+            }
+            ycsb::ycsb::key ycsb_key;
+            tpcc::warehouse::key w_key;
+            tpcc::district::key d_key;
+            tpcc::customer::key c_key;
+            tpcc::stock::key s_key;
+        } key;
+        
+        union val_ {
+            val_(){
+                ;
+            }           
+            star::ycsb::ycsb::value ycsb_val;
+            tpcc::warehouse::value w_val;
+            tpcc::district::value d_val;
+            tpcc::customer::value c_val;
+            tpcc::stock::value s_val;
+        } value;
+
+        MoveRecord(){
+            table_id = 0;
+            memset(&key, 0, sizeof(key));
+            memset(&value, 0, sizeof(value));
         }
+        ~MoveRecord(){
+            table_id = 0;
+            memset(&key, 0, sizeof(key));
+            memset(&value, 0, sizeof(value));
+        }
+        void set_real_key(uint64_t record_key){
+            /**
+             * @brief Construct a new DCHECK object
+             * 
+             */
+            record_key_ = record_key;
+
+            this->key_size = sizeof(uint64_t);
+            
+            myTestSet hihi = WorkloadType::which_workload;
+
+            if(WorkloadType::which_workload == myTestSet::YCSB){
+                this->key.ycsb_key = record_key;
+                this->field_size = ClassOf<ycsb::ycsb::value>::size();
+            } else if(WorkloadType::which_workload == myTestSet::TPCC){
+                int32_t table_id = (record_key >> RECORD_COUNT_TABLE_ID_OFFSET);
+                this->table_id = table_id;
+
+                int32_t w_id = (record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+                int32_t d_id = (record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+                int32_t c_id = (record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+                int32_t s_id = (record_key & RECORD_COUNT_OL_ID_VALID);
+                switch (table_id)
+                {
+                case tpcc::warehouse::tableID:
+                    this->key.w_key = tpcc::warehouse::key(w_id); // res = new tpcc::warehouse::key(content);
+                    this->field_size = ClassOf<tpcc::warehouse::value>::size();
+                    break;
+                case tpcc::district::tableID:
+                    this->key.d_key = tpcc::district::key(w_id, d_id);
+                    this->field_size = ClassOf<tpcc::district::value>::size();
+                    break;
+                case tpcc::customer::tableID:
+                    this->key.c_key = tpcc::customer::key(w_id, d_id, c_id);
+                    this->field_size = ClassOf<tpcc::customer::value>::size();
+                    break;
+                case tpcc::stock::tableID:
+                    this->key.s_key = tpcc::stock::key(w_id, s_id);
+                    this->field_size = ClassOf<tpcc::stock::value>::size();
+                    break;
+                default:
+                    DCHECK(false);
+                    break;
+                }
+            }
+            return;
+
+        }
+
+        void set_real_value(uint64_t record_key, const void* record_val){            
+            if(WorkloadType::which_workload == myTestSet::YCSB){
+                this->table_id = ycsb::ycsb::tableID;
+
+                const auto &v = *static_cast<const ycsb::ycsb::value *>(record_val);  
+                this->value.ycsb_val = v;
+            } else if(WorkloadType::which_workload == myTestSet::TPCC){
+                int32_t table_id = (record_key >> RECORD_COUNT_TABLE_ID_OFFSET);
+                this->table_id = table_id;
+
+                // int32_t w_id = (record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+                // int32_t d_id = (record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+                // int32_t c_id = (record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+                // int32_t s_id = (record_key & RECORD_COUNT_OL_ID_VALID);
+                switch (table_id)
+                {
+                case tpcc::warehouse::tableID:{
+                    const auto &v = *static_cast<const tpcc::warehouse::value *>(record_val);  
+                    this->value.w_val = v;
+                    // this->key.w_key = tpcc::warehouse::key(w_id); // res = new tpcc::warehouse::key(content);
+                    // this->field_size = ClassOf<tpcc::warehouse::value>::size();
+                    break;
+                }
+                case tpcc::district::tableID:{
+                    const auto &v = *static_cast<const tpcc::district::value *>(record_val);  
+                    this->value.d_val = v;
+                    // this->key.d_key = tpcc::district::key(w_id, d_id);
+                    // this->field_size = ClassOf<tpcc::district::value>::size();
+                    break;
+                }
+                case tpcc::customer::tableID:{
+                    const auto &v = *static_cast<const tpcc::customer::value *>(record_val);  
+                    this->value.c_val = v;
+                    // this->key.c_key = tpcc::customer::key(w_id, d_id, c_id);
+                    // this->field_size = ClassOf<tpcc::customer::value>::size();
+                    break;
+                }
+                case tpcc::stock::tableID:{
+                    const auto &v = *static_cast<const tpcc::stock::value *>(record_val);  
+                    this->value.s_val = v;
+                    // this->key.s_key = tpcc::stock::key(w_id, s_id);
+                    // this->field_size = ClassOf<tpcc::stock::value>::size();
+                    break;
+                }
+                default:
+                    DCHECK(false);
+                    break;
+                }
+            }
+            return;
+
+        }
+    
     };
 
-    template <typename key_type, typename value_type>
+    template <class Workload>
     struct myMove
     {   
     /**
      * @brief a bunch of record that needs to be transformed 
      * 
-     */
-        std::vector<MoveRecord<key_type, value_type> > records;
+     */ 
+        using WorkloadType = Workload;
+
+        std::vector<MoveRecord<WorkloadType>> records;
+        // std::vector<MoveRecord<tpcc::warehouse::key, tpcc::warehouse::value> > tpcc_warehouse_records;
+        // std::vector<MoveRecord<tpcc::district::key, tpcc::district::value> > tpcc_district_records;
+        // std::vector<MoveRecord<tpcc::customer::key, tpcc::customer::value> > tpcc_customer_records;
+        // std::vector<MoveRecord<tpcc::stock::key, tpcc::stock::value> > tpcc_stack_records;
+
+        // std::vector<MoveRecord<key_type, value_type> > records;
         // may come from different partition but to the same dest
         int32_t dest_partition_id;
+        // size_t cur_move_record_num;
 
+        myMove(){
+            reset(); 
+        }
+        // void push_back(u_int64_t key, int32_t p_id){
+
+            // int32_t table_id = (key & RECORD_COUNT_TABLE_ID_VALID) >> RECORD_COUNT_TABLE_ID_OFFSET;
+            // int32_t w_id = (key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+            // int32_t d_id = (key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+            // int32_t c_id = (key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+            // int32_t s_id = (key & RECORD_COUNT_OL_ID_VALID);
+
+            // switch(table_id){
+            //     case 0:{ // ycsb
+            //         // if(Workload)
+            //         MoveRecord<ycsb::ycsb::key, ycsb::ycsb::value> rec;
+            //         auto tmp_key = ycsb::ycsb::key(key);
+            //         rec.set_key(tmp_key, p_id);
+            //         ycsb_records.push_back(rec);
+
+            //         // MoveRecord<tpcc::warehouse::key, tpcc::warehouse::value> rec;
+            //         // auto tmp_key = tpcc::warehouse::key(w_id);
+            //         // rec.set_key(tmp_key, p_id);
+            //         // tpcc_warehouse_records.push_back(rec);
+            //         break;
+            //     }
+            //     case tpcc::district::tableID:{
+            //         MoveRecord<tpcc::district::key, tpcc::district::value> rec;
+            //         auto tmp_key = tpcc::district::key(w_id, d_id);
+            //         rec.set_key(tmp_key, p_id);
+            //         tpcc_district_records.push_back(rec);
+            //         break;
+            //     }
+            //     case tpcc::customer::tableID:{
+            //         MoveRecord<tpcc::customer::key, tpcc::customer::value> rec;
+            //         auto tmp_key = tpcc::customer::key(w_id, d_id, c_id);
+            //         rec.set_key(tmp_key, p_id);
+            //         tpcc_customer_records.push_back(rec);
+            //         break;
+            //     }
+            //     case tpcc::stock::tableID:{
+            //         MoveRecord<tpcc::stock::key, tpcc::stock::value> rec;
+            //         auto tmp_key = tpcc::stock::key(w_id, s_id);
+            //         rec.set_key(tmp_key, p_id);
+            //         tpcc_stack_records.push_back(rec);
+            //         break;
+            //     }
+            // }     
+            // cur_move_record_num ++; 
+        // }
         void reset()
         {
             records.clear();
+
+            // tpcc_warehouse_records.clear();
+            // tpcc_district_records.clear();
+            // tpcc_customer_records.clear();
+            // tpcc_stack_records.clear();
             dest_partition_id = -1;
+            // cur_move_record_num = 0;
         }
     };
 
@@ -50,16 +263,16 @@ namespace star
 
     struct Node
     {
-        int32_t from, to;
+        u_int64_t from, to;
         int32_t from_p_id, to_p_id;
         int degree;
         int on_same_coordi;
     };
     struct myTuple{
-        int32_t key;
+        u_int64_t key;
         int32_t p_id;
         int32_t degree;
-        myTuple(int32_t key_, int32_t p_id_, int32_t degree_){
+        myTuple(u_int64_t key_, int32_t p_id_, int32_t degree_){
             key = key_;
             p_id = p_id_;
             degree = degree_;
@@ -144,47 +357,44 @@ namespace star
         void operator delete[](void *);
     };
 
-    template <typename KeyType, typename ValueType>
+    template <class Workload>
     class Clay
-    {
-        using record_degree_bit = u_int64_t;
+    {   
+        using WorkloadType = Workload;
+        using myKeyType = u_int64_t;
     public: // unordered_  unordered_
-        Clay(std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node> >& record_d):
+        Clay(std::unordered_map<myKeyType, std::unordered_map<myKeyType, Node> >& record_d):
         record_degree(record_d){
         }
 
-        void find_clump(std::vector<myMove<KeyType, ValueType> > &moves)
+        void find_clump(std::vector<myMove<WorkloadType>> &moves)
         {
             /***
-             * @brief 
+             * @brief find all the records to move
+             *        each moves is the set of records which may from different 
+             *        partition but will be transformed to the same destination
             */
             average_load = 0;
             int32_t overloaded_partition_id = find_overloaded_partition(average_load);
             if(overloaded_partition_id == -1){
                 return;
             }
-            if (big_node_heap.find(overloaded_partition_id) == big_node_heap.end())
-            {
+            // check if there is the hottest tuple on this partition
+            if (big_node_heap.find(overloaded_partition_id) == big_node_heap.end()){
                 return;
             }
             cur_load = load_partition[overloaded_partition_id];
 
             //
-            myMove<KeyType, ValueType> C_move, tmp_move;
-            
+            myMove<WorkloadType> C_move, tmp_move;
             auto cur_node_ptr = big_node_heap[overloaded_partition_id].begin();
-            
             int32_t look_ahead = find_clump_look_ahead;
             // the cur_load will change as the clump keeps expand
-            while (cur_load + cost_delta_for_sender(C_move, overloaded_partition_id) > average_load)
-            {
-                if (tmp_move.records.empty())
-                {
+            while (cur_load + cost_delta_for_sender(C_move, overloaded_partition_id) > average_load){
+                if (tmp_move.records.empty()){
                     // hottest tuple
-                    int32_t key = -1;
-                    if (cur_node_ptr == big_node_heap[overloaded_partition_id].end())
-                    { // find next hottest edge!
-                        
+                    if (cur_node_ptr == big_node_heap[overloaded_partition_id].end()){ 
+                        // find next hottest edge!
                         break;
                     }
 
@@ -206,10 +416,10 @@ namespace star
                         break;
                     }
 
-                    MoveRecord<KeyType, ValueType> rec;
+                    MoveRecord<WorkloadType> rec;
                     if (cur_node.p_id == overloaded_partition_id){
-                        key = cur_node.key;
-                        rec.set_key(cur_node.key, cur_node.p_id);
+                        rec.set_real_key(cur_node.key);
+                        rec.src_partition_id = cur_node.p_id;
                     }
                     tmp_move.records.push_back(rec);
                     tmp_move.dest_partition_id = overloaded_partition_id;
@@ -219,22 +429,22 @@ namespace star
                     DCHECK(tmp_move.dest_partition_id != -1);
 
                     // get its neighbor cached
-                    get_neighbor_cached(key);
+                    get_neighbor_cached(cur_node.key);
                     // 当前move的tuple_id
-                    move_tuple_id.insert(key);
+                    move_tuple_id.insert(cur_node.key);
                 }
                 else if (move_has_neighbor(tmp_move))
                 {
                     // continue to expand the clump until it is offload underneath the average level
-                    MoveRecord<KeyType, ValueType> new_move_rec;
+                    MoveRecord<WorkloadType> new_move_rec;
                     get_most_co_accessed_neighbor(new_move_rec);
                     tmp_move.records.push_back(new_move_rec);
 
                     // after add new tuple, the dest may change
                     update_dest(tmp_move);
 
-                    get_neighbor_cached(*(int32_t*)& new_move_rec.key);
-                    move_tuple_id.insert(*(int32_t*)&new_move_rec.key);
+                    get_neighbor_cached(new_move_rec.record_key_);
+                    move_tuple_id.insert(new_move_rec.record_key_);
                 }
                 else
                 {
@@ -255,14 +465,16 @@ namespace star
                         continue;
                     }
                 }
-            
+                // if feasible continue to expand
                 if(feasible(tmp_move, tmp_move.dest_partition_id)){
                     C_move = tmp_move;
                 } else if(!C_move.records.empty()) {
+                    // save current status as candidate, contiune to find better one 
                     look_ahead -= 1;
                 }
 
                 if(look_ahead == 0){
+                    // fail to expand
                     moves.push_back(C_move);
                     cur_load += cost_delta_for_sender(C_move, overloaded_partition_id);
                     C_move.reset();
@@ -281,7 +493,7 @@ namespace star
             hottest_tuple.clear(); // <key, frequency>
             load_partition.clear(); // <partition_id, load>
         }
-        void update_dest(myMove<KeyType, ValueType> &move)
+        void update_dest(myMove<WorkloadType> &move)
         {
             /**
              * @brief 更新
@@ -352,7 +564,7 @@ namespace star
         }
 
     private:
-        int32_t initial_dest_partition(const myMove<KeyType, ValueType> &move) {
+        int32_t initial_dest_partition(const myMove<WorkloadType> &move) {
             // 
             int32_t min_delta;
             int32_t partition_id=-1;
@@ -378,7 +590,7 @@ namespace star
 
             return partition_id;
         }
-        void get_neighbor_cached(int32_t key) {
+        void get_neighbor_cached(u_int64_t key) {
             /**
              * @brief get the neighbor of tuple [key] in degree DESC sequence
              * @param key description
@@ -386,17 +598,17 @@ namespace star
             if (record_for_neighbor.find(key) == record_for_neighbor.end())
             {
                 //
-                std::vector<std::pair<int32_t, Node> > name_score_vec(record_degree[key].begin(), record_degree[key].end());
+                std::vector<std::pair<myKeyType, Node> > name_score_vec(record_degree[key].begin(), record_degree[key].end());
                 std::sort(name_score_vec.begin(), name_score_vec.end(), 
-                        [=](const std::pair<int32_t, Node> &p1, const std::pair<int32_t, Node> &p2)
+                        [=](const std::pair<myKeyType, Node> &p1, const std::pair<myKeyType, Node> &p2)
                           {
                               return p1.second.degree > p2.second.degree;
                           });
 
-                record_for_neighbor.insert(std::make_pair(key, name_score_vec));
+                record_for_neighbor[key] = name_score_vec;
             }
         }
-        int32_t get_most_related_partition(const myMove<KeyType, ValueType> &move){
+        int32_t get_most_related_partition(const myMove<WorkloadType> &move){
             /**
              * @brief 
              * 
@@ -407,8 +619,8 @@ namespace star
 
             for(auto it = move.records.begin(); it != move.records.end(); it ++ ){
                 // 遍历每一条record
-                int32_t key = *(int32_t*)& it->key;
-                std::unordered_map<record_degree_bit, Node>& all_edges = record_degree[key];
+                auto key = it->record_key_;
+                std::unordered_map<myKeyType, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto itt = all_edges.begin(); itt != all_edges.end(); itt ++ ) {
                     Node& cur_n = itt->second;
@@ -470,7 +682,7 @@ namespace star
             return overloaded_partition_id;
         }
 
-        void get_most_co_accessed_neighbor(MoveRecord<KeyType, ValueType> &new_move_rec)
+        void get_most_co_accessed_neighbor(MoveRecord<WorkloadType> &new_move_rec)
         {
             /**
              * @brief 找node中与 M 权重最大的边
@@ -482,7 +694,7 @@ namespace star
             for (auto it = record_for_neighbor.begin(); it != record_for_neighbor.end(); it++)
             {
                 // 遍历每一条 move_rec
-                const std::vector<std::pair<int32_t, Node> > &cur = it->second;
+                const std::vector<std::pair<myKeyType, Node> > &cur = it->second;
                 for (auto itt = cur.begin(); itt != cur.end(); itt++)
                 {
                     // 遍历tuple的所有neighbor
@@ -499,14 +711,14 @@ namespace star
                     }
                 }
             }
-
-            new_move_rec.key = node.to;
+            
+            new_move_rec.set_real_key(node.to);
             new_move_rec.src_partition_id = node.to_p_id;
 
             return;
         }
 
-        bool move_has_neighbor(const myMove<KeyType, ValueType> &move)
+        bool move_has_neighbor(const myMove<WorkloadType> &move)
         {
             /**
              * @brief find if current move has uncontained tuple
@@ -516,10 +728,10 @@ namespace star
             for (auto it = move.records.begin(); it != move.records.end(); it++)
             {
                 // 遍历每一条record
-                const MoveRecord<KeyType, ValueType> &cur_rec = *it;
-                int32_t key = *(int32_t *)&cur_rec.key;
+                const MoveRecord<WorkloadType> &cur_rec = *it;
+                auto key = cur_rec.record_key_;
 
-                std::vector<std::pair<int32_t, Node> > &all_neighbors = record_for_neighbor[key];
+                std::vector<std::pair<myKeyType, Node> > &all_neighbors = record_for_neighbor[key];
                 for (auto itt = all_neighbors.begin(); itt != all_neighbors.end(); itt++)
                 {
                     if (move_tuple_id.find(itt->first) == move_tuple_id.end())
@@ -537,7 +749,7 @@ namespace star
             return ret;
         }
 
-        bool feasible(const myMove<KeyType, ValueType> &move, const int32_t &dest_partition_id)
+        bool feasible(const myMove<WorkloadType> &move, const int32_t &dest_partition_id)
         {
             //
             int32_t delta = cost_delta_for_receiver(move, dest_partition_id);
@@ -547,15 +759,15 @@ namespace star
             return not_overload || minus_delta;
             // true;
         }
-        int32_t cost_delta_for_receiver(const myMove<KeyType, ValueType> &move, const int32_t &dest_partition_id)
+        int32_t cost_delta_for_receiver(const myMove<WorkloadType> &move, const int32_t &dest_partition_id)
         {
             int32_t cost = 0;
             for(size_t i = 0 ; i < move.records.size(); i ++ ){
-                const MoveRecord<KeyType, ValueType>& cur = move.records[i]; 
-                auto key = *(int32_t*)&cur.key;
+                const MoveRecord<WorkloadType>& cur = move.records[i]; 
+                auto key = cur.record_key_;
                 // 点权重
                 cost += hottest_tuple[key];
-                std::unordered_map<record_degree_bit, Node>& all_edges = record_degree[key];
+                std::unordered_map<myKeyType, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto it = all_edges.begin(); it != all_edges.end(); it ++ ) {
                     if(it->second.to_p_id == dest_partition_id){
@@ -568,7 +780,7 @@ namespace star
             return cost;
         }
 
-        int32_t cost_delta_for_sender(const myMove<KeyType, ValueType> &move, const int32_t &src_partition_id)
+        int32_t cost_delta_for_sender(const myMove<WorkloadType> &move, const int32_t &src_partition_id)
         {
             /**
              * @brief 
@@ -577,7 +789,7 @@ namespace star
 
             int32_t cost = 0;
             for(size_t i = 0 ; i < move.records.size(); i ++ ){
-                const MoveRecord<KeyType, ValueType>& cur = move.records[i]; 
+                const MoveRecord<WorkloadType>& cur = move.records[i]; 
                 auto key = *(int32_t*)&cur.key;
                 if(cur.src_partition_id == move.dest_partition_id){
                     // 没动？
@@ -585,7 +797,7 @@ namespace star
                 }
                 // 点权重
                 cost -= hottest_tuple[key];
-                std::unordered_map<record_degree_bit, Node>& all_edges = record_degree[key];
+                std::unordered_map<myKeyType, Node>& all_edges = record_degree[key];
                 // 边权重
                 for(auto it = all_edges.begin(); it != all_edges.end(); it ++ ) {
                     // 
@@ -625,12 +837,12 @@ namespace star
         int32_t cur_load;
     public:
         std::unordered_map<int32_t, fixed_priority_queue> big_node_heap; // <partition_id, big_heap>
-        std::unordered_map<record_degree_bit, std::vector<std::pair<int32_t, Node> > > record_for_neighbor;
-        std::unordered_set<record_degree_bit> move_tuple_id;
-        std::unordered_map<record_degree_bit, int32_t> hottest_tuple; // <key, frequency>
+        std::unordered_map<myKeyType, std::vector<std::pair<myKeyType, Node> > > record_for_neighbor;
+        std::unordered_set<myKeyType> move_tuple_id;
+        std::unordered_map<myKeyType, int32_t> hottest_tuple; // <key, frequency>
         std::map<int32_t, int32_t> load_partition; // <partition_id, load>
 
-        std::unordered_map<record_degree_bit, std::unordered_map<record_degree_bit, Node> >& record_degree; // unordered_ unordered_
+        std::unordered_map<myKeyType, std::unordered_map<myKeyType, Node> >& record_degree; // unordered_ unordered_
 
     };
 }

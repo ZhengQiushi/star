@@ -19,6 +19,11 @@ enum class ExecutorStatus {
   EXIT
 };
 
+enum myTestSet {
+  YCSB,
+  TPCC
+};
+
 enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY };
 
 // 64bit

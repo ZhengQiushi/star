@@ -83,9 +83,9 @@ public:
 
 
 
-  template <typename key_type, typename value_type>
+  template <class WorkloadType>
   static std::size_t new_transmit_message(Message &message, 
-                                          const myMove<key_type, value_type>& move) {
+                                          const myMove<WorkloadType>& move) {
     /**
      * @brief 同一个表的迁移
      * @note 可能为零
@@ -99,15 +99,34 @@ public:
       LOG(INFO) << "too large";
     }
     // DCHECK(move.records.size() >= 0);
+  
+    int32_t key_size = sizeof(u_int64_t);// move.records[0].key_size;
+    int32_t normal_size = sizeof(int32_t);
 
-    int32_t key_size = sizeof(int32_t);// move.records[0].key_size;
-    int32_t field_size = (total_key_len > 0) ? move.records[0].field_size: 0;
+    // int32_t field_size = (total_key_len > 0) ? move.records[0].field_size: 0;
 
-    auto message_size = MessagePiece::get_header_size() + 
-                        key_size +                 // len of keys
-                        key_size +                 // field_size
-                        (key_size + key_size + field_size) * total_key_len + // src partition + keys + value 
-                        key_size;       // dest partition
+    auto cal_message_length = [&](const myMove<WorkloadType>& move){
+      auto message_size = MessagePiece::get_header_size() + 
+                          normal_size + // len of keys
+                          normal_size;  // dest partition
+      // LOG(INFO) << "New message send: ";
+      for(size_t i = 0 ; i < move.records.size(); i ++ ){
+        // 
+        message_size += normal_size +   // src partition
+                        key_size +      // key
+                        normal_size +   // field size
+                        move.records[i].field_size; // field value
+        // LOG(INFO) << "[ " << *(int32_t*)& move.records[i].table_id << "] " << move.records[i].src_partition_id << " -> " << move.dest_partition_id;
+      }
+
+      return message_size;
+    };
+    auto message_size = cal_message_length(move);
+    // MessagePiece::get_header_size() + 
+    //                     key_size +                 // len of keys
+    //                     key_size +                 // field_size
+    //                     (key_size + key_size + field_size) * total_key_len + // src partition + keys + value 
+    //                     key_size;       // dest partition
 
     // LOG(INFO) << "message_size: " << message_size << " = " << field_size << " * " << total_key_len;
 
@@ -116,17 +135,19 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
 
-    encoder.write_n_bytes((void*)&total_key_len, key_size);
-    encoder.write_n_bytes((void*)&field_size, key_size);
+    encoder.write_n_bytes((void*)&total_key_len, normal_size);
+    encoder.write_n_bytes((void*)&move.dest_partition_id, normal_size);
+
+    // encoder.write_n_bytes((void*)&field_size, key_size);
 
     for (size_t i = 0 ; i < static_cast<size_t>(total_key_len); i ++ ){
       // ITable* table = db.find_table(tableId, move.records[i].src_partition_id);
-    
-      encoder.write_n_bytes((void*)&move.records[i].src_partition_id, key_size);
-      encoder.write_n_bytes((void*)&move.records[i].key, key_size);
-      encoder.write_n_bytes((void*)&move.records[i].value, field_size);
+      auto field_size = move.records[i].field_size;
+      encoder.write_n_bytes((void*)&move.records[i].src_partition_id, normal_size);
+      encoder.write_n_bytes((void*)&move.records[i].record_key_  , key_size);
+      encoder.write_n_bytes((void*)&field_size                      , normal_size);
+      encoder.write_n_bytes((void*)&move.records[i].value           , field_size);
     }
-    encoder.write_n_bytes((void*)&move.dest_partition_id, key_size);
 
     message.flush();
     return message_size;

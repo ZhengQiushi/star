@@ -121,8 +121,8 @@ public:
     // DCHECK(i != context.partition_num);
     return i;
   }
-
-  std::set<int32_t> getPartitionIDs(const star::Context &context, std::size_t key) const{
+  template<typename KeyType>
+  std::set<int32_t> getPartitionIDs(const star::Context &context, KeyType key) const{
     // 返回这个key所在的partition
     std::set<int32_t> res;
     size_t i = 0;

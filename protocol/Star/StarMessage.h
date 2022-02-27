@@ -90,12 +90,13 @@ public:
      * @brief 记录txn的record
      * @note key_size increased from 32bits to 64bits
     */
-    auto key_size = sizeof(T);
+    auto key_size = sizeof(u_int64_t);
+    auto normal_size = sizeof(int32_t);
 
     int32_t total_key_len = (int32_t)record_key_in_this_txn.size();
 
     auto message_size = MessagePiece::get_header_size() +
-                        key_size + 
+                        normal_size +             // total length
                         key_size * total_key_len;
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -105,7 +106,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
 
-    encoder.write_n_bytes((void*)&total_key_len, key_size);
+    encoder.write_n_bytes((void*)&total_key_len, normal_size);
     for (size_t i = 0 ; i < record_key_in_this_txn.size(); i ++ ){
       auto key = record_key_in_this_txn[i];
       encoder.write_n_bytes((void*)&key, key_size);
@@ -192,7 +193,7 @@ public:
     const auto &k = *static_cast<const int32_t *>(key);
     // LOG(WARNING) << "KEY: " << k << " TID: " << tid;
     if (commit_tid > last_tid) {
-      table.deserialize_value(key, valueStringPiece);
+      table.deserialize_value(key, valueStringPiece); 
       SiloHelper::unlock(tid, commit_tid);
     } else {
       // if(SiloHelper::is_locked(tid)){

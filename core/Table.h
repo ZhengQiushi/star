@@ -63,17 +63,23 @@ public:
 
   std::tuple<MetaDataType *, void *> search(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
+    bool ok = map_.contains(k);
+    DCHECK(ok == true);
     auto &v = map_[k];
     return std::make_tuple(&std::get<0>(v), &std::get<1>(v));
   }
 
   void *search_value(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
+    bool ok = map_.contains(k);
+    DCHECK(ok == true);
     return &std::get<1>(map_[k]);
   }
 
   MetaDataType &search_metadata(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
+    bool ok = map_.contains(k);
+    DCHECK(ok == true);
     return std::get<0>(map_[k]);
   }
 
@@ -81,7 +87,7 @@ public:
     const auto &k = *static_cast<const KeyType *>(key);
     const auto &v = *static_cast<const ValueType *>(value);
     bool ok = map_.contains(k);
-    // DCHECK(ok == false);
+    DCHECK(ok == false);
     auto &row = map_[k];
     std::get<0>(row).store(0);
     std::get<1>(row) = v;
@@ -96,13 +102,17 @@ public:
 
   void delete_(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
-    map_.remove(k);
-    // LOG(INFO) << "Deleted!";
+    bool ok = map_.contains(k);
+    DCHECK(ok == true);
+    ok = map_.remove(k);
+    DCHECK(ok == true);
   }
 
   void deserialize_value(const void *key, StringPiece stringPiece) override {
     std::size_t size = stringPiece.size();
     const auto &k = *static_cast<const KeyType *>(key);
+    bool ok = map_.contains(k);
+    DCHECK(ok == true);
     auto &row = map_[k];
     auto &v = std::get<1>(row);
 

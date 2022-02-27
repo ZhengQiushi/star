@@ -30,6 +30,7 @@ public:
 
     batch_size = context.batch_size;
     recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
+    transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
   }
 
   ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
@@ -106,7 +107,10 @@ public:
   void set_record_worker_status(ExecutorStatus status) {
     recorder_status.store(static_cast<uint32_t>(status));
   }
-
+  
+  void set_record_worker_transmit_status(ExecutorStatus status) {
+    transmit_status.store(static_cast<uint32_t>(status));
+  }
   void wait_recorder_worker_finish(){
     /**
      * @brief 
@@ -173,12 +177,12 @@ public:
           cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
           (cur_data_transform_num / context.data_transform_interval) % 2 == 1) {
         // 开始操作 
-        
+        set_record_worker_transmit_status(ExecutorStatus::START);
         wait_recorder_worker_finish();
       }
       
       //// for debug 
-      if(WorkloadType::which_workload() == "ycsb"){
+      if(WorkloadType::which_workload == myTestSet::YCSB){
         for(int i = 0 ; i < 12; i ++ ){
           ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
           LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
@@ -286,7 +290,7 @@ public:
       LOG(INFO) << "send_ack";
 
       send_ack();
-      if(WorkloadType::which_workload() == "ycsb"){
+      if(WorkloadType::which_workload == myTestSet::YCSB){
         for(int i = 0 ; i < 12; i ++ ){
           if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
             ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
@@ -327,6 +331,7 @@ public:
   uint32_t batch_size;
   DatabaseType& db;
   std::atomic<uint32_t> recorder_status;
+  std::atomic<uint32_t> transmit_status;
   std::unique_ptr<Partitioner> c_partitioner;
 };
 } // namespace star

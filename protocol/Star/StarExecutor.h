@@ -110,7 +110,7 @@ public:
           // commit transaction in s_phase;
           commit_transactions();
           LOG(WARNING) << "Executor " << id << " exits.";
-
+          // debug
           trace_txn();
 
           return;
@@ -289,7 +289,7 @@ public:
         }
         // 甄别一下？
         bool is_success = true;
-        
+
         bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
 
         if(is_success){
@@ -314,11 +314,19 @@ public:
   }
   
   void commit_transactions() {
+    /**
+     * @brief 
+     * 
+     */
+
     while (!q.empty()) {
       auto &ptr = q.front();
       auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
                          std::chrono::steady_clock::now() - ptr->startTime)
                          .count();
+      // if (context.star_sync_in_single_master_phase){
+      //   Star<DatabaseType>::sync_messages(*ptr);
+      // }
       percentile.add(latency);
       q.pop();
     }
@@ -440,9 +448,13 @@ public:
 
       cur_transactions_queue->pop();
 
+      if(i % (phase_context.batch_flush/2) == 0){
+        flush_record_messages();
+      }
+
       if (i % phase_context.batch_flush == 0) {
         flush_async_messages(); 
-        flush_record_messages();
+        
       }
     }
     flush_async_messages();

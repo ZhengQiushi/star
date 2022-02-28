@@ -178,7 +178,10 @@ public:
           (cur_data_transform_num / context.data_transform_interval) % 2 == 1) {
         // 开始操作 
         set_record_worker_transmit_status(ExecutorStatus::START);
+        LOG(INFO) << "set_record_worker_transmit_status";
         wait_recorder_worker_finish();
+        LOG(INFO) << "set_record_worker_transmit_status_finish";
+
       }
       
       //// for debug 

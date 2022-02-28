@@ -81,6 +81,9 @@ public:
     std::ofstream outfile_excel;
 	  outfile_excel.open("/Users/lion/project/01_star/star/result.xls", std::ios::trunc); // ios::trunc
     outfile_excel.close();
+
+	  outfile_excel.open("/Users/lion/project/01_star/star/result_moves.xls", std::ios::trunc); // ios::trunc
+    outfile_excel.close();
   }
 
 // MoveRecord<WorkloadType> get_move_record(myMove<WorkloadType>& move, const Node& max){
@@ -353,7 +356,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         // do data transforming 
         std::vector<myMove<WorkloadType> >  moves, moves_merged;
         // find the moves (only keys)
-        show_for_degree_set();
+        // show_for_degree_set();
 
         my_clay->find_clump(moves);
         my_clay->reset();
@@ -380,11 +383,16 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
               myMove<WorkloadType>& move = moves_merged[cur_move];
               DCHECK(move.records.size() > 0);
               // 全副本节点开始准备迁移
-              // LOG(INFO) << cur_move ;
+
+              // LOG(INFO) << "start transmit_record: " << cur_move; 
               transmit_record(move);
+
+              // LOG(INFO) << "signal_recorder: " << cur_move; 
 
               // 部分副本节点开始准备replicate
               signal_recorder(move);
+              // LOG(INFO) << "singnal_done: " << cur_move; 
+
             }
             ////// for debug 
             // for(int i = 0 ; i < 12; i ++ ){
@@ -612,6 +620,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     }
     // outfile.close();
   }
+
   void non_coordinator_start()  {
     std::size_t n_workers = context.worker_num;
     std::size_t n_coordinators = context.coordinator_num;
@@ -634,7 +643,9 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         continue;
       }
       // 
-      LOG(INFO) << "move comes!";
+      // show_for_moves(move);
+
+ //     LOG(INFO) << "move comes!";
       if(move.records.size() > 0){
         remove_on_secondary_coordinator(move);
       }
@@ -644,7 +655,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
       //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
       //   }
       // }
-      LOG(INFO) << "send_ack!";
+//      LOG(INFO) << "send_ack!";
       send_ack();
 
     }
@@ -880,7 +891,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     CHECK(type == ControlMessage::TRANSMIT);
 
     auto stringPiece = messagePiece.toStringPiece();
-    LOG(INFO) << "decode!";
+   // LOG(INFO) << "decode!";
     get_move_decode(move, stringPiece);
 
     return true;
@@ -1106,12 +1117,24 @@ private:
      * @param record_keys 递增的key
      * @note 双向图
     */
-    size_t tableID = ycsb::ycsb::tableID;
+    auto select_tpcc = [&](u_int64_t key){
+      // only transform STOCK_TABLE
+      bool is_jumped = false;
+      if(WorkloadType::which_workload == myTestSet::TPCC){
+        int32_t table_id = key >> RECORD_COUNT_TABLE_ID_OFFSET;
+        if(table_id != tpcc::stock::tableID){
+          is_jumped = true;
+        }
+      }
+      return is_jumped;
+    };
 
     for(size_t i = 0; i < record_keys.size(); i ++ ){
       std::unordered_map<myKeyType, std::unordered_map<myKeyType, Node>>::iterator it;
       auto key_one = record_keys[i];
-
+      if(select_tpcc(key_one)){
+        continue;
+      }
       it = record_degree.find(key_one);
       if (it == record_degree.end()){
         // [key_one -> [key_two, Node]]
@@ -1125,8 +1148,11 @@ private:
           continue;
         std::unordered_map<myKeyType, Node>::iterator itt;
         auto key_two = record_keys[j];
-
+        if(select_tpcc(key_two)){
+          continue;
+        }
         itt = it->second.find(key_two);
+
         if (itt == it->second.end()){
           // [key_one -> [key_two, Node]]
           Node n;
@@ -1270,7 +1296,35 @@ private:
     }
 
   }
+  void show_for_moves(const myMove<WorkloadType>& move){
+    std::ofstream outfile_excel;
+	  outfile_excel.open("/Users/lion/project/01_star/star/result_moves.xls", std::ios::app); // ios::trunc
 
+    static int rounds = 0;
+    if(rounds == 0){
+      outfile_excel << 
+      "f table_id" << "\t" << "f w_id" << "\t" << "f d_id" << "\t" << "f c_id" << "\t" << "f s_id" << "\t" <<
+      "from_p_id" << "\t"<< "to_p_id" << "\t" << "round" << "\n";
+    }
+    rounds ++ ;
+
+    auto dest = move.dest_partition_id;
+    for(auto i: move.records){
+        u_int64_t record_key = i.record_key_;
+        int32_t f_table_id = (record_key >> RECORD_COUNT_TABLE_ID_OFFSET);
+
+        int32_t f_w_id = (record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+        int32_t f_d_id = (record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+        int32_t f_c_id = (record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+        int32_t f_s_id = (record_key & RECORD_COUNT_OL_ID_VALID);
+
+      outfile_excel << 
+      f_table_id << "\t" << f_w_id << "\t" << f_d_id << "\t" << f_c_id << "\t" << f_s_id << "\t" <<
+      i.src_partition_id << "\t"<< dest << "\t" << rounds << "\n";
+
+    }
+    outfile_excel.close();
+  }
 private:
   std::vector<myMove<WorkloadType>> move_in_history;
 

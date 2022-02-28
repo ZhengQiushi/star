@@ -50,7 +50,9 @@ public:
 
     auto warehouseTableID = warehouse::tableID;
     storage.warehouse_key = warehouse::key(W_ID);
-    this->search_for_read(warehouseTableID, W_ID - 1, storage.warehouse_key,
+
+    auto key_partition_id = db.getPartitionID(context, warehouseTableID, storage.warehouse_key);
+    this->search_for_read(warehouseTableID, key_partition_id, storage.warehouse_key,
                           storage.warehouse_value);
 
     // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
@@ -60,7 +62,8 @@ public:
 
     auto districtTableID = district::tableID;
     storage.district_key = district::key(W_ID, D_ID);
-    this->search_for_update(districtTableID, W_ID - 1, storage.district_key,
+    key_partition_id = db.getPartitionID(context, districtTableID, storage.district_key);
+    this->search_for_update(districtTableID, key_partition_id, storage.district_key,
                             storage.district_value);
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
@@ -70,7 +73,8 @@ public:
 
     auto customerTableID = customer::tableID;
     storage.customer_key = customer::key(W_ID, D_ID, C_ID);
-    this->search_for_read(customerTableID, W_ID - 1, storage.customer_key,
+    key_partition_id = db.getPartitionID(context, customerTableID, storage.customer_key);
+    this->search_for_read(customerTableID, key_partition_id, storage.customer_key,
                           storage.customer_value);
 
     auto itemTableID = item::tableID;
@@ -106,7 +110,8 @@ public:
 
       storage.stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
 
-      this->search_for_update(stockTableID, OL_SUPPLY_W_ID - 1,
+      key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      this->search_for_update(stockTableID, key_partition_id,
                               storage.stock_keys[i], storage.stock_values[i]);
     }
 
@@ -121,7 +126,8 @@ public:
 
     storage.district_value.D_NEXT_O_ID += 1;
 
-    this->update(districtTableID, W_ID - 1, storage.district_key,
+    key_partition_id = db.getPartitionID(context, districtTableID, storage.district_key);
+    this->update(districtTableID, key_partition_id, storage.district_key,
                  storage.district_value);
 
     if (context.operation_replication) {
@@ -183,7 +189,8 @@ public:
         storage.stock_values[i].S_REMOTE_CNT++;
       }
 
-      this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage.stock_keys[i],
+      key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      this->update(stockTableID, key_partition_id, storage.stock_keys[i],
                    storage.stock_values[i]);
 
       if (context.operation_replication) {
@@ -338,9 +345,9 @@ public:
     size_t dist_partition_id = db.getPartitionID(context, district::tableID, district_key);
     size_t cust_partition_id = db.getPartitionID(context, customer::tableID, customer_key);
 
-    partition_ids.insert(ware_partition_id);
-    partition_ids.insert(dist_partition_id);
-    partition_ids.insert(ware_partition_id);
+    // partition_ids.insert(ware_partition_id);
+    // partition_ids.insert(dist_partition_id);
+    // partition_ids.insert(ware_partition_id);
     
     if(ware_partition_id == context.partition_num || 
        dist_partition_id == context.partition_num || 
@@ -351,6 +358,10 @@ public:
     for(size_t i = 0 ; i < item_keys.size(); i ++ ){
       size_t stock_partition_id = db.getPartitionID(context, stock::tableID, stock_keys[i]);
       //
+      if(item_keys[i] == 0){
+        success = false;
+        return is_cross_txn;
+      }
       if(stock_partition_id == context.partition_num){
         success = false;
         return is_cross_txn;

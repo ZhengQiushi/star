@@ -171,7 +171,7 @@ public:
       n_started_workers.fetch_add(1);
       // LOG(WARNING) << "worker " << id << " ready to run_transaction";
       if(id == 0){
-        LOG(INFO) << "debug";
+        // LOG(INFO) << "debug";
       }
       run_transaction(ExecutorStatus::S_PHASE);
 
@@ -261,7 +261,7 @@ public:
              StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
         phase_context = context.get_cross_partition_context(); 
         if(id == 0){
-          LOG(INFO) << "debug";
+          // LOG(INFO) << "debug";
         }
       } else if (status == ExecutorStatus::S_PHASE) {
         partitioner = s_partitioner.get();
@@ -269,7 +269,7 @@ public:
             StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
         phase_context = context.get_single_partition_context(); 
         if(id == 0){
-          LOG(INFO) << "debug";
+          // LOG(INFO) << "debug";
         }
       } else {
         CHECK(false);
@@ -291,7 +291,12 @@ public:
         bool is_success = true;
 
         bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
-
+        if(is_success){
+          if(is_cross_txn && status == ExecutorStatus::S_PHASE){
+            LOG(INFO) << "what?";
+            bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
+          }
+        }
         if(is_success){
           if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
             if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
@@ -399,7 +404,10 @@ public:
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue->size();
-        
+    
+    if(id == 0){
+      // LOG(INFO) << "debug";
+    }
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
     for (auto i = 0u; i < cur_queue_size; i++) {
       if(cur_transactions_queue->empty()){

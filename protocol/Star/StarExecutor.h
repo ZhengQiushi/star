@@ -73,6 +73,9 @@ public:
 
     s_context = context.get_single_partition_context();
     c_context = context.get_cross_partition_context();
+
+    // sync responds that need to be received 
+    async_message_num.store(0);
   }
   void trace_txn(){
     if(coordinator_id == 0 && id == 0){
@@ -92,6 +95,17 @@ public:
       }
       outfile_excel.close();
     }
+  }
+
+  void replication_fence(ExecutorStatus status){
+    while(async_message_num.load() != async_message_respond_num.load()){
+      if(status == ExecutorStatus::S_PHASE){
+        process_request();
+      }
+      std::this_thread::yield();
+    }
+    async_message_num.store(0);
+    async_message_respond_num.store(0);
   }
   void start() override {
 
@@ -129,39 +143,41 @@ public:
       prepare_transactions_to_run(c_workload, s_workload);
 
       // c_phase
-      // LOG(WARNING) << "worker " << id << " c_phase";
+      LOG(WARNING) << "worker " << id << " c_phase";
       if (coordinator_id == 0) {
-        // LOG(WARNING) << "worker " << id << " ready to run_transaction";
+        LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
-        run_transaction(ExecutorStatus::C_PHASE);
+        run_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        
+        replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
-        // LOG(WARNING) << "worker " << id << " finish run_transaction";
+        LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       } else {
         
         n_started_workers.fetch_add(1);
-        // LOG(WARNING) << "worker " << id << " ready to process_request";
+         LOG(WARNING) << "worker " << id << " ready to process_request";
 
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
                ExecutorStatus::C_PHASE) {
           process_request();
         }
-        // LOG(WARNING) << "worker " << id << " finish to process_request";
+         LOG(WARNING) << "worker " << id << " finish to process_request";
         // LOG(WARNING) << "worker " << id << " ready to process_request for replication";
         // process replication request after all workers stop.
         process_request();
         n_complete_workers.fetch_add(1);
-        // LOG(WARNING) << "worker " << id << " finish process_request for replication";
+         LOG(WARNING) << "worker " << id << " finish process_request for replication";
       }
 
       // wait to s_phase
-      // LOG(WARNING) << "worker " << id << " wait to s_phase";
-
+      LOG(WARNING) << "worker " << id << " wait to s_phase";
+      
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
         std::this_thread::yield();
       }
-      // LOG(WARNING) << "worker " << id << " s_phase";
+       LOG(WARNING) << "worker " << id << " s_phase";
 
       // commit transaction in c_phase;
       commit_transactions();
@@ -169,30 +185,32 @@ public:
       // s_phase
 
       n_started_workers.fetch_add(1);
-      // LOG(WARNING) << "worker " << id << " ready to run_transaction";
+       LOG(WARNING) << "worker " << id << " ready to run_transaction";
       if(id == 0){
         // LOG(INFO) << "debug";
       }
-      run_transaction(ExecutorStatus::S_PHASE);
+      run_transaction(ExecutorStatus::S_PHASE, async_message_num);
+      
+       LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
+      replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
 
-      // LOG(WARNING) << "worker " << id << " finish run_transaction";
+       LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       // once all workers are stop, we need to process the replication
       // requests
-
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::S_PHASE) {
         process_request();
       }
 
-      // LOG(WARNING) << "worker " << id << " finish process_request";
+       LOG(WARNING) << "worker " << id << " finish process_request";
 
       // n_complete_workers has been cleared
       process_request();
       n_complete_workers.fetch_add(1);
-      // LOG(WARNING) << "worker " << id << " finish process_request for replication";
+       LOG(WARNING) << "worker " << id << " finish process_request for replication";
 
     //   if(id == 0){
     //   LOG(INFO) << id << " over prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
@@ -360,7 +378,7 @@ public:
     return partition_id;
   }
 
-  void run_transaction(ExecutorStatus status) {
+  void run_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
     /**
      * @brief 
      * @note modified by truth 22-01-24
@@ -373,8 +391,8 @@ public:
 
     ContextType phase_context; //  = c_context;
 
-    if(id == 0){
-      // LOG(INFO) << "hi, i'm thread 0";
+    if(id == 0 && status == ExecutorStatus::S_PHASE){
+      LOG(INFO) << "hi, i'm thread 0";
     }
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = c_partitioner.get();
@@ -418,7 +436,7 @@ public:
       transaction =
               std::move(cur_transactions_queue->front());
       do {
-        // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request";
+        // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request" << i;
         process_request();
         last_seed = random.get_seed();
 
@@ -428,12 +446,16 @@ public:
           std::size_t partition_id = get_partition_id(status);
           setupHandlers(*transaction, protocol);
         }
-        // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute";
+        // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute" << i;
 
         auto result = transaction->execute(id);
+
         if (result == TransactionResult::READY_TO_COMMIT) {
+          // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
+
           bool commit =
-              protocol.commit(*transaction, sync_messages, async_messages, record_messages);
+              protocol.commit(*transaction, sync_messages, async_messages, record_messages, 
+                              async_message_num);
           n_network_size.fetch_add(transaction->network_size);
           if (commit) {
             n_commit.fetch_add(1);
@@ -456,17 +478,16 @@ public:
 
       cur_transactions_queue->pop();
 
-      if(i % (phase_context.batch_flush/2) == 0){
-        flush_record_messages();
-      }
-
       if (i % phase_context.batch_flush == 0) {
         flush_async_messages(); 
+        flush_sync_messages();
+        flush_record_messages();
         
       }
     }
     flush_async_messages();
     flush_record_messages();
+    flush_sync_messages();
   }
 
   void onExit() override {
@@ -480,7 +501,32 @@ public:
     }
   }
 
-  void push_message(Message *message) override { in_queue.push(message); }
+  void push_message(Message *message) override { 
+
+    // message will only be of type signal, COUNT
+    // MessagePiece messagePiece = *(message->begin());
+
+    // auto message_type =
+    // static_cast<int>(messagePiece.get_message_type());
+
+      // sync_queue.push(message);
+      // LOG(INFO) << "sync_queue: " << sync_queue.read_available(); 
+      for (auto it = message->begin(); it != message->end(); it++) {
+        auto messagePiece = *it;
+        auto message_type = messagePiece.get_message_type();
+
+        if(message_type == static_cast<int>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE)){
+          auto message_length = messagePiece.get_message_length();
+          static int total_async = 0;
+          
+          // LOG(INFO) << "recv : " << ++total_async;
+          // async_message_num.fetch_sub(1);
+          async_message_respond_num.fetch_add(1);
+        }
+      }
+
+    in_queue.push(message);
+  }
 
   Message *pop_message() override {
     if (out_queue.empty())
@@ -583,6 +629,9 @@ private:
   std::unique_ptr<Partitioner> s_partitioner, c_partitioner;
   RandomType random;
   std::atomic<uint32_t> &worker_status;
+  std::atomic<uint32_t> async_message_num;
+  std::atomic<uint32_t> async_message_respond_num;
+
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Delay> delay;
   std::unique_ptr<BufferedFileWriter> logger;
@@ -594,7 +643,8 @@ private:
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
                                  TransactionType *)>>
       messageHandlers;
-  LockfreeQueue<Message *> in_queue, out_queue;
+  LockfreeQueue<Message *> in_queue, out_queue, 
+                           sync_queue; // for value sync when phase switching occurs
 
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 

@@ -248,8 +248,10 @@ public:
       last_tid = SiloHelper::lock(tid, success);
     }
 
-    DCHECK(last_tid < commit_tid);
-    table.deserialize_value(key, valueStringPiece);
+    // DCHECK(last_tid < commit_tid);
+    if(last_tid < commit_tid){
+      table.deserialize_value(key, valueStringPiece);
+    }
     SiloHelper::unlock(tid, commit_tid);
 
     // prepare response message header
@@ -258,6 +260,8 @@ public:
         static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE),
         message_size, table_id, partition_id);
 
+    static int recv_ = 0;
+    // LOG(INFO) << "recv : " << ++recv_;
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;
     responseMessage.flush();
@@ -267,7 +271,9 @@ public:
                                                       Message &responseMessage,
                                                       Database &db,
                                                       Transaction *txn) {
-
+    return ;
+    // DCHECK(false);
+    // never come in
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE));
     auto table_id = inputPiece.get_table_id();
@@ -282,8 +288,8 @@ public:
      * The structure of a sync value replication response: ()
      */
 
-    txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
+    // txn->pendingResponses--;
+    // txn->network_size += inputPiece.get_message_length();
   }
 
   static void operation_replication_request_handler(MessagePiece inputPiece,

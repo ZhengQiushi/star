@@ -1136,6 +1136,12 @@ private:
         continue;
       }
       it = record_degree.find(key_one);
+
+      MoveRecord<WorkloadType> key_one_real;
+      if(WorkloadType::which_workload == myTestSet::TPCC){
+        key_one_real.set_real_key(key_one); 
+      }
+      
       if (it == record_degree.end()){
         // [key_one -> [key_two, Node]]
         std::unordered_map<myKeyType, Node> tmp;
@@ -1164,8 +1170,7 @@ private:
             n.from_p_id = db.getPartitionID(context, key_one_table_id, key_one);
             n.to_p_id = db.getPartitionID(context, key_two_table_id, key_two);
           } else if(WorkloadType::which_workload == myTestSet::TPCC){
-            MoveRecord<WorkloadType> key_one_real;
-            key_one_real.set_real_key(key_one); 
+
             MoveRecord<WorkloadType> key_two_real;
             key_two_real.set_real_key(key_two);
 

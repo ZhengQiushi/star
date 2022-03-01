@@ -71,7 +71,9 @@ public:
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &syncMessages,
               std::vector<std::unique_ptr<Message>> &asyncMessages,
-              std::vector<std::unique_ptr<Message>> &recordMessages) {
+              std::vector<std::unique_ptr<Message>> &recordMessages,
+              std::atomic<uint32_t>& async_message_num
+              ) {
     // lock write set
     // LOG(INFO) << "StarExecutor: "<< id << " " << "lock_write_set";
     size_t cur_ptr = 0;
@@ -95,7 +97,8 @@ public:
     // LOG(INFO) << "StarExecutor: "<< id << " " << "write_and_replicate";
 
     // write and replicate
-    write_and_replicate(txn, commit_tid, syncMessages, asyncMessages);
+    write_and_replicate(txn, commit_tid, syncMessages, asyncMessages, 
+                        async_message_num);
 
 
     // LOG(INFO) << "StarExecutor: "<< id << " " << "async_txn_to_recorder";
@@ -247,7 +250,8 @@ private:
   void
   write_and_replicate(TransactionType &txn, uint64_t commit_tid,
                       std::vector<std::unique_ptr<Message>> &syncMessages,
-                      std::vector<std::unique_ptr<Message>> &asyncMessages) {
+                      std::vector<std::unique_ptr<Message>> &asyncMessages,
+                      std::atomic<uint32_t>& async_message_num) {
 
     auto &readSet = txn.readSet;
     auto &writeSet = txn.writeSet;
@@ -320,23 +324,28 @@ private:
           if (k == txn.coordinator_id) {
             continue;
           }
-          if (context.star_sync_in_single_master_phase) {
-            txn.pendingResponses++;
+          // if (context.star_sync_in_single_master_phase) {
+            // txn.pendingResponses++;
             txn.network_size +=
                 MessageFactoryType::new_sync_value_replication_message(
                     *syncMessages[k], *table, key, value, commit_tid);
-          } else {
-            txn.network_size +=
-                MessageFactoryType::new_async_value_replication_message(
-                    *asyncMessages[k], *table, key, value, commit_tid);
-          }
+            async_message_num.fetch_add(1);
+            // static int total_send = 0 ;
+            // total_send ++ ;
+            // LOG(INFO) << "total send : " << total_send;
+          // } else {
+          //   txn.network_size +=
+          //       MessageFactoryType::new_async_value_replication_message(
+          //           *asyncMessages[k], *table, key, value, commit_tid);
+          // }
         }
+        
       }
     }
 
-    if (context.star_sync_in_single_master_phase) {
-      sync_messages(txn);
-    }
+    // if (context.star_sync_in_single_master_phase) {
+    //   sync_messages(txn);
+    // }
 
     for (auto i = 0u; i < tids.size(); i++) {
       auto tmp = tids[i]->load();

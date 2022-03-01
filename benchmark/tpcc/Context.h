@@ -23,7 +23,7 @@ public:
     c.newOrderCrossPartitionProbability = 0;
     c.paymentCrossPartitionProbability = 0;
     c.operation_replication = this->operation_replication;
-    c.star_sync_in_single_master_phase = false;
+    c.star_sync_in_single_master_phase = this->star_sync_in_single_master_phase;
     return c;
   }
 

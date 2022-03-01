@@ -33,7 +33,10 @@ public:
 
   ITable *find_table(std::size_t table_id, std::size_t partition_id) {
     DCHECK(table_id < tbl_vecs.size());
-    DCHECK(partition_id < tbl_vecs[table_id].size());
+    if(partition_id >= tbl_vecs[table_id].size()){
+      LOG(INFO) << partition_id <<" " << tbl_vecs[table_id].size();
+      DCHECK(partition_id < tbl_vecs[table_id].size());
+    }
     return tbl_vecs[table_id][partition_id];
   }
 

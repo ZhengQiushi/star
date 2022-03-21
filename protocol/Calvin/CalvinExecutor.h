@@ -95,7 +95,7 @@ public:
       } while (status != ExecutorStatus::Analysis);
 
       n_started_workers.fetch_add(1);
-      generate_transactions();
+      generate_transactions(); // active
       n_complete_workers.fetch_add(1);
 
       // wait to Execute
@@ -340,6 +340,7 @@ public:
 
         auto &active_coordinators = txn.active_coordinators;
         for (auto i = 0u; i < active_coordinators.size(); i++) {
+          //
           if (i == worker->coordinator_id || !active_coordinators[i])
             continue;
           auto sz = MessageFactoryType::new_read_message(

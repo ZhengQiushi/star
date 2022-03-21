@@ -36,6 +36,9 @@ public:
 
   // assume there are n = 2 lock managers and m = 4 workers
   // the following function maps
+  // (0, 2, 4) => first two are lock mangers! => 0
+  // (1, 2, 4) => 1
+  //  Then comes works -> worker deal with the data that was operated by the lock managers
   // (2, 2, 4) => 0
   // (3, 2, 4) => 0
   // (4, 2, 4) => 1

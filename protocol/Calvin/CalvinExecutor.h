@@ -95,7 +95,7 @@ public:
       } while (status != ExecutorStatus::Analysis);
 
       n_started_workers.fetch_add(1);
-      generate_transactions(); // active
+      generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
       n_complete_workers.fetch_add(1);
 
       // wait to Execute
@@ -198,7 +198,10 @@ public:
   }
 
   void prepare_transaction(TransactionType &txn) {
-
+    /**
+     * @brief Set the up prepare handlers object
+     * @ active_coordinator
+     */
     setup_prepare_handlers(txn);
     // run execute to prepare read/write set
     auto result = txn.execute(id);
@@ -218,7 +221,10 @@ public:
   }
 
   void analyze_active_coordinator(TransactionType &transaction) {
-
+    /**
+     * @brief 确定某txn 涉及到了些coordinator
+     * 
+     */
     // assuming no blind write
     auto &readSet = transaction.readSet;
     auto &active_coordinators = transaction.active_coordinators;
@@ -267,7 +273,9 @@ public:
 
           if (CalvinHelper::partition_id_to_lock_manager_id(
                   readKey.get_partition_id(), n_lock_manager,
-                  partitioner.replica_group_size) != lock_manager_id) {
+                  partitioner.replica_group_size) 
+              != 
+                  lock_manager_id) {
             continue;
           }
 
@@ -329,10 +337,19 @@ public:
   }
 
   void setup_execute_handlers(TransactionType &txn) {
+    /**
+     * @brief 
+     * 
+     */
+
     txn.read_handler = [this, &txn](std::size_t worker_id, std::size_t table_id,
                                     std::size_t partition_id, std::size_t id,
                                     uint32_t key_offset, const void *key,
                                     void *value) {
+      /**
+       * @brief 
+       * 
+       */
       auto *worker = this->all_executors[worker_id];
       if (worker->partitioner.has_master_partition(partition_id)) {
         ITable *table = worker->db.find_table(table_id, partition_id);
@@ -340,7 +357,7 @@ public:
 
         auto &active_coordinators = txn.active_coordinators;
         for (auto i = 0u; i < active_coordinators.size(); i++) {
-          //
+          // 发送到涉及到的且非本地coordinator
           if (i == worker->coordinator_id || !active_coordinators[i])
             continue;
           auto sz = MessageFactoryType::new_read_message(
@@ -354,6 +371,7 @@ public:
 
     txn.setup_process_requests_in_execution_phase(
         n_lock_manager, n_workers, partitioner.replica_group_size);
+
     txn.remote_request_handler = [this](std::size_t worker_id) {
       auto *worker = this->all_executors[worker_id];
       return worker->process_request();
@@ -365,6 +383,10 @@ public:
   };
 
   void setup_prepare_handlers(TransactionType &txn) {
+    /**
+     * @brief
+    */
+
     txn.local_index_read_handler = [this](std::size_t table_id,
                                           std::size_t partition_id,
                                           const void *key, void *value) {

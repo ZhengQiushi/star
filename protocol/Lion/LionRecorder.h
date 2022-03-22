@@ -30,16 +30,14 @@
 namespace star {
 
 
-template <class Workload, typename key_type, typename value_type> 
-class StarRecorder : public Worker {
+template <class Workload> 
+class LionRecorder : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
-  using KeyType = key_type;
-  using ValueType = value_type; 
   using myKeyType = u_int64_t;
 
-  StarRecorder(std::size_t coordinator_id, std::size_t id, const Context &context,
+  LionRecorder(std::size_t coordinator_id, std::size_t id, const Context &context,
           std::atomic<bool> &stopFlag, DatabaseType& db,
           std::atomic<uint32_t>& recorder_status, 
           std::atomic<uint32_t>& transmit_status,
@@ -52,9 +50,9 @@ public:
         n_started_workers(n_started_workers),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)),
-        // s_partitioner(std::make_unique<StarSPartitioner>(
+        // s_partitioner(std::make_unique<LionSPartitioner>(
         //     coordinator_id, context.coordinator_num)),
-        c_partitioner(std::make_unique<StarCPartitioner>(
+        c_partitioner(std::make_unique<LionCPartitioner>(
             coordinator_id, context.coordinator_num)) {
 
     for (auto i = 0u; i < context.coordinator_num; i++) {

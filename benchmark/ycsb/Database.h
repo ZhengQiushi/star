@@ -199,7 +199,10 @@ private:
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;
+  std::vector<std::vector<ITable *>> tbl_vecs_router;
+  
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec;
+  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router;
 };
 } // namespace ycsb
 } // namespace star

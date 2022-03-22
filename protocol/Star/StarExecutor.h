@@ -138,9 +138,10 @@ public:
 
       WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get());
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
+      StorageType storage;
 
       // 准备transaction
-      prepare_transactions_to_run(c_workload, s_workload);
+      prepare_transactions_to_run(c_workload, s_workload, storage);
 
       // c_phase
       LOG(WARNING) << "worker " << id << " c_phase";
@@ -256,7 +257,7 @@ public:
   //   return is_cross_txn;
   // }
 
-  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload){
+  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
@@ -293,7 +294,9 @@ public:
         CHECK(false);
       }   
 
-      StorageType storage;
+      
+      LOG(INFO) << sizeof(storage);
+
       uint64_t last_seed = 0;
 
       for (auto i = 0u; i < query_num; i++) {
@@ -375,6 +378,9 @@ public:
       CHECK(false);
     }
 
+    if(partition_id > 10 && status == ExecutorStatus::S_PHASE){
+      LOG(INFO) << "TEST";
+    }
     return partition_id;
   }
 
@@ -416,7 +422,7 @@ public:
     ProtocolType protocol(db, phase_context, *partitioner, id);
     WorkloadType workload(coordinator_id, db, random, *partitioner);
 
-    StorageType storage;
+    // StorageType storage;
 
     uint64_t last_seed = 0;
 

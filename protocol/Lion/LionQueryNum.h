@@ -8,7 +8,7 @@
 #include "benchmark/ycsb/Context.h"
 
 namespace star {
-template <class Context> class StarQueryNum {
+template <class Context> class LionQueryNum {
 
 public:
   static std::size_t get_s_phase_query_num(const Context &context,
@@ -24,7 +24,7 @@ public:
   }
 };
 
-template <> class StarQueryNum<star::tpcc::Context> {
+template <> class LionQueryNum<star::tpcc::Context> {
 public:
   static std::size_t get_s_phase_query_num(const star::tpcc::Context &context,
                                            uint32_t batch_size) {
@@ -62,7 +62,7 @@ public:
   }
 };
 
-template <> class StarQueryNum<star::ycsb::Context> {
+template <> class LionQueryNum<star::ycsb::Context> {
 public:
   static std::size_t get_s_phase_query_num(const star::ycsb::Context &context,
                                            uint32_t batch_size) {

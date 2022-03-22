@@ -38,7 +38,7 @@ public:
                     CalvinHelper::string_to_vint(context.replica_group)) {
 
     storages.resize(context.batch_size);
-    transactions.resize(context.batch_size);
+    transactions.resize(context.batch_size);// 由manager统一生成txn
   }
 
   void coordinator_start() override {

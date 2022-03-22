@@ -29,6 +29,11 @@
 #include "protocol/Star/StarRecorder.h"
 
 
+#include "protocol/Lion/Lion.h"
+#include "protocol/Lion/LionExecutor.h"
+#include "protocol/Lion/LionManager.h"
+#include "protocol/Lion/LionRecorder.h"
+
 #include "protocol/Calvin/Calvin.h"
 #include "protocol/Calvin/CalvinExecutor.h"
 #include "protocol/Calvin/CalvinManager.h"
@@ -47,8 +52,8 @@ public:
 
   // using KeyType = tpcc::tpcc::key;
   // using ValueType = tpcc::tpcc::value;
-  using KeyType = ycsb::ycsb::key;
-  using ValueType = ycsb::ycsb::value;
+  // using KeyType = ycsb::ycsb::key;
+  // using ValueType = ycsb::ycsb::value;
 };
 
 template <> class InferType<star::ycsb::Context> {
@@ -56,8 +61,8 @@ public:
   template <class Transaction>
   using WorkloadType = star::ycsb::Workload<Transaction>;
 
-  using KeyType = ycsb::ycsb::key;
-  using ValueType = ycsb::ycsb::value;
+  // using KeyType = ycsb::ycsb::key;
+  // using ValueType = ycsb::ycsb::value;
 };
 
 class WorkerFactory {
@@ -69,7 +74,8 @@ public:
                  const Context &context, std::atomic<bool> &stop_flag) {
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
-                                                 "TwoPL", "TwoPLGC", "Calvin"};
+                                                 "TwoPL", "TwoPLGC", "Calvin",
+                                                 "Lion"};
     CHECK(protocols.count(context.protocol) == 1);
 
     std::vector<std::shared_ptr<Worker>> workers;
@@ -117,16 +123,12 @@ public:
       using TransactionType = star::SiloTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
-      using KeyType_ = 
-          typename InferType<Context>::KeyType;
-      using ValueType_ = 
-          typename InferType<Context>::ValueType;
 
       auto manager = std::make_shared<StarManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
-      auto recorder = std::make_shared<StarRecorder<WorkloadType, KeyType_, ValueType_> >(
+      auto recorder = std::make_shared<StarRecorder<WorkloadType> >(  // 
           coordinator_id, context.worker_num + 1, context, stop_flag, db,
           manager->recorder_status, manager->transmit_status, 
           manager->n_completed_workers, manager->n_started_workers);
@@ -140,7 +142,36 @@ public:
       workers.push_back(manager);
       workers.push_back(recorder);
 
-    } else if (context.protocol == "TwoPL") {
+    } else if (context.protocol == "Lion") {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::SiloTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+
+      auto manager = std::make_shared<LionManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag, db);
+
+      // add recorder for data-transformation
+      auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+          coordinator_id, context.worker_num + 1, context, stop_flag, db,
+          manager->recorder_status, manager->transmit_status, 
+          manager->n_completed_workers, manager->n_started_workers);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<LionExecutor<WorkloadType>>(
+            coordinator_id, i, db, context, manager->batch_size,
+            manager->worker_status, manager->n_completed_workers,
+            manager->n_started_workers)); // , manager->recorder_status
+      }
+      workers.push_back(manager);
+      workers.push_back(recorder);  
+    } 
+    else if (context.protocol == "TwoPL") {
 
       using TransactionType = star::TwoPLTransaction;
       using WorkloadType =

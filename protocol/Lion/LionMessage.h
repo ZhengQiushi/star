@@ -15,7 +15,7 @@
 
 namespace star {
 
-enum class StarMessage {
+enum class LionMessage {
   ASYNC_VALUE_REPLICATION_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
   SYNC_VALUE_REPLICATION_REQUEST,
   SYNC_VALUE_REPLICATION_RESPONSE,
@@ -23,7 +23,7 @@ enum class StarMessage {
   NFIELDS
 };
 
-class StarMessageFactory {
+class LionMessageFactory {
 
 public:
   static std::size_t new_async_value_replication_message(Message &message,
@@ -43,7 +43,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(StarMessage::ASYNC_VALUE_REPLICATION_REQUEST),
+        static_cast<uint32_t>(LionMessage::ASYNC_VALUE_REPLICATION_REQUEST),
         message_size, table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -71,7 +71,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_REQUEST),
+        static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_REQUEST),
         message_size, table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -126,7 +126,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + sizeof(uint64_t) +
                         operation.data.size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(StarMessage::OPERATION_REPLICATION_REQUEST),
+        static_cast<uint32_t>(LionMessage::OPERATION_REPLICATION_REQUEST),
         message_size, 0, 0);
 
     Encoder encoder(message.data);
@@ -138,7 +138,7 @@ public:
   }
 };
 
-template <class Database> class StarMessageHandler {
+template <class Database> class LionMessageHandler {
 
   using Transaction = SiloTransaction;
 
@@ -149,7 +149,7 @@ public:
                                                       Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(StarMessage::ASYNC_VALUE_REPLICATION_REQUEST));
+           static_cast<uint32_t>(LionMessage::ASYNC_VALUE_REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -206,7 +206,7 @@ public:
                                                      Database &db,
                                                      Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_REQUEST));
+           static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -257,7 +257,7 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE),
+        static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE),
         message_size, table_id, partition_id);
 
     static int recv_ = 0;
@@ -275,7 +275,7 @@ public:
     // DCHECK(false);
     // never come in
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE));
+           static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -298,7 +298,7 @@ public:
                                                     Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(StarMessage::OPERATION_REPLICATION_REQUEST));
+           static_cast<uint32_t>(LionMessage::OPERATION_REPLICATION_REQUEST));
 
     auto message_size = inputPiece.get_message_length();
     Decoder dec(inputPiece.toStringPiece());
@@ -323,10 +323,10 @@ public:
         std::function<void(MessagePiece, Message &, Database &, Transaction *)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
-    v.push_back(StarMessageHandler::async_value_replication_request_handler);
-    v.push_back(StarMessageHandler::sync_value_replication_request_handler);
-    v.push_back(StarMessageHandler::sync_value_replication_response_handler);
-    v.push_back(StarMessageHandler::operation_replication_request_handler);
+    v.push_back(LionMessageHandler::async_value_replication_request_handler);
+    v.push_back(LionMessageHandler::sync_value_replication_request_handler);
+    v.push_back(LionMessageHandler::sync_value_replication_response_handler);
+    v.push_back(LionMessageHandler::operation_replication_request_handler);
     return v;
   }
 };

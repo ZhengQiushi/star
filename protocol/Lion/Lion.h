@@ -15,24 +15,24 @@
 #include "protocol/Silo/SiloHelper.h"
 #include "protocol/Silo/SiloRWKey.h"
 #include "protocol/Silo/SiloTransaction.h"
-#include "protocol/Star/StarManager.h"
-#include "protocol/Star/StarMessage.h"
+#include "protocol/Lion/LionManager.h"
+#include "protocol/Lion/LionMessage.h"
 #include <glog/logging.h>
 
 namespace star {
 
-template <class Database> class Star {
+template <class Database> class Lion {
 public:
   using DatabaseType = Database;
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = typename DatabaseType::ContextType;
-  using MessageType = StarMessage;
+  using MessageType = LionMessage;
   using TransactionType = SiloTransaction;
 
-  using MessageFactoryType = StarMessageFactory;
-  using MessageHandlerType = StarMessageHandler<DatabaseType>;
+  using MessageFactoryType = LionMessageFactory;
+  using MessageHandlerType = LionMessageHandler<DatabaseType>;
 
-  Star(DatabaseType &db, const ContextType &context, Partitioner &partitioner, size_t id)
+  Lion(DatabaseType &db, const ContextType &context, Partitioner &partitioner, size_t id)
       : db(db), context(context), partitioner(partitioner), id(id) {}
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
@@ -75,7 +75,7 @@ public:
               std::atomic<uint32_t>& async_message_num
               ) {
     // lock write set
-    // LOG(INFO) << "StarExecutor: "<< id << " " << "lock_write_set";
+    // LOG(INFO) << "LionExecutor: "<< id << " " << "lock_write_set";
     size_t cur_ptr = 0;
 
     if (lock_write_set(txn, cur_ptr)) {
@@ -83,7 +83,7 @@ public:
       return false;
     }
 
-    // LOG(INFO) << "StarExecutor: "<< id << " " << "validate_read_set";
+    // LOG(INFO) << "LionExecutor: "<< id << " " << "validate_read_set";
 
     // commit phase 2, read validation
     if (!validate_read_set(txn)) {
@@ -94,14 +94,14 @@ public:
     // generate tid
     uint64_t commit_tid = generateTid(txn);
 
-    // LOG(INFO) << "StarExecutor: "<< id << " " << "write_and_replicate";
+    // LOG(INFO) << "LionExecutor: "<< id << " " << "write_and_replicate";
 
     // write and replicate
     write_and_replicate(txn, commit_tid, syncMessages, asyncMessages, 
                         async_message_num);
 
 
-    // LOG(INFO) << "StarExecutor: "<< id << " " << "async_txn_to_recorder";
+    // LOG(INFO) << "LionExecutor: "<< id << " " << "async_txn_to_recorder";
 
     // 记录txn的record情况
     if(context.enable_data_transfer == true){

@@ -30,13 +30,13 @@
 namespace star {
 
 
-template <class Workload, typename key_type, typename value_type> 
+template <class Workload>  // , typename key_type, typename value_type
 class StarRecorder : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
-  using KeyType = key_type;
-  using ValueType = value_type; 
+  // using KeyType = key_type;
+  // using ValueType = value_type; 
   using myKeyType = u_int64_t;
 
   StarRecorder(std::size_t coordinator_id, std::size_t id, const Context &context,

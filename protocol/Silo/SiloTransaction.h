@@ -178,9 +178,12 @@ public:
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;
   bool execution_phase;
-  // table id, partition id, key, value, local index read?
-  std::function<uint64_t(std::size_t, std::size_t, uint32_t, const void *,
-                         void *, bool)>
+  // table_id, partition_id, key_offset
+  // key, value, 
+  // local_index_read
+  std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
+                         const void *, void *, 
+                         bool)>
       readRequestHandler;
   // processed a request?
   std::function<std::size_t(void)> remote_request_handler;

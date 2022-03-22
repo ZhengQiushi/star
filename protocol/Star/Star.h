@@ -44,6 +44,7 @@ public:
     ITable *table = db.find_table(table_id, partition_id);
     auto value_bytes = table->value_size();
     auto row = table->search(key);
+
     return SiloHelper::read(row, value, value_bytes);
   }
 

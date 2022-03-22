@@ -218,6 +218,90 @@ public:
   bool is_backup() const override { return coordinator_id != 0; }
 };
 
+/***
+ * Lion Partitioner
+*/
+
+class LionSPartitioner : public Partitioner {
+public:
+  LionSPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
+      : Partitioner(coordinator_id, coordinator_num) {
+    CHECK(coordinator_num >= 2);
+  }
+
+  ~LionSPartitioner() override = default;
+
+  std::size_t replica_num() const override { return 2; }
+
+  bool is_replicated() const override { return true; }
+
+  bool has_master_partition(std::size_t partition_id) const override {
+    return master_coordinator(partition_id) == coordinator_id;
+  }
+
+  std::size_t master_coordinator(std::size_t partition_id) const override {
+    return partition_id % coordinator_num;
+  }
+
+  bool is_partition_replicated_on(std::size_t partition_id,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(coordinator_id < coordinator_num);
+
+    auto master_id = master_coordinator(partition_id);
+    auto secondary_id = 0u; // case 1
+    if (master_id == 0) {
+      secondary_id = partition_id % (coordinator_num - 1) + 1; // case 2
+    }
+    return coordinator_id == master_id || coordinator_id == secondary_id;
+  }
+
+  bool is_backup() const override { return false; }
+};
+
+class LionCPartitioner : public Partitioner {
+public:
+  LionCPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
+      : Partitioner(coordinator_id, coordinator_num) {
+    CHECK(coordinator_num >= 2);
+  }
+
+  ~LionCPartitioner() override = default;
+
+  std::size_t replica_num() const override { return 2; }
+
+  bool is_replicated() const override { return true; }
+
+  bool has_master_partition(std::size_t partition_id) const override {
+    return coordinator_id == 0;
+  }
+
+  std::size_t master_coordinator(std::size_t partition_id) const override {
+    return 0;
+  }
+
+  bool is_partition_replicated_on(std::size_t partition_id,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(coordinator_id < coordinator_num);
+
+    // 全副本节点上，所有分区都有
+    if (coordinator_id == 0)
+      return true;
+    // 非全副本节点需要判断
+    if(partition_id % coordinator_num == 0){
+      return coordinator_id == (partition_id / coordinator_num) % (coordinator_num - 1) + 1;
+    } else {
+      return coordinator_id == partition_id % coordinator_num;
+                              //partition_id % (coordinator_num - 1) + 1; 
+                              //((partition_id - 1) % (coordinator_num - 1)) + 1;
+    }
+  }
+
+  bool is_backup() const override { return coordinator_id != 0; }
+};
+
+
+
+
 class CalvinPartitioner : public Partitioner {
 
 public:

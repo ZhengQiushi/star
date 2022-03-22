@@ -13,19 +13,19 @@ namespace star {
 
 
 template <class Workload>
-class StarManager : public star::Manager {
+class LionManager : public star::Manager {
 public:
   using base_type = star::Manager;
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
 
-  StarManager(std::size_t coordinator_id, std::size_t id,
+  LionManager(std::size_t coordinator_id, std::size_t id,
               const Context &context, 
               std::atomic<bool> &stopFlag, 
               DatabaseType& db)
       : base_type(coordinator_id, id, context, stopFlag),
         db(db),
-        c_partitioner(std::make_unique<StarCPartitioner>(
+        c_partitioner(std::make_unique<LionCPartitioner>(
             coordinator_id, context.coordinator_num)) {
 
     batch_size = context.batch_size;

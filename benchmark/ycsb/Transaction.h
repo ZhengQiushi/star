@@ -49,6 +49,8 @@ public:
       auto key = query.Y_KEY[i];
       storage.ycsb_keys[i].Y_KEY = key;
 
+      // LOG(INFO) << sizeof(storage.ycsb_keys[i]) << "  " << sizeof(storage.ycsb_values[i]);
+
       auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
       if(key_partition_id == context.partition_num){
         // 

@@ -12,15 +12,15 @@
 #include "core/Worker.h"
 #include "glog/logging.h"
 
-#include "protocol/Star/Star.h"
-#include "protocol/Star/StarQueryNum.h"
+#include "protocol/Lion/Lion.h"
+#include "protocol/Lion/LionQueryNum.h"
 
 #include <chrono>
 #include <queue>
 
 namespace star {
 
-template <class Workload> class StarExecutor : public Worker {
+template <class Workload> class LionExecutor : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
@@ -29,22 +29,22 @@ public:
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
 
-  using ProtocolType = Star<DatabaseType>;
+  using ProtocolType = Lion<DatabaseType>;
 
-  using MessageType = StarMessage;
-  using MessageFactoryType = StarMessageFactory;
-  using MessageHandlerType = StarMessageHandler<DatabaseType>;
+  using MessageType = LionMessage;
+  using MessageFactoryType = LionMessageFactory;
+  using MessageHandlerType = LionMessageHandler<DatabaseType>;
 
-  StarExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  LionExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context, uint32_t &batch_size,
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
                std::atomic<uint32_t> &n_started_workers)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
-        s_partitioner(std::make_unique<StarSPartitioner>(
+        s_partitioner(std::make_unique<LionSPartitioner>(
             coordinator_id, context.coordinator_num)),
-        c_partitioner(std::make_unique<StarCPartitioner>(
+        c_partitioner(std::make_unique<LionCPartitioner>(
             coordinator_id, context.coordinator_num)),
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
@@ -138,9 +138,10 @@ public:
 
       WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get());
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
+      StorageType storage;
 
       // 准备transaction
-      prepare_transactions_to_run(c_workload, s_workload);
+      prepare_transactions_to_run(c_workload, s_workload, storage);
 
       // c_phase
       LOG(WARNING) << "worker " << id << " c_phase";
@@ -256,7 +257,7 @@ public:
   //   return is_cross_txn;
   // }
 
-  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload){
+  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
@@ -276,7 +277,7 @@ public:
       if (status == ExecutorStatus::C_PHASE) {
         partitioner = c_partitioner.get();
         query_num =
-             StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+             LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
         phase_context = context.get_cross_partition_context(); 
         if(id == 0){
           // LOG(INFO) << "debug";
@@ -284,7 +285,7 @@ public:
       } else if (status == ExecutorStatus::S_PHASE) {
         partitioner = s_partitioner.get();
         query_num =
-            StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+            LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
         phase_context = context.get_single_partition_context(); 
         if(id == 0){
           // LOG(INFO) << "debug";
@@ -293,7 +294,7 @@ public:
         CHECK(false);
       }   
 
-      StorageType storage;
+      
       uint64_t last_seed = 0;
 
       for (auto i = 0u; i < query_num; i++) {
@@ -348,7 +349,7 @@ public:
                          std::chrono::steady_clock::now() - ptr->startTime)
                          .count();
       // if (context.star_sync_in_single_master_phase){
-      //   Star<DatabaseType>::sync_messages(*ptr);
+      //   Lion<DatabaseType>::sync_messages(*ptr);
       // }
       percentile.add(latency);
       q.pop();
@@ -397,7 +398,7 @@ public:
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = c_partitioner.get();
       query_num =
-          StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+          LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
       phase_context = context.get_cross_partition_context(); //  c_context; // 
 
       cur_transactions_queue = &c_transactions_queue;
@@ -405,7 +406,7 @@ public:
     } else if (status == ExecutorStatus::S_PHASE) {
       partitioner = s_partitioner.get();
       query_num =
-          StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+          LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
       phase_context = context.get_single_partition_context(); // s_context;// 
 
       cur_transactions_queue = &s_transactions_queue;
@@ -415,8 +416,6 @@ public:
 
     ProtocolType protocol(db, phase_context, *partitioner, id);
     WorkloadType workload(coordinator_id, db, random, *partitioner);
-
-    StorageType storage;
 
     uint64_t last_seed = 0;
 
@@ -436,7 +435,7 @@ public:
       transaction =
               std::move(cur_transactions_queue->front());
       do {
-        // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request" << i;
+        // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
         process_request();
         last_seed = random.get_seed();
 
@@ -446,12 +445,12 @@ public:
           std::size_t partition_id = get_partition_id(status);
           setupHandlers(*transaction, protocol);
         }
-        // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute" << i;
+        // LOG(INFO) << "LionExecutor: "<< id << " " << "transaction->execute" << i;
 
         auto result = transaction->execute(id);
 
         if (result == TransactionResult::READY_TO_COMMIT) {
-          // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
+          // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
 
           bool commit =
               protocol.commit(*transaction, sync_messages, async_messages, record_messages, 
@@ -515,7 +514,7 @@ public:
         auto messagePiece = *it;
         auto message_type = messagePiece.get_message_type();
 
-        if(message_type == static_cast<int>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE)){
+        if(message_type == static_cast<int>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE)){
           auto message_length = messagePiece.get_message_length();
           static int total_async = 0;
           

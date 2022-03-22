@@ -185,9 +185,15 @@ public:
   setup_process_requests_in_execution_phase(std::size_t n_lock_manager,
                                             std::size_t n_worker,
                                             std::size_t replica_group_size) {
+    /**
+     * @brief 
+     * 
+     */
+
     // only read the keys with locks from the lock_manager_id
     process_requests = [this, n_lock_manager, n_worker,
                         replica_group_size](std::size_t worker_id) {
+
       auto lock_manager_id = CalvinHelper::worker_id_to_lock_manager_id(
           worker_id, n_lock_manager, n_worker);
 
@@ -200,7 +206,9 @@ public:
 
         if (CalvinHelper::partition_id_to_lock_manager_id(
                 readSet[i].get_partition_id(), n_lock_manager,
-                replica_group_size) != lock_manager_id) {
+                replica_group_size) 
+            != 
+                lock_manager_id) {
           continue;
         }
 

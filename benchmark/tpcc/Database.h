@@ -40,6 +40,12 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
+  ITable *find_router_table(std::size_t table_id, std::size_t partition_id) {
+    DCHECK(table_id < tbl_vecs.size());
+    DCHECK(partition_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id][partition_id];
+  }
+
   ITable *tbl_warehouse(std::size_t partition_id) {
     DCHECK(partition_id < tbl_warehouse_vec.size());
     return tbl_warehouse_vec[partition_id].get();
@@ -772,6 +778,7 @@ private:
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;
+  std::vector<std::vector<ITable *>> tbl_vecs_router;
 
   std::vector<std::unique_ptr<ITable>> tbl_warehouse_vec;
   std::vector<std::unique_ptr<ITable>> tbl_district_vec;

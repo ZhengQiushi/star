@@ -12,6 +12,11 @@
 
 namespace star {
 
+struct RTable {
+  std::tuple<int, int> dynamic_dst;
+  std::tuple<int, int> static_dst;
+};
+
 class ITable {
 public:
   using MetaDataType = std::atomic<uint64_t>;

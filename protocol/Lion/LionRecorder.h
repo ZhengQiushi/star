@@ -52,8 +52,8 @@ public:
             coordinator_id, context.coordinator_num, context.delay_time)),
         // s_partitioner(std::make_unique<LionSPartitioner>(
         //     coordinator_id, context.coordinator_num)),
-        c_partitioner(std::make_unique<LionCPartitioner>(
-            coordinator_id, context.coordinator_num)) {
+        l_partitioner(std::make_unique<LionDynamicPartitioner<Workload>>(
+            coordinator_id, context.coordinator_num, db)) {
 
     for (auto i = 0u; i < context.coordinator_num; i++) {
       messages.emplace_back(std::make_unique<Message>());
@@ -306,9 +306,9 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
       cur_move.dest_partition_id = move.dest_partition_id;
 
       for(size_t j = 0 ; j < move.records.size(); j ++ ){
-        if(c_partitioner->is_partition_replicated_on(move.records[j].src_partition_id, i)){
+        if(l_partitioner->is_partition_replicated_on(move.records[j].src_partition_id, i)){
           cur_move.records.push_back(move.records[j]);
-        } else if (c_partitioner->is_partition_replicated_on(move.dest_partition_id, i)) {
+        } else if (l_partitioner->is_partition_replicated_on(move.dest_partition_id, i)) {
           // partition在副本上
           cur_move.records.push_back(move.records[j]);
         }
@@ -506,7 +506,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     // outfile.open("/Users/lion/project/01_star/star/result_non_con.txt", std::ios::app); // ios::trunc
 
     // insert 
-    if(c_partitioner->is_partition_replicated_on(move.dest_partition_id, coordinator_id)){
+    if(l_partitioner->is_partition_replicated_on(move.dest_partition_id, coordinator_id)){
       // 说明partition 在这个上面
       // outfile << "move round" << move_round << " -------------- \n";
       for(size_t i = 0 ; i < move.records.size(); i ++ ){
@@ -573,7 +573,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     for(size_t i = 0 ; i < move.records.size(); i ++ ){
       const auto& rec = move.records[i];
       // remove
-      if(c_partitioner->is_partition_replicated_on(rec.src_partition_id, coordinator_id)){
+      if(l_partitioner->is_partition_replicated_on(rec.src_partition_id, coordinator_id)){
         // 说明partition 在这个上面
         ITable *src_table = db.find_table(rec.table_id, rec.src_partition_id);
         // ycsb::ycsb::key ycsb_keys = move.records[i].key;
@@ -648,7 +648,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         remove_on_secondary_coordinator(move);
       }
       // for(int i = 0 ; i < 12; i ++ ){
-      //   if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+      //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
       //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
       //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
       //   }
@@ -660,7 +660,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
     
     // for(int i = 0 ; i < 12; i ++ ){
-    //   if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+    //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
     //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
     //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
     //   }
@@ -1352,7 +1352,7 @@ public:
   std::unique_ptr<Delay> delay;  
 
   std::unordered_map<myKeyType, std::unordered_map<myKeyType, Node>> record_degree;
-  std::unique_ptr<Partitioner> c_partitioner; //  s_partitioner,
+  std::unique_ptr<Partitioner> l_partitioner; //  s_partitioner,
 
   std::unique_ptr<Clay<WorkloadType> > my_clay;
 };

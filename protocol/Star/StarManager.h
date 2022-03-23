@@ -33,21 +33,22 @@ public:
     transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
   }
 
-  ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
-    // the value is put into the most significant 24 bits
-    uint32_t offset = 8;
-    return static_cast<ExecutorStatus>((value << offset) |
-                                       static_cast<uint32_t>(signal));
-  }
+  // ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
+  //   // the value is put into the most significant 24 bits
+  //   uint32_t offset = 8;
+  //   return static_cast<ExecutorStatus>((value << offset) |
+  //                                      static_cast<uint32_t>(signal));
+  // }
 
-  std::tuple<uint32_t, ExecutorStatus> split_signal(ExecutorStatus signal) {
-    // the value is put into the most significant 24 bits
-    uint32_t offset = 8, mask = 0xff;
-    uint32_t value = static_cast<uint32_t>(signal);
-    // return value and ``real" signal
-    return std::make_tuple(value >> offset,
-                           static_cast<ExecutorStatus>(value & mask));
-  }
+  // std::tuple<uint32_t, ExecutorStatus> split_signal(ExecutorStatus signal) {
+  //   // the value is put into the most significant 24 bits
+  //   uint32_t offset = 8, mask = 0xff;
+  //   uint32_t value = static_cast<uint32_t>(signal);
+  //   // return value and ``real" signal
+  //   return std::make_tuple(value >> offset,
+  //                          static_cast<ExecutorStatus>(value & mask));
+  // }
+
 
   void update_batch_size(uint64_t running_time) {
     // running_time in microseconds

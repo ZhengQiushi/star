@@ -42,10 +42,10 @@ public:
                std::atomic<uint32_t> &n_started_workers)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
-        s_partitioner(std::make_unique<LionSPartitioner>(
-            coordinator_id, context.coordinator_num)),
-        c_partitioner(std::make_unique<LionCPartitioner>(
-            coordinator_id, context.coordinator_num)),
+        l_partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
+            coordinator_id, context.coordinator_num, db)),
+        s_partitioner(std::make_unique<LionStaticPartitioner<Workload> >(
+            coordinator_id, context.coordinator_num, db)),    
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -116,10 +116,11 @@ public:
     for (;;) {
 
       ExecutorStatus status;
+      int lion_king_coordinator_id;
 
       do {
-        status = static_cast<ExecutorStatus>(worker_status.load());
-
+        std::tie(lion_king_coordinator_id, status) = split_signal(static_cast<ExecutorStatus>(worker_status.load()));
+        
         if (status == ExecutorStatus::EXIT) {
           // commit transaction in s_phase;
           commit_transactions();
@@ -136,7 +137,7 @@ public:
 
       // LOG(WARNING) << "worker " << id << " prepare_transactions_to_run";
 
-      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get());
+      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *l_partitioner.get());
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
       StorageType storage;
 
@@ -145,12 +146,12 @@ public:
 
       // c_phase
       LOG(WARNING) << "worker " << id << " c_phase";
-      if (coordinator_id == 0) {
+      if (coordinator_id == lion_king_coordinator_id) {
         LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
-        run_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        // run_transaction(ExecutorStatus::C_PHASE, async_message_num);
         
-        replication_fence(ExecutorStatus::C_PHASE);
+        // replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
         LOG(WARNING) << "worker " << id << " finish run_transaction";
 
@@ -159,7 +160,7 @@ public:
         n_started_workers.fetch_add(1);
          LOG(WARNING) << "worker " << id << " ready to process_request";
 
-        while (static_cast<ExecutorStatus>(worker_status.load()) ==
+        while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
           process_request();
         }
@@ -174,7 +175,7 @@ public:
       // wait to s_phase
       LOG(WARNING) << "worker " << id << " wait to s_phase";
       
-      while (static_cast<ExecutorStatus>(worker_status.load()) !=
+      while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) !=
              ExecutorStatus::S_PHASE) {
         std::this_thread::yield();
       }
@@ -192,7 +193,7 @@ public:
       }
       run_transaction(ExecutorStatus::S_PHASE, async_message_num);
       
-       LOG(WARNING) << "worker " << id << " ready to replication_fence";
+      LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
@@ -201,7 +202,7 @@ public:
 
       // once all workers are stop, we need to process the replication
       // requests
-      while (static_cast<ExecutorStatus>(worker_status.load()) ==
+      while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
              ExecutorStatus::S_PHASE) {
         process_request();
       }
@@ -275,7 +276,7 @@ public:
       auto status = cur_status[round];
 
       if (status == ExecutorStatus::C_PHASE) {
-        partitioner = c_partitioner.get();
+        partitioner = l_partitioner.get();
         query_num =
              LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
         phase_context = context.get_cross_partition_context(); 
@@ -396,7 +397,7 @@ public:
       LOG(INFO) << "hi, i'm thread 0";
     }
     if (status == ExecutorStatus::C_PHASE) {
-      partitioner = c_partitioner.get();
+      partitioner = l_partitioner.get();
       query_num =
           LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
       phase_context = context.get_cross_partition_context(); //  c_context; // 
@@ -625,7 +626,7 @@ private:
   DatabaseType &db;
   const ContextType &context;
   uint32_t &batch_size;
-  std::unique_ptr<Partitioner> s_partitioner, c_partitioner;
+  std::unique_ptr<Partitioner> l_partitioner, s_partitioner;
   RandomType random;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> async_message_num;

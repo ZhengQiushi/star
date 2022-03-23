@@ -9,6 +9,8 @@
 #include <numeric>
 #include <string>
 
+
+#include "Table.h"
 namespace star {
 
 class Partitioner {
@@ -31,12 +33,25 @@ public:
 
   virtual std::size_t master_coordinator(std::size_t partition_id) const = 0;
 
+  virtual std::size_t secondary_coordinator(std::size_t partition_id) const = 0;
+
   virtual bool is_partition_replicated_on(std::size_t partition_id,
                                           std::size_t coordinator_id) const = 0;
 
   bool is_partition_replicated_on_me(std::size_t partition_id) const {
     return is_partition_replicated_on(partition_id, coordinator_id);
   }
+
+  
+  virtual bool has_master_partition(int table_id, int partition_id, const void* key) const = 0;
+
+  
+  virtual std::size_t master_coordinator(int table_id, int partition_id, const void* key) const = 0;
+
+  
+  virtual bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const = 0;
+
 
   virtual bool is_backup() const = 0;
 
@@ -73,7 +88,10 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     return partition_id % coordinator_num;
   }
-
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    DCHECK(false);
+    return (partition_id) % coordinator_num;
+  }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id < coordinator_num);
@@ -85,6 +103,27 @@ public:
     } else {
       return coordinator_id >= first_replica || coordinator_id <= last_replica;
     }
+  }
+
+
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
+
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
   }
 
   bool is_backup() const override { return false; }
@@ -113,13 +152,35 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     return 0;
   }
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    DCHECK(false);
+    return (partition_id) % coordinator_num;
+  }
 
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id < coordinator_num);
     return true;
   }
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
 
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
+  }
   bool is_backup() const override { return coordinator_id == 1; }
 };
 
@@ -161,7 +222,10 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     return partition_id % coordinator_num;
   }
-
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    DCHECK(false);
+    return (partition_id) % coordinator_num;
+  }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id < coordinator_num);
@@ -173,7 +237,25 @@ public:
     }
     return coordinator_id == master_id || coordinator_id == secondary_id;
   }
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
 
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
+  }
   bool is_backup() const override { return false; }
 };
 
@@ -197,7 +279,10 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     return 0;
   }
-
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    DCHECK(false);
+    return (partition_id) % coordinator_num;
+  }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id < coordinator_num);
@@ -214,22 +299,55 @@ public:
                               //((partition_id - 1) % (coordinator_num - 1)) + 1;
     }
   }
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
 
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
+  }
   bool is_backup() const override { return coordinator_id != 0; }
 };
 
 /***
  * Lion Partitioner
+ * Features:
+ *      - 2 full replicas
+ *      - 2 kinds of replicas: + (stands for dynamic replica | master    ), 
+ *                             - (stands for static replica  | secondary )
+ *      - replicas will change as time goes by accordding to the locality.
+ * Here is an example(inital state):
+ * 
+ *     | N0    |  N1   |  N2   |
+ * P0  | +     |  -    |       |
+ * P1  |       |  +    |  -    |
+ * P2  | -     |       |  +    |
+ * P3  | +     |  -    |       |
+ * P4  |       |  +    |  -    |
+ * P5  | -     |       |  +    |
+ * 
 */
 
-class LionSPartitioner : public Partitioner {
+class LionInitPartitioner : public Partitioner {
 public:
-  LionSPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
+  LionInitPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
       : Partitioner(coordinator_id, coordinator_num) {
     CHECK(coordinator_num >= 2);
   }
 
-  ~LionSPartitioner() override = default;
+  ~LionInitPartitioner() override = default;
 
   std::size_t replica_num() const override { return 2; }
 
@@ -240,66 +358,188 @@ public:
   }
 
   std::size_t master_coordinator(std::size_t partition_id) const override {
-    return partition_id % coordinator_num;
+    // the static replica is master at initial state
+    return (partition_id) % coordinator_num;
   }
 
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    // the static replica is master at initial state
+    return (partition_id + 1) % coordinator_num;
+  }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
+    // judge if it is replicated partition or not
     DCHECK(coordinator_id < coordinator_num);
 
     auto master_id = master_coordinator(partition_id);
-    auto secondary_id = 0u; // case 1
-    if (master_id == 0) {
-      secondary_id = partition_id % (coordinator_num - 1) + 1; // case 2
-    }
+    auto secondary_id = secondary_coordinator(partition_id); // case 1
+    
     return coordinator_id == master_id || coordinator_id == secondary_id;
   }
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
 
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
+  }
   bool is_backup() const override { return false; }
 };
 
-class LionCPartitioner : public Partitioner {
+
+template <class Workload> 
+class LionDynamicPartitioner : public LionInitPartitioner {
 public:
-  LionCPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
-      : Partitioner(coordinator_id, coordinator_num) {
+  using WorkloadType = Workload;
+  using DatabaseType = typename WorkloadType::DatabaseType;
+
+  LionDynamicPartitioner(std::size_t coordinator_id, std::size_t coordinator_num, DatabaseType& db):
+    LionInitPartitioner(coordinator_id, coordinator_num), db(db){
     CHECK(coordinator_num >= 2);
   }
 
-  ~LionCPartitioner() override = default;
+  ~LionDynamicPartitioner() override = default;
 
   std::size_t replica_num() const override { return 2; }
 
   bool is_replicated() const override { return true; }
 
-  bool has_master_partition(std::size_t partition_id) const override {
-    return coordinator_id == 0;
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    return master_coordinator(table_id, partition_id, key) == coordinator_id;
   }
 
-  std::size_t master_coordinator(std::size_t partition_id) const override {
-    return 0;
-  }
-
-  bool is_partition_replicated_on(std::size_t partition_id,
-                                  std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
-
-    // 全副本节点上，所有分区都有
-    if (coordinator_id == 0)
-      return true;
-    // 非全副本节点需要判断
-    if(partition_id % coordinator_num == 0){
-      return coordinator_id == (partition_id / coordinator_num) % (coordinator_num - 1) + 1;
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    auto table_router = db.find_router_table(table_id, partition_id);
+    RTable* ret = (RTable*)table_router->search_value(key);
+     
+    if(std::get<1>(ret->dynamic_dst) == 1){
+      //
+      return std::get<0>(ret->dynamic_dst);
     } else {
-      return coordinator_id == partition_id % coordinator_num;
-                              //partition_id % (coordinator_num - 1) + 1; 
-                              //((partition_id - 1) % (coordinator_num - 1)) + 1;
+      return std::get<0>(ret->static_dst);
     }
   }
 
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(coordinator_id < coordinator_num);
+    auto table_router = db.find_router_table(table_id, partition_id);
+    RTable* ret = (RTable*)table_router->search_value(key);
+    return std::get<0>(ret->dynamic_dst) == coordinator_id || 
+           std::get<0>(ret->static_dst) == coordinator_id ;
+  }
+
+
+  bool has_master_partition(std::size_t partition_id) const override {
+    DCHECK(false);
+    return false; // master_coordinator(partition_id) == coordinator_id;
+  }
+
+  std::size_t master_coordinator(std::size_t partition_id) const override {
+    // the static replica is master at initial state
+    DCHECK(false);
+    return 0; // (partition_id + 1) % coordinator_num;
+  }
+
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    // the static replica is master at initial state
+    DCHECK(false);
+    return 0; // (partition_id) % coordinator_num;
+  }
+  bool is_partition_replicated_on(std::size_t partition_id,
+                                  std::size_t coordinator_id) const override {
+    // judge if it is replicated partition or not
+    DCHECK(false);    
+    return true;// coordinator_id == master_id || coordinator_id == secondary_id;
+  }
+  
   bool is_backup() const override { return coordinator_id != 0; }
+private:
+  DatabaseType& db;
 };
 
+template <class Workload> 
+class LionStaticPartitioner : public LionInitPartitioner {
+public:
+  using WorkloadType = Workload;
+  using DatabaseType = typename WorkloadType::DatabaseType;
 
+  LionStaticPartitioner(std::size_t coordinator_id, std::size_t coordinator_num, DatabaseType& db):
+    LionInitPartitioner(coordinator_id, coordinator_num), db(db){
+    CHECK(coordinator_num >= 2);
+  }
+
+  ~LionStaticPartitioner() override = default;
+
+  std::size_t replica_num() const override { return 2; }
+
+  bool is_replicated() const override { return true; }
+
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    return master_coordinator(table_id, partition_id, key) == coordinator_id;
+  }
+
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    // the static replica is master at initial state
+    return (partition_id + 1) % coordinator_num;
+  }
+
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(coordinator_id < coordinator_num);
+    if(has_master_partition(table_id, partition_id, key) == true){
+      return true;
+    }
+    auto table_router = db.find_router_table(table_id, partition_id);
+    RTable* ret = (RTable*)table_router->search_value(key);
+    return std::get<0>(ret->dynamic_dst) == coordinator_id ; // || 
+           // std::get<0>(ret->static_dst) == coordinator_id ;
+  }
+
+
+  bool has_master_partition(std::size_t partition_id) const override {
+    DCHECK(false);
+    return false; // master_coordinator(partition_id) == coordinator_id;
+  }
+
+  std::size_t master_coordinator(std::size_t partition_id) const override {
+    // the static replica is master at initial state
+    DCHECK(false);
+    return 0; // (partition_id + 1) % coordinator_num;
+  }
+
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    // the static replica is master at initial state
+    DCHECK(false);
+    return 0; // (partition_id) % coordinator_num;
+  }
+  bool is_partition_replicated_on(std::size_t partition_id,
+                                  std::size_t coordinator_id) const override {
+    // judge if it is replicated partition or not
+    DCHECK(false);    
+    return true;// coordinator_id == master_id || coordinator_id == secondary_id;
+  }
+  
+  bool is_backup() const override { return coordinator_id != 0; }
+private:
+  DatabaseType& db;
+};
 
 
 class CalvinPartitioner : public Partitioner {
@@ -341,13 +581,34 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     return partition_id % replica_group_size + coordinator_start_id;
   }
-
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    DCHECK(false);
+    return (partition_id) % coordinator_num;
+  }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     // replica group in calvin is independent
     return false;
   }
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
 
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+  
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
+  }
   bool is_backup() const override { return false; }
 
 public:
@@ -397,6 +658,9 @@ public:
     } else if (part == "StarC") {
       return std::make_unique<StarCPartitioner>(coordinator_id,
                                                 coordinator_num);
+    } else if (part == "Lion") {
+      return std::make_unique<LionInitPartitioner>(coordinator_id,
+                                                   coordinator_num);
     } else {
       CHECK(false);
       return nullptr;

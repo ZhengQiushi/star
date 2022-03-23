@@ -33,6 +33,12 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
+  ITable *find_router_table(std::size_t table_id, std::size_t partition_id) {
+    DCHECK(table_id < tbl_vecs.size());
+    DCHECK(partition_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id][partition_id];
+  }
+
   template <class InitFunc>
   void initTables(const std::string &name, InitFunc initFunc,
                   std::size_t partitionNum, std::size_t threadsNum,
@@ -68,6 +74,7 @@ public:
               << " milliseconds.";
   }
 
+
   void initialize(const Context &context) {
 
     std::size_t coordinator_id = context.coordinator_id;
@@ -82,15 +89,22 @@ public:
       tbl_ycsb_vec.push_back(
           std::make_unique<Table<9973, ycsb::key, ycsb::value>>(ycsbTableID,
                                                                 partitionID));
+
+      tbl_ycsb_vec_router.push_back(
+          std::make_unique<Table<9973, ycsb::key, RTable>>(ycsbTableID, partitionID));
     }
 
     // there is 1 table in ycsb
     tbl_vecs.resize(1);
+    tbl_vecs_router.resize(1);
 
     auto tFunc = [](std::unique_ptr<ITable> &table) { return table.get(); };
 
     std::transform(tbl_ycsb_vec.begin(), tbl_ycsb_vec.end(),
                    std::back_inserter(tbl_vecs[0]), tFunc);
+
+    std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
+                   std::back_inserter(tbl_vecs_router[0]), tFunc);
 
     using std::placeholders::_1;
     initTables("ycsb",
@@ -140,11 +154,19 @@ private:
 
     Random random;
     ITable *table = tbl_ycsb_vec[partitionID].get();
+    ITable *table_router = tbl_ycsb_vec_router[partitionID].get();
 
     std::size_t keysPerPartition =
         context.keysPerPartition; // 5M keys per partition
     std::size_t partitionNum = context.partition_num;
     std::size_t totalKeys = keysPerPartition * partitionNum;
+
+    auto getKeyDynamicDst = [&](const Context &context, std::size_t partitionID){
+      return partitionID % context.coordinator_num;
+    };
+    auto getKeyStaticDst = [&](const Context &context, std::size_t partitionID){
+      return (partitionID + 1) % context.coordinator_num;
+    };
 
     if (context.strategy == PartitionStrategy::RANGE) {
 
@@ -169,6 +191,17 @@ private:
         value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
 
         table->insert(&key, &value);
+
+        // insert router
+        RTable cur;
+        cur.dynamic_dst = std::make_pair(getKeyDynamicDst(context, partitionID),
+                                         1);
+
+        cur.static_dst = std::make_pair(getKeyStaticDst(context, partitionID),
+                                         0);
+
+        table_router->insert(&key, &cur);
+
       }
 
     } else {
@@ -193,6 +226,16 @@ private:
         value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
 
         table->insert(&key, &value);
+
+        // insert router
+        RTable cur;
+        cur.dynamic_dst = std::make_pair(getKeyDynamicDst(context, partitionID),
+                                         1);
+
+        cur.static_dst = std::make_pair(getKeyStaticDst(context, partitionID),
+                                         0);
+
+        table_router->insert(&key, &cur);
       }
     }
   }
@@ -202,7 +245,9 @@ private:
   std::vector<std::vector<ITable *>> tbl_vecs_router;
   
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec;
-  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router;
+  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router; // router for each tuple 
+                                                            // <dynamic_replica_coordinator_id, 
+                                                            //   static_replica_coordinator_id  >
 };
 } // namespace ycsb
 } // namespace star

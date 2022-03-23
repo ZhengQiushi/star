@@ -35,6 +35,27 @@ public:
 
   virtual Message *pop_message() = 0;
 
+  ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
+    // the value is put into the most significant 24 bits
+    uint32_t offset = 8;
+    return static_cast<ExecutorStatus>((value << offset) |
+                                       static_cast<uint32_t>(signal));
+  }
+
+  std::tuple<uint32_t, ExecutorStatus> split_signal(ExecutorStatus signal) {
+    // the value is put into the most significant 24 bits
+    uint32_t offset = 8, mask = 0xff;
+    uint32_t value = static_cast<uint32_t>(signal);
+    // return value and ``real" signal
+    return std::make_tuple(value >> offset,
+                           static_cast<ExecutorStatus>(value & mask));
+  }
+  ExecutorStatus signal_unmask(ExecutorStatus signal){
+    uint32_t offset = 8, mask = 0xff;
+    uint32_t value = static_cast<uint32_t>(signal);
+    // return value and ``real" signal
+    return static_cast<ExecutorStatus>(value & mask);
+  }
 public:
   std::size_t coordinator_id;
   std::size_t id;

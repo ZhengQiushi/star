@@ -16,7 +16,10 @@ enum class ExecutorStatus {
   Kiva_READ,
   Kiva_COMMIT,
   STOP,
-  EXIT
+  EXIT,
+  LION_KING_START,
+  LION_NORMAL_START,
+  LION_KING_EXECUTE
 };
 
 enum myTestSet {

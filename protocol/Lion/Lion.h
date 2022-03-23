@@ -284,23 +284,24 @@ private:
     // operation replication optimization in the partitioned phase
     if (context.operation_replication) {
       //! TODO: not finished yet
-      txn.operation.set_tid(commit_tid);
-      auto partition_id = txn.operation.partition_id;
+      DCHECK(false);
+      // txn.operation.set_tid(commit_tid);
+      // auto partition_id = txn.operation.partition_id;
 
-      for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
-        // k does not have this partition
-        if (!partitioner.is_partition_replicated_on(partition_id, k)) {
-          continue;
-        }
-        // already write
-        if (k == txn.coordinator_id) {
-          continue;
-        }
+      // for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
+      //   // k does not have this partition
+      //   if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, k)) {
+      //     continue;
+      //   }
+      //   // already write
+      //   if (k == txn.coordinator_id) {
+      //     continue;
+      //   }
 
-        txn.network_size +=
-            MessageFactoryType::new_operation_replication_message(
-                *asyncMessages[k], txn.operation);
-      }
+      //   txn.network_size +=
+      //       MessageFactoryType::new_operation_replication_message(
+      //           *asyncMessages[k], txn.operation);
+      // }
     } else {
       // value replication
       for (auto i = 0u; i < writeSet.size(); i++) {
@@ -316,7 +317,7 @@ private:
         for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
 
           // k does not have this partition
-          if (!partitioner.is_partition_replicated_on(partitionId, k)) {
+          if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, k)) {
             continue;
           }
 

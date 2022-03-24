@@ -53,7 +53,7 @@ public:
         // s_partitioner(std::make_unique<LionSPartitioner>(
         //     coordinator_id, context.coordinator_num)),
         l_partitioner(std::make_unique<LionDynamicPartitioner<Workload>>(
-            coordinator_id, context.coordinator_num, db)) {
+            context.coordinator_id, context.coordinator_num, db)) {
 
     for (auto i = 0u; i < context.coordinator_num; i++) {
       messages.emplace_back(std::make_unique<Message>());

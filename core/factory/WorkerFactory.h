@@ -149,7 +149,7 @@ public:
             0)
           << "In Lion, each partition is managed by only one thread.";
 
-      using TransactionType = star::SiloTransaction;
+      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
@@ -157,10 +157,10 @@ public:
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
-      auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-          coordinator_id, context.worker_num + 1, context, stop_flag, db,
-          manager->recorder_status, manager->transmit_status, 
-          manager->n_completed_workers, manager->n_started_workers);
+      // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
+      //     manager->recorder_status, manager->transmit_status, 
+      //     manager->n_completed_workers, manager->n_started_workers);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<LionExecutor<WorkloadType>>(
@@ -169,7 +169,7 @@ public:
             manager->n_started_workers)); // , manager->recorder_status
       }
       workers.push_back(manager);
-      workers.push_back(recorder);  
+      // workers.push_back(recorder);  
     } 
     else if (context.protocol == "TwoPL") {
 

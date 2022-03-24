@@ -26,7 +26,7 @@ public:
       : base_type(coordinator_id, id, context, stopFlag),
         db(db),
         l_partitioner(std::make_unique<LionDynamicPartitioner<WorkloadType> >(
-            coordinator_id, context.coordinator_num, db)) {
+            context.coordinator_id, context.coordinator_num, db)) {
 
     batch_size = context.batch_size;
     coordinators_load.resize(context.coordinator_num);
@@ -122,8 +122,6 @@ public:
         // start c-phase
         LOG(INFO) << "start C-Phase: C" << coordinator_id << " is the king";
 
-        n_completed_workers.store(0);
-        n_started_workers.store(0);
         batch_size_percentile.add(batch_size);
         LOG(INFO) << "wait_all_workers_start";
 
@@ -149,11 +147,28 @@ public:
         auto s_start = std::chrono::steady_clock::now();
         // start s-phase
 
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
+
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(int i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
         LOG(INFO) << "start S-Phase";
 
         n_completed_workers.store(0);
         n_started_workers.store(0);
-        signal_worker(ExecutorStatus::S_PHASE);
+        signal_worker(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::S_PHASE));
         wait_all_workers_start();
         
         // LOG(INFO) << "wait_all_workers_finish";
@@ -211,7 +226,8 @@ public:
         DCHECK(signal == ExecutorStatus::C_PHASE);
         n_completed_workers.store(0);
         n_started_workers.store(0);
-        set_worker_status(ExecutorStatus::C_PHASE);
+        
+        set_worker_status(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::C_PHASE));
         
         LOG(INFO) << "wait_all_workers_start";
 
@@ -221,6 +237,7 @@ public:
 
         wait4_stop(1);
         
+        LOG(INFO) << "getStop";
         
         set_worker_status(ExecutorStatus::STOP);
         
@@ -231,20 +248,30 @@ public:
         LOG(INFO) << "send_ack";
 
         send_lion_ack(lion_king_coordinator_id);
-        // if(WorkloadType::which_workload == myTestSet::YCSB){
-        //   for(int i = 0 ; i < 12; i ++ ){
-        //     if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-        //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-        //       LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-        //     }
-        //   }
-        // }
 
+
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
+
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(int i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
         LOG(INFO) << "start S-Phase";
         
         // start s-phase
-
-        signal = wait4_lion_signal();
+        
+        signal = signal_unmask(wait4_lion_signal());
         DCHECK(signal == ExecutorStatus::S_PHASE);
         n_completed_workers.store(0);
         n_started_workers.store(0);
@@ -280,6 +307,9 @@ public:
 
       static size_t lion_king_coordinator_id = -1;
       lion_king_coordinator_id = (lion_king_coordinator_id + 1) % n_coordinators;
+      
+      n_completed_workers.store(0);
+      n_started_workers.store(0);
 
       signal_worker(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::C_PHASE));
       // signal_lion_worker(lion_king_coordinator_id);
@@ -339,6 +369,10 @@ public:
       size_t lion_king_coordinator_id;
       ExecutorStatus signal, status;
       // ExecutorStatus signal = wait4_signal();
+      
+      n_completed_workers.store(0);
+      n_started_workers.store(0);
+      
       signal = wait4_lion_signal();
       std::tie(lion_king_coordinator_id, status) =  split_signal(signal);
       set_worker_status(signal);

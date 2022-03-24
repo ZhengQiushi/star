@@ -392,6 +392,12 @@ public:
     }
     return is_cross_txn;
   }
+
+  bool check_cross_node_txn(bool is_dynamic) override{
+    /**TODO**/
+    return false;
+  }
+
 private:
   void get_item_stock_keys_query(std::vector<item::key>& item_keys, std::vector<stock::key>& stock_keys){
     for (int i = 0; i < query.O_OL_CNT; i++) {
@@ -589,6 +595,10 @@ public:
     return record_keys;
   }
   bool check_cross_txn(bool& success) override{
+    /**TODO**/
+    return false;
+  }
+  bool check_cross_node_txn(bool is_dynamic) override{
     /**TODO**/
     return false;
   }

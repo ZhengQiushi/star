@@ -13,28 +13,155 @@
 #include "protocol/Silo/SiloHelper.h"
 #include "protocol/Silo/SiloTransaction.h"
 
+
+// #include "protocol/TwoPL/TwoPLHelper.h"
+// #include "protocol/TwoPL/TwoPLTransaction.h"
+
 namespace star {
 
+
 enum class LionMessage {
-  ASYNC_VALUE_REPLICATION_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
-  SYNC_VALUE_REPLICATION_REQUEST,
-  SYNC_VALUE_REPLICATION_RESPONSE,
-  OPERATION_REPLICATION_REQUEST,
+  SEARCH_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
+  SEARCH_RESPONSE,
+  LOCK_REQUEST,
+  LOCK_RESPONSE,
+  READ_VALIDATION_REQUEST,
+  READ_VALIDATION_RESPONSE,
+  ABORT_REQUEST,
+  WRITE_REQUEST,
+  WRITE_RESPONSE,
+  REPLICATION_REQUEST,
+  REPLICATION_RESPONSE,
+  RELEASE_LOCK_REQUEST,
   NFIELDS
 };
 
 class LionMessageFactory {
 
 public:
-  static std::size_t new_async_value_replication_message(Message &message,
-                                                         ITable &table,
-                                                         const void *key,
-                                                         const void *value,
-                                                         uint64_t commit_tid) {
+  static std::size_t new_search_message(Message &message, ITable &table,
+                                        const void *key, uint32_t key_offset) {
 
     /*
-     * The structure of an async value replication request: (primary key, field
-     * value, commit_tid)
+     * The structure of a search request: (primary key, read key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::SEARCH_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_lock_message(Message &message, ITable &table,
+                                      const void *key, uint32_t key_offset) {
+
+    /*
+     * The structure of a lock request: (primary key, write key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::LOCK_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_read_validation_message(Message &message, ITable &table, 
+                                                 const void *key,
+                                                 uint32_t key_offset,
+                                                 uint64_t tid) {
+
+    /*
+     * The structure of a read validation request: (primary key, read key
+     * offset, tid)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size = MessagePiece::get_header_size() + key_size +
+                        sizeof(key_offset) + sizeof(tid);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::READ_VALIDATION_REQUEST),
+        message_size, table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset << tid;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_abort_message(Message &message, ITable &table,
+                                       const void *key) {
+
+    /*
+     * The structure of an abort request: (primary key)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size = MessagePiece::get_header_size() + key_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::ABORT_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_write_message(Message &message, ITable &table,
+                                       const void *key, const void *value) {
+
+    /*
+     * The structure of a write request: (primary key, field value)
+     */
+
+    auto key_size = table.key_size();
+    auto field_size = table.field_size();
+
+    auto message_size = MessagePiece::get_header_size() + key_size + field_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::WRITE_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    table.serialize_value(encoder, value);
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_replication_message(Message &message, ITable &table,
+                                             const void *key, const void *value,
+                                             uint64_t commit_tid) {
+
+    /*
+     * The structure of a replication request: (primary key, field value,
+     * commit_tid)
      */
 
     auto key_size = table.key_size();
@@ -43,8 +170,8 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::ASYNC_VALUE_REPLICATION_REQUEST),
-        message_size, table.tableID(), table.partitionID());
+        static_cast<uint32_t>(SiloMessage::REPLICATION_REQUEST), message_size,
+        table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
     encoder << message_piece_header;
@@ -55,158 +182,380 @@ public:
     return message_size;
   }
 
-  static std::size_t new_sync_value_replication_message(Message &message,
-                                                        ITable &table,
-                                                        const void *key,
-                                                        const void *value,
-                                                        uint64_t commit_tid) {
+  static std::size_t new_release_lock_message(Message &message, ITable &table,
+                                              const void *key,
+                                              uint64_t commit_tid) {
     /*
-     * The structure of a sync value replication request: (primary key, field
-     * value, commit_tid)
+     * The structure of a replication request: (primary key, commit tid)
      */
 
     auto key_size = table.key_size();
-    auto field_size = table.field_size();
 
-    auto message_size = MessagePiece::get_header_size() + key_size +
-                        field_size + sizeof(commit_tid);
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_REQUEST),
-        message_size, table.tableID(), table.partitionID());
+        static_cast<uint32_t>(SiloMessage::RELEASE_LOCK_REQUEST), message_size,
+        table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    table.serialize_value(encoder, value);
     encoder << commit_tid;
-    message.flush();
-    return message_size;
-  }
-
-  template<typename T = u_int64_t>
-  static std::size_t new_async_txn_of_record_message(Message &message,
-                                                     const std::vector<T> record_key_in_this_txn){
-    /**
-     * @brief 记录txn的record
-     * @note key_size increased from 32bits to 64bits
-    */
-    auto key_size = sizeof(u_int64_t);
-    auto normal_size = sizeof(int32_t);
-
-    int32_t total_key_len = (int32_t)record_key_in_this_txn.size();
-
-    auto message_size = MessagePiece::get_header_size() +
-                        normal_size +             // total length
-                        key_size * total_key_len;
-
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(ControlMessage::COUNT),
-        message_size, 0, 0);
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-
-    encoder.write_n_bytes((void*)&total_key_len, normal_size);
-    for (size_t i = 0 ; i < record_key_in_this_txn.size(); i ++ ){
-      auto key = record_key_in_this_txn[i];
-      encoder.write_n_bytes((void*)&key, key_size);
-    }
-    message.flush();
-    // LOG(INFO) << "message.get_message_count(): " << message.get_message_count() << "\n";
-    return message_size;
-  }
-  static std::size_t
-  new_operation_replication_message(Message &message,
-                                    const Operation &operation) {
-
-    /*
-     * The structure of an operation replication message: (tid, data)
-     */
-
-    auto message_size = MessagePiece::get_header_size() + sizeof(uint64_t) +
-                        operation.data.size();
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::OPERATION_REPLICATION_REQUEST),
-        message_size, 0, 0);
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder << operation.tid;
-    encoder.write_n_bytes(operation.data.c_str(), operation.data.size());
     message.flush();
     return message_size;
   }
 };
 
 template <class Database> class LionMessageHandler {
-
   using Transaction = SiloTransaction;
 
 public:
-  static void async_value_replication_request_handler(MessagePiece inputPiece,
-                                                      Message &responseMessage,
-                                                      Database &db,
-                                                      Transaction *txn) {
-
+  static void search_request_handler(MessagePiece inputPiece,
+                                     Message &responseMessage, Database &db,
+                                     Transaction *txn) {
+    /**
+     * @brief directly move the data to the request node!
+     * 
+     */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ASYNC_VALUE_REPLICATION_REQUEST));
+           static_cast<uint32_t>(SiloMessage::SEARCH_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);    
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read request: (primary key, read key offset)
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    auto row = table.search(key);
+
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset;
+
+    DCHECK(dec.size() == 0);
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + value_size +
+                        sizeof(uint64_t) + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::SEARCH_RESPONSE), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+    void *dest =
+        &responseMessage.data[0] + responseMessage.data.size() - value_size;
+    // read to message buffer
+    auto tid = SiloHelper::read(row, dest, value_size);
+
+    encoder << tid << key_offset;
+
+    // wait until other txn has done!
+    // bool is_blocked = true;
+    
+    // do {
+    //   std::atomic<uint64_t> &tid_ = table.search_metadata(key);
+    //   if(!SiloHelper::is_locked(tid_.load())){
+    //     is_blocked = false;
+    //     bool success = true;
+    //     uint64_t latest_tid = SiloHelper::lock(tid_, success);
+    //   }
+    // } while(is_blocked == true);
+    
+    // table.delete_(key);
+
+    responseMessage.flush();
+  }
+
+  static void search_response_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db,
+                                      Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::SEARCH_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-    auto field_size = table.field_size();
+    auto value_size = table.value_size();
 
     /*
-     * The structure of an async value replication request:
-     *      (primary key, field value, commit_tid).
-     * The structure of an async value replication response: null
+     * The structure of a read response: (value, tid, read key offset)
      */
 
+    uint64_t tid;
+    uint32_t key_offset;
+
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  key_size + field_size +
-                                                  sizeof(uint64_t));
+                                                  value_size + sizeof(tid) +
+                                                  sizeof(key_offset));
+
+    StringPiece stringPiece = inputPiece.toStringPiece();
+    stringPiece.remove_prefix(value_size);
+    Decoder dec(stringPiece);
+    dec >> tid >> key_offset;
+
+    SiloRWKey &readKey = txn->readSet[key_offset];
+    dec = Decoder(inputPiece.toStringPiece());
+    dec.read_n_bytes(readKey.get_value(), value_size);
+    readKey.set_tid(tid);
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+
+    // insert
+    // table.insert(readKey.get_key(), readKey.get_value());
+  }
+
+  static void lock_request_handler(MessagePiece inputPiece,
+                                   Message &responseMessage, Database &db,
+                                   Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::LOCK_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a lock request: (primary key, write key offset)
+     * The structure of a lock response: (success?, tid, write key offset)
+     */
 
     auto stringPiece = inputPiece.toStringPiece();
 
-    const void *key = stringPiece.data();
-    stringPiece.remove_prefix(key_size);
-    auto valueStringPiece = stringPiece;
-    stringPiece.remove_prefix(field_size);
+    uint32_t key_offset;
 
-    uint64_t commit_tid;
-    Decoder dec(stringPiece);
-    dec >> commit_tid;
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+    const void *key = stringPiece.data();
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+
+    bool success;
+    uint64_t latest_tid = SiloHelper::lock(tid, success);
+
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset;
 
     DCHECK(dec.size() == 0);
 
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + sizeof(bool) +
+                        sizeof(uint64_t) + sizeof(uint32_t);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::LOCK_RESPONSE), message_size,
+        table_id, partition_id);
 
-    bool success = false;
-    uint64_t last_tid = SiloHelper::lock(tid, success);
-    while(success != true){
-      std::this_thread::yield();
-      // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
-      last_tid = SiloHelper::lock(tid, success);
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    encoder << success << latest_tid << key_offset;
+    responseMessage.flush();
+  }
+
+  static void lock_response_handler(MessagePiece inputPiece,
+                                    Message &responseMessage, Database &db,
+                                    Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::LOCK_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a lock response: (success?, tid, write key offset)
+     */
+
+    bool success;
+    uint64_t latest_tid;
+    uint32_t key_offset;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + sizeof(success) +
+               sizeof(latest_tid) + sizeof(key_offset));
+
+    StringPiece stringPiece = inputPiece.toStringPiece();
+    Decoder dec(stringPiece);
+    dec >> success >> latest_tid >> key_offset;
+
+    DCHECK(dec.size() == 0);
+
+    SiloRWKey &writeKey = txn->writeSet[key_offset];
+
+    bool tid_changed = false;
+
+    if (success) {
+
+      SiloRWKey *readKey = txn->get_read_key(writeKey.get_key());
+
+      DCHECK(readKey != nullptr);
+
+      uint64_t tid_on_read = readKey->get_tid();
+
+      if (latest_tid != tid_on_read) {
+        tid_changed = true;
+      }
+
+      writeKey.set_tid(latest_tid);
+      writeKey.set_write_lock_bit();
     }
-    const auto &k = *static_cast<const int32_t *>(key);
-    // LOG(WARNING) << "KEY: " << k << " TID: " << tid;
-    if (commit_tid > last_tid) {
-      table.deserialize_value(key, valueStringPiece); 
-      SiloHelper::unlock(tid, commit_tid);
-    } else {
-      // if(SiloHelper::is_locked(tid)){
-      SiloHelper::unlock(tid);
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+
+    if (!success || tid_changed) {
+      txn->abort_lock = true;
     }
   }
 
-  static void sync_value_replication_request_handler(MessagePiece inputPiece,
-                                                     Message &responseMessage,
-                                                     Database &db,
-                                                     Transaction *txn) {
+  static void read_validation_request_handler(MessagePiece inputPiece,
+                                              Message &responseMessage,
+                                              Database &db, Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_REQUEST));
+           static_cast<uint32_t>(SiloMessage::READ_VALIDATION_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a read validation request: (primary key, read key
+     * offset, tid) The structure of a read validation response: (success?, read
+     * key offset)
+     */
+
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+                                                  key_size + sizeof(uint32_t) +
+                                                  sizeof(uint64_t));
+
+    auto stringPiece = inputPiece.toStringPiece();
+    const void *key = stringPiece.data();
+    auto latest_tid = table.search_metadata(key).load();
+    stringPiece.remove_prefix(key_size);
+
+    uint32_t key_offset;
+    uint64_t tid;
+    Decoder dec(stringPiece);
+    dec >> key_offset >> tid;
+
+    bool success = true;
+
+    if (SiloHelper::remove_lock_bit(latest_tid) != tid) {
+      success = false;
+    }
+
+    if (SiloHelper::is_locked(latest_tid)) { // must be locked by others
+      success = false;
+    }
+
+    // prepare response message header
+    auto message_size =
+        MessagePiece::get_header_size() + sizeof(bool) + sizeof(uint32_t);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::READ_VALIDATION_RESPONSE),
+        message_size, table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    encoder << success << key_offset;
+
+    responseMessage.flush();
+  }
+
+  static void read_validation_response_handler(MessagePiece inputPiece,
+                                               Message &responseMessage,
+                                               Database &db,
+                                               Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::READ_VALIDATION_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a read validation response: (success?, read key offset)
+     */
+
+    bool success;
+    uint32_t key_offset;
+
+    Decoder dec(inputPiece.toStringPiece());
+
+    dec >> success >> key_offset;
+
+    SiloRWKey &readKey = txn->readSet[key_offset];
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+
+    if (!success) {
+      txn->abort_read_validation = true;
+    }
+  }
+
+  static void abort_request_handler(MessagePiece inputPiece,
+                                    Message &responseMessage, Database &db,
+                                    Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::ABORT_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of an abort request: (primary key)
+     * The structure of an abort response: null
+     */
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size);
+
+    auto stringPiece = inputPiece.toStringPiece();
+    const void *key = stringPiece.data();
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+
+    // unlock the key
+    SiloHelper::unlock(tid);
+  }
+
+  static void write_request_handler(MessagePiece inputPiece,
+                                    Message &responseMessage, Database &db,
+                                    Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::WRITE_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -216,104 +565,164 @@ public:
     auto field_size = table.field_size();
 
     /*
-     * The structure of a sync value replication request:
-     *      (primary key, field value, commit_tid).
-     * The structure of a sync value replication response: ()
+     * The structure of a write request: (primary key, field value)
+     * The structure of a write response: ()
      */
 
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  key_size + field_size +
-                                                  sizeof(uint64_t));
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + field_size);
 
     auto stringPiece = inputPiece.toStringPiece();
 
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
-    auto valueStringPiece = stringPiece;
-    stringPiece.remove_prefix(field_size);
 
-    uint64_t commit_tid;
-    Decoder dec(stringPiece);
-    dec >> commit_tid;
-
-    DCHECK(dec.size() == 0);
-
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
-
-    bool success = false;
-    uint64_t last_tid = SiloHelper::lock(tid, success);
-    while(success != true){
-      std::this_thread::yield();
-      // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
-      last_tid = SiloHelper::lock(tid, success);
-    }
-
-    // DCHECK(last_tid < commit_tid);
-    if(last_tid < commit_tid){
-      table.deserialize_value(key, valueStringPiece);
-    }
-    SiloHelper::unlock(tid, commit_tid);
+    table.deserialize_value(key, stringPiece);
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE),
-        message_size, table_id, partition_id);
+        static_cast<uint32_t>(SiloMessage::WRITE_RESPONSE), message_size,
+        table_id, partition_id);
 
-    static int recv_ = 0;
-    // LOG(INFO) << "recv : " << ++recv_;
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;
     responseMessage.flush();
   }
 
-  static void sync_value_replication_response_handler(MessagePiece inputPiece,
-                                                      Message &responseMessage,
-                                                      Database &db,
-                                                      Transaction *txn) {
-    return ;
-    // DCHECK(false);
-    // never come in
+  static void write_response_handler(MessagePiece inputPiece,
+                                     Message &responseMessage, Database &db,
+                                     Transaction *txn) {
+
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE));
+           static_cast<uint32_t>(SiloMessage::WRITE_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+
+    /*
+     * The structure of a write response: ()
+     */
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+  }
+
+  static void replication_request_handler(MessagePiece inputPiece,
+                                          Message &responseMessage,
+                                          Database &db, Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::REPLICATION_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
     auto field_size = table.field_size();
 
     /*
-     * The structure of a sync value replication response: ()
+     * The structure of a replication request: (primary key, field value,
+     * commit_tid).
+     * The structure of a replication response: null
      */
 
-    // txn->pendingResponses--;
-    // txn->network_size += inputPiece.get_message_length();
-  }
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+                                                  key_size + field_size +
+                                                  sizeof(uint64_t));
 
-  static void operation_replication_request_handler(MessagePiece inputPiece,
-                                                    Message &responseMessage,
-                                                    Database &db,
-                                                    Transaction *txn) {
+    auto stringPiece = inputPiece.toStringPiece();
 
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::OPERATION_REPLICATION_REQUEST));
+    const void *key = stringPiece.data();
+    stringPiece.remove_prefix(key_size);
+    auto valueStringPiece = stringPiece;
+    stringPiece.remove_prefix(field_size);
 
-    auto message_size = inputPiece.get_message_length();
-    Decoder dec(inputPiece.toStringPiece());
-    Operation operation;
-    dec >> operation.tid;
-
-    auto data_size =
-        message_size - MessagePiece::get_header_size() - sizeof(uint64_t);
-    DCHECK(data_size > 0);
-
-    operation.data.resize(data_size);
-    dec.read_n_bytes(&operation.data[0], data_size);
+    uint64_t commit_tid;
+    Decoder dec(stringPiece);
+    dec >> commit_tid;
 
     DCHECK(dec.size() == 0);
-    db.apply_operation(operation);
+
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+
+    uint64_t last_tid = SiloHelper::lock(tid);
+    DCHECK(last_tid < commit_tid);
+    table.deserialize_value(key, valueStringPiece);
+    SiloHelper::unlock(tid, commit_tid);
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloMessage::REPLICATION_RESPONSE), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    responseMessage.flush();
+  }
+
+  static void replication_response_handler(MessagePiece inputPiece,
+                                           Message &responseMessage,
+                                           Database &db, Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::REPLICATION_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a replication response: ()
+     */
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+  }
+
+  static void release_lock_request_handler(MessagePiece inputPiece,
+                                           Message &responseMessage,
+                                           Database &db, Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloMessage::RELEASE_LOCK_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a release lock request: (primary key, commit tid)
+     * The structure of a write response: null
+     */
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(uint64_t));
+
+    auto stringPiece = inputPiece.toStringPiece();
+
+    const void *key = stringPiece.data();
+    stringPiece.remove_prefix(key_size);
+
+    uint64_t commit_tid;
+    Decoder dec(stringPiece);
+    dec >> commit_tid;
+    DCHECK(dec.size() == 0);
+
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    SiloHelper::unlock(tid, commit_tid);
   }
 
   static std::vector<
@@ -323,11 +732,20 @@ public:
         std::function<void(MessagePiece, Message &, Database &, Transaction *)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
-    v.push_back(LionMessageHandler::async_value_replication_request_handler);
-    v.push_back(LionMessageHandler::sync_value_replication_request_handler);
-    v.push_back(LionMessageHandler::sync_value_replication_response_handler);
-    v.push_back(LionMessageHandler::operation_replication_request_handler);
+    v.push_back(search_request_handler);
+    v.push_back(search_response_handler);
+    v.push_back(lock_request_handler);
+    v.push_back(lock_response_handler);
+    v.push_back(read_validation_request_handler);
+    v.push_back(read_validation_response_handler);
+    v.push_back(abort_request_handler);
+    v.push_back(write_request_handler);
+    v.push_back(write_response_handler);
+    v.push_back(replication_request_handler);
+    v.push_back(replication_response_handler);
+    v.push_back(release_lock_request_handler);
     return v;
   }
 };
+
 } // namespace star

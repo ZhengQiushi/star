@@ -33,11 +33,25 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id, std::size_t partition_id) {
+  ITable *find_router_table(std::size_t table_id, std::size_t coordinator_id) {
     DCHECK(table_id < tbl_vecs.size());
-    DCHECK(partition_id < tbl_vecs[table_id].size());
-    return tbl_vecs_router[table_id][partition_id];
+    DCHECK(coordinator_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id][coordinator_id];
   }
+
+  std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
+    std::size_t ret = -1;
+    for(int i = 0 ; i < coordinator_num; i ++ ){
+      ITable* tab = find_router_table(table_id, i);
+      if(tab->contains(key)){
+        ret = i;
+        break;
+      }
+    }
+    DCHECK(ret != -1);
+    return ret;
+  }
+
 
   template <class InitFunc>
   void initTables(const std::string &name, InitFunc initFunc,
@@ -84,14 +98,18 @@ public:
     auto partitioner = PartitionerFactory::create_partitioner(
         context.partitioner, coordinator_id, context.coordinator_num);
 
+    auto ycsbTableID = ycsb::tableID;
     for (auto partitionID = 0u; partitionID < partitionNum; partitionID++) {
-      auto ycsbTableID = ycsb::tableID;
       tbl_ycsb_vec.push_back(
           std::make_unique<Table<9973, ycsb::key, ycsb::value>>(ycsbTableID,
                                                                 partitionID));
 
+    }
+
+    // quick look-up for certain-key on which node
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
       tbl_ycsb_vec_router.push_back(
-          std::make_unique<Table<9973, ycsb::key, RTable>>(ycsbTableID, partitionID));
+          std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
     }
 
     // there is 1 table in ycsb
@@ -129,12 +147,55 @@ public:
     for( ; i < context.partition_num; i ++ ){
       ITable *table = tbl_ycsb_vec[i].get();
       bool is_exist = table->contains((void*)& key);
+      
       if(is_exist)
         break;
     }
     // DCHECK(i != context.partition_num);
     return i;
   }
+
+  template<typename KeyType>
+  std::size_t getMasterCoordinatorID(const star::Context &context, 
+                                     std::size_t partition_id,
+                                     std::size_t table_id, 
+                                     KeyType key, 
+                                     bool is_dynamic_phase) const{
+    /**
+     * @brief 返回这个key所在的partition
+     * @note key 如果不在local 副本，则返回context.partition_num
+     * 
+     */
+
+    ITable *table = tbl_ycsb_vec[partition_id].get();
+    bool is_exist = table->contains((void*)& key);
+    if(is_exist){
+      return context.coordinator_num;
+    }
+
+    size_t i = 0;
+    // for( ; i < context.coordinator_num; i ++ ){
+      
+
+    //   // 
+    //   if(is_exist){
+    //     ITable *r_table = tbl_ycsb_vec_router[i].get();
+    //     RTable *router = r_table->search_value((void*)& key);
+    //     bool is_master = false;
+    //     if(is_dynamic_phase){
+    //       is_master = std::get<1>(router->dynamic_dst) == 1; 
+    //     } else {
+    //       is_master = std::get<1>(router->static_dst) == 1;
+    //     }
+    //     break;
+    //   }
+    // }
+    // DCHECK(i != context.partition_num);
+    return i;
+  }
+
+
+
   template<typename KeyType>
   std::set<int32_t> getPartitionIDs(const star::Context &context, KeyType key) const{
     // 返回这个key所在的partition
@@ -154,19 +215,19 @@ private:
 
     Random random;
     ITable *table = tbl_ycsb_vec[partitionID].get();
-    ITable *table_router = tbl_ycsb_vec_router[partitionID].get();
+    
 
     std::size_t keysPerPartition =
         context.keysPerPartition; // 5M keys per partition
     std::size_t partitionNum = context.partition_num;
     std::size_t totalKeys = keysPerPartition * partitionNum;
 
-    auto getKeyDynamicDst = [&](const Context &context, std::size_t partitionID){
-      return partitionID % context.coordinator_num;
-    };
-    auto getKeyStaticDst = [&](const Context &context, std::size_t partitionID){
-      return (partitionID + 1) % context.coordinator_num;
-    };
+    // auto getKeyDynamicDst = [&](const Context &context, std::size_t partitionID){
+    //   return partitionID % context.coordinator_num;
+    // };
+    // auto getKeyStaticDst = [&](const Context &context, std::size_t partitionID){
+    //   return (partitionID + 1) % context.coordinator_num;
+    // };
 
     if (context.strategy == PartitionStrategy::RANGE) {
 
@@ -176,31 +237,38 @@ private:
            i < (partitionID + 1) * keysPerPartition; i++) {
 
         DCHECK(context.getPartitionID(i) == partitionID);
+        // int dynamic_dst = getKeyDynamicDst(context, partitionID);
+        // int static_dst = getKeyStaticDst(context, partitionID);
+
+        int router_coordinator = partitionID % context.coordinator_num;
 
         ycsb::key key(i);
-        ycsb::value value;
-        value.Y_F01.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F02.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F03.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F04.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F05.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F06.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F07.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F08.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F09.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
 
-        table->insert(&key, &value);
+        if(context.coordinator_id == router_coordinator || context.protocol != "Lion"){ // || 
+           // context.coordinator_id == static_dst){
+            ycsb::value value;
+            value.Y_F01.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F02.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F03.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F04.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F05.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F06.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F07.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F08.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F09.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
 
+            table->insert(&key, &value);
+            
+        }
+        ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
+        table_router->insert(&key, &router_coordinator);
         // insert router
-        RTable cur;
-        cur.dynamic_dst = std::make_pair(getKeyDynamicDst(context, partitionID),
-                                         1);
+        // RTable cur;
+        // cur.dynamic_dst = std::make_pair(dynamic_dst, 1);
+        // cur.static_dst = std::make_pair(static_dst, 0);
 
-        cur.static_dst = std::make_pair(getKeyStaticDst(context, partitionID),
-                                         0);
-
-        table_router->insert(&key, &cur);
+        
 
       }
 
@@ -211,31 +279,35 @@ private:
       for (auto i = partitionID; i < totalKeys; i += partitionNum) {
 
         DCHECK(context.getPartitionID(i) == partitionID);
+        // int dynamic_dst = getKeyDynamicDst(context, partitionID);
+        // int static_dst = getKeyStaticDst(context, partitionID);
+        int router_coordinator = partitionID % context.coordinator_num;
 
         ycsb::key key(i);
-        ycsb::value value;
-        value.Y_F01.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F02.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F03.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F04.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F05.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F06.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F07.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F08.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F09.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-        value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
 
-        table->insert(&key, &value);
+        if(context.coordinator_id == router_coordinator || context.protocol != "Lion"){
+            ycsb::value value;
+            value.Y_F01.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F02.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F03.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F04.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F05.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F06.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F07.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F08.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F09.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+            value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+
+            table->insert(&key, &value);
+            
+        }
 
         // insert router
-        RTable cur;
-        cur.dynamic_dst = std::make_pair(getKeyDynamicDst(context, partitionID),
-                                         1);
-
-        cur.static_dst = std::make_pair(getKeyStaticDst(context, partitionID),
-                                         0);
-
-        table_router->insert(&key, &cur);
+        // RTable cur;
+        // cur.dynamic_dst = std::make_pair(dynamic_dst, 1);
+        // cur.static_dst = std::make_pair(static_dst, 0);
+        ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
+        table_router->insert(&key, &router_coordinator);        
       }
     }
   }
@@ -245,9 +317,9 @@ private:
   std::vector<std::vector<ITable *>> tbl_vecs_router;
   
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec;
-  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router; // router for each tuple 
-                                                            // <dynamic_replica_coordinator_id, 
-                                                            //   static_replica_coordinator_id  >
+  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router; // table_id, coordinator_id
+                                                            // key
+                                                            // 
 };
 } // namespace ycsb
 } // namespace star

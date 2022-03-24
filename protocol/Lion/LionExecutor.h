@@ -43,9 +43,9 @@ public:
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
         l_partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
-            coordinator_id, context.coordinator_num, db)),
+            context.coordinator_id, context.coordinator_num, db)),
         s_partitioner(std::make_unique<LionStaticPartitioner<Workload> >(
-            coordinator_id, context.coordinator_num, db)),    
+            context.coordinator_id, context.coordinator_num, db)),    
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -53,6 +53,9 @@ public:
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
     for (auto i = 0u; i < context.coordinator_num; i++) {
+      messages.emplace_back(std::make_unique<Message>());
+      init_message(messages[i].get(), i);
+
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
 
@@ -145,11 +148,11 @@ public:
       prepare_transactions_to_run(c_workload, s_workload, storage);
 
       // c_phase
-      LOG(WARNING) << "worker " << id << " c_phase";
+      LOG(WARNING) << "worker " << id << " c_phase " << lion_king_coordinator_id;
       if (coordinator_id == lion_king_coordinator_id) {
         LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
-        // run_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        run_transaction(ExecutorStatus::C_PHASE, async_message_num);
         
         // replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
@@ -195,7 +198,7 @@ public:
       
       LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
-      replication_fence(ExecutorStatus::S_PHASE);
+      // replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
 
        LOG(WARNING) << "worker " << id << " finish run_transaction";
@@ -309,20 +312,22 @@ public:
         }
         // 甄别一下？
         bool is_success = true;
-
-        bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
-        if(is_success){
-          if(is_cross_txn && status == ExecutorStatus::S_PHASE){
-            LOG(INFO) << "what?";
-            bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
-          }
-        }
+        // first figure out which can be execute on S_Phase(static_replica)
+        bool is_cross_txn = cur_transaction->check_cross_node_txn(false);
+        // bool is_cross_txn = cur_transaction->check_cross_txn_with_remastering(is_success, status == ExecutorStatus::C_PHASE);
+        // if(is_success){
+        //   if(is_cross_txn && status == ExecutorStatus::S_PHASE){
+        //     LOG(INFO) << "what?";
+        //     // bool is_cross_txn = cur_transaction->check_cross_txn_with_remastering(is_success, 
+        //     //                                                                       );
+        //   }
+        // }
         if(is_success){
           if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
-            if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
+            // if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
               // TODO: 暂时不考虑部分副本处理跨分区事务...
               c_transactions_queue.push(std::move(cur_transaction));
-            }
+            // }
           } else {
             s_transactions_queue.push(std::move(cur_transaction));
           }
@@ -447,15 +452,18 @@ public:
           setupHandlers(*transaction, protocol);
         }
         // LOG(INFO) << "LionExecutor: "<< id << " " << "transaction->execute" << i;
-
+        if(id == 0 && status == ExecutorStatus::C_PHASE){
+          // LOG(INFO) << "HAHAH";
+          // std::cout << "test" << std::endl;
+        }
         auto result = transaction->execute(id);
 
         if (result == TransactionResult::READY_TO_COMMIT) {
           // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
 
           bool commit =
-              protocol.commit(*transaction, sync_messages, async_messages, record_messages, 
-                              async_message_num);
+              protocol.commit(*transaction, messages, async_message_num); // sync_messages, async_messages, record_messages, 
+                              // );
           n_network_size.fetch_add(transaction->network_size);
           if (commit) {
             n_commit.fetch_add(1);
@@ -479,12 +487,14 @@ public:
       cur_transactions_queue->pop();
 
       if (i % phase_context.batch_flush == 0) {
+        flush_messages(messages); 
         flush_async_messages(); 
         flush_sync_messages();
         flush_record_messages();
         
       }
     }
+    flush_messages(messages); 
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
@@ -514,15 +524,16 @@ public:
       for (auto it = message->begin(); it != message->end(); it++) {
         auto messagePiece = *it;
         auto message_type = messagePiece.get_message_type();
-
-        if(message_type == static_cast<int>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE)){
-          auto message_length = messagePiece.get_message_length();
-          static int total_async = 0;
+        //!TODO replica 
+        
+        // if(message_type == static_cast<int>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE)){
+        //   auto message_length = messagePiece.get_message_length();
+        //   static int total_async = 0;
           
-          // LOG(INFO) << "recv : " << ++total_async;
-          // async_message_num.fetch_sub(1);
-          async_message_respond_num.fetch_add(1);
-        }
+        //   // LOG(INFO) << "recv : " << ++total_async;
+        //   // async_message_num.fetch_sub(1);
+        //   async_message_respond_num.fetch_add(1);
+        // }
       }
 
     in_queue.push(message);
@@ -565,6 +576,7 @@ private:
         auto type = messagePiece.get_message_type();
         DCHECK(type < messageHandlers.size());
 
+        // LOG(INFO) << "GET MESSAGE TYPE: " << type;
         messageHandlers[type](messagePiece,
                               *sync_messages[message->get_source_node_id()], db,
                               transaction.get());
@@ -582,14 +594,88 @@ private:
 
   void setupHandlers(TransactionType &txn, ProtocolType &protocol) {
     txn.readRequestHandler =
-        [&protocol](std::size_t table_id, std::size_t partition_id,
-                    uint32_t key_offset, const void *key, void *value,
-                    bool local_index_read) -> uint64_t {
-      return protocol.search(table_id, partition_id, key, value);
+        [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
+                     uint32_t key_offset, const void *key, void *value,
+                     bool local_index_read) -> uint64_t {
+      bool local_read = false;
+
+      if (txn.partitioner.has_master_partition(table_id, partition_id, key) // ||
+          // (this->partitioner->is_partition_replicated_on(
+          //      partition_id, this->coordinator_id) &&
+          //  this->context.read_on_replica)
+           ) {
+        local_read = true;
+      }
+
+      if (local_index_read || local_read) {
+        return protocol.search(table_id, partition_id, key, value);
+      } else {
+        ITable *table = this->db.find_table(table_id, partition_id);
+        auto coordinatorID =
+            txn.partitioner.master_coordinator(table_id, partition_id, key);
+        txn.network_size += MessageFactoryType::new_search_message(
+            *(this->messages[coordinatorID]), *table, key, key_offset);
+        txn.pendingResponses++;
+        txn.distributed_transaction = true;
+        return 0;
+      }
     };
 
+
+    // txn.lock_request_handler =
+    //     [this, &protocol, &txn](std::size_t table_id, std::size_t partition_id,
+    //                  uint32_t key_offset, const void *key, void *value,
+    //                  bool local_index_read, bool write_lock, bool &success,
+    //                  bool &remote) -> uint64_t {
+    //   if (local_index_read) {
+    //     success = true;
+    //     remote = false;
+    //     return protocol.search(table_id, partition_id, key, value);
+    //   }
+
+    //   ITable *table = this->db.find_table(table_id, partition_id);
+
+    //   if (txn.partitioner.has_master_partition(table_id, partition_id, key)) {
+
+    //     remote = false;
+
+    //     std::atomic<uint64_t> &tid = table->search_metadata(key);
+
+    //     if (write_lock) {
+    //       TwoPLHelper::write_lock(tid, success);
+    //     } else {
+    //       TwoPLHelper::read_lock(tid, success);
+    //     }
+
+    //     if (success) {
+    //       return protocol.search(table_id, partition_id, key, value);
+    //     } else {
+    //       return 0;
+    //     }
+
+    //   } else {
+
+    //     remote = true;
+
+    //     auto coordinatorID =
+    //         txn.partitioner.master_coordinator(table_id, partition_id, key);
+
+    //     if (write_lock) {
+    //       txn.network_size += MessageFactoryType::new_write_lock_message(
+    //           *(this->messages[coordinatorID]), *table, key, key_offset);
+    //     } else {
+    //       txn.network_size += MessageFactoryType::new_read_lock_message(
+    //           *(this->messages[coordinatorID]), *table, key, key_offset);
+    //     }
+    //     txn.distributed_transaction = true;
+    //     return 0;
+    //   }
+    // };
+
+
+
     txn.remote_request_handler = [this]() { return this->process_request(); };
-    txn.message_flusher = [this]() { this->flush_sync_messages(); };
+    txn.message_flusher = [this]() { this->flush_messages(messages); };
   }
 
   void flush_messages(std::vector<std::unique_ptr<Message>> &messages) {
@@ -637,6 +723,8 @@ private:
   std::unique_ptr<BufferedFileWriter> logger;
   Percentile<int64_t> percentile;
   std::unique_ptr<TransactionType> transaction;
+
+  std::vector<std::unique_ptr<Message>> messages;
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;

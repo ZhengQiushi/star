@@ -12,10 +12,11 @@
 
 namespace star {
 
-struct RTable {
-  std::tuple<int, int> dynamic_dst;
-  std::tuple<int, int> static_dst;
-};
+// struct RTable {
+//   // std::tuple<int, int> dynamic_dst; // <coordinator_id, is_master>
+//   // std::tuple<int, int> static_dst;
+//   size_t dynamic_coordinator_id;
+// };
 
 class ITable {
 public:

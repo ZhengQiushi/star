@@ -35,6 +35,7 @@ public:
 
   virtual std::size_t secondary_coordinator(std::size_t partition_id) const = 0;
 
+  
   virtual bool is_partition_replicated_on(std::size_t partition_id,
                                           std::size_t coordinator_id) const = 0;
 
@@ -48,7 +49,7 @@ public:
   
   virtual std::size_t master_coordinator(int table_id, int partition_id, const void* key) const = 0;
 
-  
+  // check if the replica of `key` is on Node `coordinator_id` or not
   virtual bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const = 0;
 
@@ -108,22 +109,22 @@ public:
 
   
   bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
-    DCHECK(false);
-    return false;
+    // DCHECK(false);
+    return master_coordinator(partition_id) == coordinator_id;// false;
   }
 
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
-    DCHECK(false);
-    return false;
+    // DCHECK(false);
+    return master_coordinator(partition_id); // false;
 
   }
 
   
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
-    DCHECK(false);
-    return false;
+    // DCHECK(false);
+    return is_partition_replicated_on(partition_id, coordinator_id); //false;
   }
 
   bool is_backup() const override { return false; }
@@ -330,13 +331,23 @@ public:
  *      - replicas will change as time goes by accordding to the locality.
  * Here is an example(inital state):
  * 
- *     | N0    |  N1   |  N2   |
- * P0  | +     |  -    |       |
- * P1  |       |  +    |  -    |
- * P2  | -     |       |  +    |
- * P3  | +     |  -    |       |
- * P4  |       |  +    |  -    |
- * P5  | -     |       |  +    |
+ *     | N0     |  N1    |  N2    |
+ * P0  | +-     |        |        |
+ * P1  |        |  +-    |        |
+ * P2  |        |        |  +-    |
+ * P3  | +-     |        |        |
+ * P4  |        |  +-    |        |
+ * P5  |        |        |  +-    |
+ * 
+ * ==> only the dynamic replica can be moved 
+ * 
+ *     | N0     |  N1    |  N2    |
+ * P0  | +-     |        |        |
+ * P1  | +      |   -    |        |
+ * P2  |        |        |  +-    |
+ * P3  |  -     |        |  +     |
+ * P4  |        |  +-    |        |
+ * P5  |        |        |  +-    | 
  * 
 */
 
@@ -364,7 +375,7 @@ public:
 
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
     // the static replica is master at initial state
-    return (partition_id + 1) % coordinator_num;
+    return (partition_id) % coordinator_num;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
@@ -421,27 +432,47 @@ public:
     return master_coordinator(table_id, partition_id, key) == coordinator_id;
   }
 
-  
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
-    auto table_router = db.find_router_table(table_id, partition_id);
-    RTable* ret = (RTable*)table_router->search_value(key);
-     
-    if(std::get<1>(ret->dynamic_dst) == 1){
-      //
-      return std::get<0>(ret->dynamic_dst);
-    } else {
-      return std::get<0>(ret->static_dst);
-    }
+    /**
+     * @brief dynamic mastership. master piece will be moved to other coordinators!
+     * 
+     */
+    // if(secondary_coordinator(partition_id) != coordinator_id){
+    //   // not static replica, always master!
+    //   return coordinator_id;
+    // } else {
+    // static replica, check if is re-mastered
+    
+    // auto table_router = db.find_router_table(table_id, partition_id);
+    // size_t* master_coordinator = (size_t*)table_router->search_value(key);
+    //  == coordinator_id;
+    return db.get_dynamic_coordinator_id(coordinator_num, table_id, key);// *master_coordinator;
+    // if(std::get<1>(ret->dynamic_dst) == 1){
+    //   //
+    //   return std::get<0>(ret->dynamic_dst);
+    // } else {
+    //   return std::get<0>(ret->static_dst);
+    // }
+    // }
   }
 
-  
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id < coordinator_num);
-    auto table_router = db.find_router_table(table_id, partition_id);
-    RTable* ret = (RTable*)table_router->search_value(key);
-    return std::get<0>(ret->dynamic_dst) == coordinator_id || 
-           std::get<0>(ret->static_dst) == coordinator_id ;
+      // static replica
+      return secondary_coordinator(partition_id) == coordinator_id ; // || 
+            //  master_coordinator(table_id, partition_id, key);
+    // } else {
+    //   // 
+    //   // auto table_router = db.find_router_table(table_id, partition_id);
+    //   // RTable* ret = (RTable*)table_router->search_value(key);
+    //   // return std::get<0>(ret->dynamic_dst) == coordinator_id || 
+    //   //       std::get<0>(ret->static_dst) == coordinator_id ;
+
+    //   auto table_router = db.find_router_table(table_id, partition_id);
+    //   size_t* master_coordinator = (size_t*)table_router->search_value(key);
+    //   return (*master_coordinator) == coordinator_id;
+    // }
   }
 
 
@@ -453,13 +484,13 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     // the static replica is master at initial state
     DCHECK(false);
-    return 0; // (partition_id + 1) % coordinator_num;
+    return (partition_id) % coordinator_num;
   }
 
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
     // the static replica is master at initial state
-    DCHECK(false);
-    return 0; // (partition_id) % coordinator_num;
+    // DCHECK(false);
+    return (partition_id) % coordinator_num;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
@@ -497,19 +528,31 @@ public:
 
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
     // the static replica is master at initial state
-    return (partition_id + 1) % coordinator_num;
+    return (partition_id) % coordinator_num;
   }
 
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
-    if(has_master_partition(table_id, partition_id, key) == true){
-      return true;
-    }
-    auto table_router = db.find_router_table(table_id, partition_id);
-    RTable* ret = (RTable*)table_router->search_value(key);
-    return std::get<0>(ret->dynamic_dst) == coordinator_id ; // || 
+    // check if has dynamic replica on coordinator
+    // size_t i = ;
+    
+    // first should on the same-node 
+  
+    // then should 
+
+    // DCHECK(coordinator_id < coordinator_num);
+    // if(has_master_partition(table_id, partition_id, key) == true){
+    //   return true;
+    // }
+    // auto table_router = db.find_router_table(table_id, partition_id);
+    // size_t* master_coordinator = (size_t*)table_router->search_value(key);
+    // return (*master_coordinator) == coordinator_id;
+
+    // auto table_router = db.find_router_table(table_id, partition_id);
+    // RTable* ret = (RTable*)table_router->search_value(key);
+    // return std::get<0>(ret->dynamic_dst) == coordinator_id ; // || 
            // std::get<0>(ret->static_dst) == coordinator_id ;
+    return db.get_dynamic_coordinator_id(coordinator_num, table_id, key) == coordinator_id;
   }
 
 

@@ -35,9 +35,7 @@ public:
       : base_type(coordinator_id, id, db, context, worker_status,
                   n_complete_workers, n_started_workers) {}
 
-  ~
-
-      SiloExecutor() = default;
+  ~SiloExecutor() = default;
 
   void setupHandlers(TransactionType &txn)
 

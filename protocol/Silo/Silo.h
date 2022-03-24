@@ -33,7 +33,10 @@ public:
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
                   const void *key, void *value) const {
-
+    /**
+     * @brief read value from the key in table[table_id] from partition[partition_id]
+     * 
+     */
     ITable *table = db.find_table(table_id, partition_id);
     auto value_bytes = table->value_size();
     auto row = table->search(key);
@@ -44,9 +47,7 @@ public:
              std::vector<std::unique_ptr<Message>> &messages) {
 
     auto &writeSet = txn.writeSet;
-
     // unlock locked records
-
     for (auto i = 0u; i < writeSet.size(); i++) {
       auto &writeKey = writeSet[i];
       // only unlock locked records
@@ -145,6 +146,7 @@ private:
 
     return txn.abort_lock;
   }
+
 
   bool validate_read_set(TransactionType &txn,
                          std::vector<std::unique_ptr<Message>> &messages) {

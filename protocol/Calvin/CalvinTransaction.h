@@ -52,6 +52,7 @@ public:
   virtual const std::vector<u_int64_t> get_query() = 0;
 
   virtual bool check_cross_txn(bool& success) = 0;
+  virtual bool check_cross_node_txn(bool is_dynamic) = 0;
 
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,

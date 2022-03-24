@@ -40,10 +40,10 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id, std::size_t partition_id) {
+  ITable *find_router_table(std::size_t table_id, std::size_t coordinator_id) {
     DCHECK(table_id < tbl_vecs.size());
-    DCHECK(partition_id < tbl_vecs[table_id].size());
-    return tbl_vecs_router[table_id][partition_id];
+    DCHECK(coordinator_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id][coordinator_id];
   }
 
   ITable *tbl_warehouse(std::size_t partition_id) {
@@ -281,6 +281,19 @@ public:
   {
     std::set<int32_t> res;
     return res;
+  }
+
+  std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
+    std::size_t ret = -1;
+    // for(int i = 0 ; i < coordinator_num; i ++ ){
+    //   ITable* tab = find_router_table(table_id, i);
+    //   if(tab->contains(key)){
+    //     ret = i;
+    //     break;
+    //   }
+    // } 
+    DCHECK(ret != -1);
+    return ret;
   }
 
   void apply_operation(const Operation &operation) {

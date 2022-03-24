@@ -66,6 +66,8 @@ public:
       init_message(record_messages[i].get(), i);
     }
 
+    partitioner = nullptr;
+
     messageHandlers = MessageHandlerType::get_message_handlers();
 
     if (context.log_path != "") {
@@ -148,6 +150,8 @@ public:
       prepare_transactions_to_run(c_workload, s_workload, storage);
 
       // c_phase
+      partitioner = l_partitioner.get();
+
       LOG(WARNING) << "worker " << id << " c_phase " << lion_king_coordinator_id;
       if (coordinator_id == lion_king_coordinator_id) {
         LOG(WARNING) << "worker " << id << " ready to run_transaction";
@@ -188,13 +192,14 @@ public:
       commit_transactions();
 
       // s_phase
+      partitioner = s_partitioner.get();
 
       n_started_workers.fetch_add(1);
        LOG(WARNING) << "worker " << id << " ready to run_transaction";
       if(id == 0){
         // LOG(INFO) << "debug";
       }
-      run_transaction(ExecutorStatus::S_PHASE, async_message_num);
+      // run_transaction(ExecutorStatus::S_PHASE, async_message_num);
       
       LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
@@ -394,11 +399,11 @@ public:
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
     std::size_t query_num = 0;
 
-    Partitioner *partitioner = nullptr;
+    
 
     ContextType phase_context; //  = c_context;
 
-    if(id == 0 && status == ExecutorStatus::S_PHASE){
+    if(id == 0 && status == ExecutorStatus::C_PHASE){
       LOG(INFO) << "hi, i'm thread 0";
     }
     if (status == ExecutorStatus::C_PHASE) {
@@ -578,8 +583,10 @@ private:
 
         // LOG(INFO) << "GET MESSAGE TYPE: " << type;
         messageHandlers[type](messagePiece,
-                              *sync_messages[message->get_source_node_id()], db,
+                              *sync_messages[message->get_source_node_id()], 
+                              db, context, partitioner,
                               transaction.get());
+
         if (logger) {
           logger->write(messagePiece.toStringPiece().data(),
                         messagePiece.get_message_length());
@@ -598,6 +605,19 @@ private:
                      uint32_t key_offset, const void *key, void *value,
                      bool local_index_read) -> uint64_t {
       bool local_read = false;
+      
+      // block when the tuple is remote-read by others
+      bool is_blocked = true;
+      do {
+        auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+        auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+        // wait until other txn has done!
+        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+        if(!SiloHelper::is_locked(tid_r.load())){
+          is_blocked = false;
+        }
+      } while(is_blocked == true);
+
 
       if (txn.partitioner.has_master_partition(table_id, partition_id, key) // ||
           // (this->partitioner->is_partition_replicated_on(
@@ -713,6 +733,7 @@ private:
   const ContextType &context;
   uint32_t &batch_size;
   std::unique_ptr<Partitioner> l_partitioner, s_partitioner;
+  Partitioner* partitioner;
   RandomType random;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> async_message_num;
@@ -728,7 +749,7 @@ private:
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;
-  std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
+  std::vector<std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &, Partitioner *, // add partitioner
                                  TransactionType *)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue, 

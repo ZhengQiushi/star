@@ -8,8 +8,11 @@
 #include "common/Message.h"
 #include "common/MessagePiece.h"
 #include "common/Operation.h"
+
 #include "core/ControlMessage.h"
 #include "core/Table.h"
+#include "core/Partitioner.h"
+
 #include "protocol/Silo/SiloHelper.h"
 #include "protocol/Silo/SiloTransaction.h"
 
@@ -208,10 +211,11 @@ public:
 
 template <class Database> class LionMessageHandler {
   using Transaction = SiloTransaction;
+  using Context = typename Database::ContextType;
 
 public:
   static void search_request_handler(MessagePiece inputPiece,
-                                     Message &responseMessage, Database &db,
+                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn) {
     /**
      * @brief directly move the data to the request node!
@@ -244,7 +248,7 @@ public:
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset;
+    dec >> key_offset; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
@@ -267,25 +271,49 @@ public:
 
     encoder << tid << key_offset;
 
-    // wait until other txn has done!
-    // bool is_blocked = true;
-    
-    // do {
-    //   std::atomic<uint64_t> &tid_ = table.search_metadata(key);
-    //   if(!SiloHelper::is_locked(tid_.load())){
-    //     is_blocked = false;
-    //     bool success = true;
-    //     uint64_t latest_tid = SiloHelper::lock(tid_, success);
-    //   }
-    // } while(is_blocked == true);
-    
-    // table.delete_(key);
+    // lock the router_table 
+    if(partitioner->is_dynamic()){
+      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+      auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+      
+      // wait until other txn has done!
+      bool is_blocked = true;
+      do {
+        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+        if(!SiloHelper::is_locked(tid_r.load())){
+          is_blocked = false;
+          bool success = true;
+          uint64_t latest_tid = SiloHelper::lock(tid_r, success); // locked, release until the global router is updated!
+        }
+      } while(is_blocked == true);
+      
+      // create the new tuple in global router of source request node
+      auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+      DCHECK(coordinator_id_new != coordinator_id_old);
+      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+      router_table_new->insert(key, &coordinator_id_new);
+      std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+      SiloHelper::lock(tid_r_new); // locked, not available so far
+
+      // delete old value in router and real-replica
+      router_table_old->delete_(key);
+      // if it is on the static replica, it can be reserved as the secondary replica
+      if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){
+        // pass 
+      } else {
+        // the value should be removed
+        // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new ;
+        table.delete_(key);
+      }
+      
+      SiloHelper::unlock(tid_r_new); 
+    }
 
     responseMessage.flush();
   }
 
   static void search_response_handler(MessagePiece inputPiece,
-                                      Message &responseMessage, Database &db,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::SEARCH_RESPONSE));
@@ -320,12 +348,54 @@ public:
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
 
-    // insert
-    // table.insert(readKey.get_key(), readKey.get_value());
+    // insert remote tuple to local replica 
+    if(partitioner->is_dynamic()){
+      // key && value
+      auto key = readKey.get_key();
+      auto value = readKey.get_value();
+
+      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+      auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+      
+      // wait until other txn has done!
+      bool is_blocked = true;
+      do {
+        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+        if(!SiloHelper::is_locked(tid_r.load())){
+          is_blocked = false;
+          bool success = true;
+          uint64_t latest_tid = SiloHelper::lock(tid_r, success); // locked, release until the global router is updated!
+        }
+      } while(is_blocked == true);
+      
+      // create the new tuple in global router of source request node
+      auto coordinator_id_new = responseMessage.get_source_node_id(); 
+      DCHECK(coordinator_id_new != coordinator_id_old);
+      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+      router_table_new->insert(key, &coordinator_id_new);
+      std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+      SiloHelper::lock(tid_r_new); // locked, not available so far
+
+      // delete old value in router and real-replica
+      router_table_old->delete_(key);
+      // 
+      // LOG(INFO) << *(int*) key << " transform " << coordinator_id_old << " --> " << coordinator_id_new;
+
+      // already in static replica
+      //!TODO remastering
+      if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
+        // pass
+      } else {
+        table.insert(key, value); 
+      }
+           
+      SiloHelper::unlock(tid_r_new); 
+    }
+
   }
 
   static void lock_request_handler(MessagePiece inputPiece,
-                                   Message &responseMessage, Database &db,
+                                   Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                    Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::LOCK_REQUEST));
@@ -374,7 +444,7 @@ public:
   }
 
   static void lock_response_handler(MessagePiece inputPiece,
-                                    Message &responseMessage, Database &db,
+                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::LOCK_RESPONSE));
@@ -433,7 +503,8 @@ public:
 
   static void read_validation_request_handler(MessagePiece inputPiece,
                                               Message &responseMessage,
-                                              Database &db, Transaction *txn) {
+                                              Database &db, const Context &context,  Partitioner *partitioner, 
+                                              Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::READ_VALIDATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
@@ -490,7 +561,7 @@ public:
 
   static void read_validation_response_handler(MessagePiece inputPiece,
                                                Message &responseMessage,
-                                               Database &db,
+                                               Database &db, const Context &context,  Partitioner *partitioner,
                                                Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::READ_VALIDATION_RESPONSE));
@@ -523,7 +594,7 @@ public:
   }
 
   static void abort_request_handler(MessagePiece inputPiece,
-                                    Message &responseMessage, Database &db,
+                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::ABORT_REQUEST));
@@ -551,7 +622,7 @@ public:
   }
 
   static void write_request_handler(MessagePiece inputPiece,
-                                    Message &responseMessage, Database &db,
+                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -591,7 +662,7 @@ public:
   }
 
   static void write_response_handler(MessagePiece inputPiece,
-                                     Message &responseMessage, Database &db,
+                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -613,7 +684,8 @@ public:
 
   static void replication_request_handler(MessagePiece inputPiece,
                                           Message &responseMessage,
-                                          Database &db, Transaction *txn) {
+                                          Database &db, const Context &context,  Partitioner *partitioner, 
+                                          Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::REPLICATION_REQUEST));
@@ -652,7 +724,8 @@ public:
     std::atomic<uint64_t> &tid = table.search_metadata(key);
 
     uint64_t last_tid = SiloHelper::lock(tid);
-    DCHECK(last_tid < commit_tid);
+    //! TODO logic needs to be checked
+    // DCHECK(last_tid < commit_tid);
     table.deserialize_value(key, valueStringPiece);
     SiloHelper::unlock(tid, commit_tid);
 
@@ -669,7 +742,8 @@ public:
 
   static void replication_response_handler(MessagePiece inputPiece,
                                            Message &responseMessage,
-                                           Database &db, Transaction *txn) {
+                                           Database &db, const Context &context,  Partitioner *partitioner,
+                                           Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::REPLICATION_RESPONSE));
@@ -690,8 +764,9 @@ public:
   }
 
   static void release_lock_request_handler(MessagePiece inputPiece,
-                                           Message &responseMessage,
-                                           Database &db, Transaction *txn) {
+                                           Message &responseMessage, 
+                                           Database &db, const Context &context,  Partitioner *partitioner, 
+                                           Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(SiloMessage::RELEASE_LOCK_REQUEST));
@@ -726,10 +801,11 @@ public:
   }
 
   static std::vector<
-      std::function<void(MessagePiece, Message &, Database &, Transaction *)>>
+      std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, Transaction *)>>
   get_message_handlers() {
+
     std::vector<
-        std::function<void(MessagePiece, Message &, Database &, Transaction *)>>
+        std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, Transaction *)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(search_request_handler);

@@ -119,6 +119,8 @@ public:
         // current node is the true-coordinator 
         int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
         auto c_start = std::chrono::steady_clock::now();
+        n_completed_workers.store(0);
+        n_started_workers.store(0);
         // start c-phase
         LOG(INFO) << "start C-Phase: C" << coordinator_id << " is the king";
 

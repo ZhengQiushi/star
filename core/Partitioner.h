@@ -46,7 +46,8 @@ public:
   
   virtual bool has_master_partition(int table_id, int partition_id, const void* key) const = 0;
 
-  
+  virtual bool is_dynamic() const = 0;
+
   virtual std::size_t master_coordinator(int table_id, int partition_id, const void* key) const = 0;
 
   // check if the replica of `key` is on Node `coordinator_id` or not
@@ -128,6 +129,8 @@ public:
   }
 
   bool is_backup() const override { return false; }
+
+  bool is_dynamic() const override { return false; };
 };
 
 using HashPartitioner = HashReplicatedPartitioner<1>;
@@ -183,6 +186,9 @@ public:
     return false;
   }
   bool is_backup() const override { return coordinator_id == 1; }
+
+  bool is_dynamic() const override { return false; };
+
 };
 
 /*
@@ -258,6 +264,9 @@ public:
     return false;
   }
   bool is_backup() const override { return false; }
+
+  bool is_dynamic() const override { return false; };
+
 };
 
 class StarCPartitioner : public Partitioner {
@@ -320,6 +329,8 @@ public:
     return false;
   }
   bool is_backup() const override { return coordinator_id != 0; }
+
+  bool is_dynamic() const override { return false; };
 };
 
 /***
@@ -407,6 +418,9 @@ public:
     return false;
   }
   bool is_backup() const override { return false; }
+
+  bool is_dynamic() const override { return false; };
+
 };
 
 
@@ -500,6 +514,9 @@ public:
   }
   
   bool is_backup() const override { return coordinator_id != 0; }
+
+  bool is_dynamic() const override { return true; };
+
 private:
   DatabaseType& db;
 };
@@ -580,6 +597,9 @@ public:
   }
   
   bool is_backup() const override { return coordinator_id != 0; }
+
+  bool is_dynamic() const override { return false; };
+
 private:
   DatabaseType& db;
 };
@@ -653,6 +673,9 @@ public:
     return false;
   }
   bool is_backup() const override { return false; }
+
+  bool is_dynamic() const override { return false; };
+
 
 public:
   std::size_t replica_group_id;

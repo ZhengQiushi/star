@@ -27,7 +27,7 @@ enum myTestSet {
   TPCC
 };
 
-enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY };
+enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY, NOT_LOCAL_NORETRY };
 
 // 64bit
 // 4bit    | 8bit | 12bit | 18bit | 22bit

@@ -283,6 +283,25 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   }
 
+
+  TransactionResult prepare_read_execute(std::size_t worker_id) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+  TransactionResult read_execute(std::size_t worker_id, bool local_read_only) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+  TransactionResult prepare_update_execute(std::size_t worker_id) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+
+  TransactionResult local_execute(std::size_t worker_id) override {
+    // TODO
+    DCHECK(false);
+    return TransactionResult::NOT_LOCAL_NORETRY;
+  }
   void reset_query() override {
     query = makeNewOrderQuery()(context, partition_id, random);
   }
@@ -584,6 +603,24 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   }
 
+  TransactionResult prepare_read_execute(std::size_t worker_id) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+  TransactionResult read_execute(std::size_t worker_id, bool local_read_only) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+  TransactionResult prepare_update_execute(std::size_t worker_id) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+
+  TransactionResult local_execute(std::size_t worker_id) override {
+    // TODO
+    DCHECK(false);
+    return TransactionResult::NOT_LOCAL_NORETRY;
+  }
   void reset_query() override {
     query = makePaymentQuery()(context, partition_id, random);
   }

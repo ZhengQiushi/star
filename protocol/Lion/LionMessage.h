@@ -298,7 +298,9 @@ public:
       // delete old value in router and real-replica
       router_table_old->delete_(key);
       // if it is on the static replica, it can be reserved as the secondary replica
-      if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){
+      if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){ // || 
+        //!TODO partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
+        // local is or new destination is the static replica 
         // pass 
       } else {
         // the value should be removed
@@ -357,16 +359,6 @@ public:
       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
       auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
       
-      // wait until other txn has done!
-      bool is_blocked = true;
-      do {
-        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-        if(!SiloHelper::is_locked(tid_r.load())){
-          is_blocked = false;
-          bool success = true;
-          uint64_t latest_tid = SiloHelper::lock(tid_r, success); // locked, release until the global router is updated!
-        }
-      } while(is_blocked == true);
       
       // create the new tuple in global router of source request node
       auto coordinator_id_new = responseMessage.get_source_node_id(); 
@@ -389,7 +381,7 @@ public:
         table.insert(key, value); 
       }
            
-      SiloHelper::unlock(tid_r_new); 
+      // SiloHelper::unlock(tid_r_new); 
     }
 
   }
@@ -619,6 +611,13 @@ public:
 
     // unlock the key
     SiloHelper::unlock(tid);
+
+    if(partitioner->is_dynamic()){
+      // unlock dynamic replica
+      auto router_table = db.find_router_table(table_id, responseMessage.get_source_node_id());
+      std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+      SiloHelper::unlock(tid);
+    }
   }
 
   static void write_request_handler(MessagePiece inputPiece,
@@ -759,8 +758,8 @@ public:
      * The structure of a replication response: ()
      */
 
-    txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
+    // txn->pendingResponses--;
+    // txn->network_size += inputPiece.get_message_length();
   }
 
   static void release_lock_request_handler(MessagePiece inputPiece,
@@ -798,6 +797,13 @@ public:
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     SiloHelper::unlock(tid, commit_tid);
+
+    if(partitioner->is_dynamic()){
+      // unlock dynamic replica
+      auto router_table = db.find_router_table(table_id, responseMessage.get_source_node_id());
+      std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+      SiloHelper::unlock(tid);
+    }
   }
 
   static std::vector<

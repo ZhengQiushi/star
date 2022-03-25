@@ -167,6 +167,8 @@ public:
         n_started_workers.fetch_add(1);
          LOG(WARNING) << "worker " << id << " ready to process_request";
 
+        run_local_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        
         while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
           process_request();
@@ -199,7 +201,7 @@ public:
       if(id == 0){
         // LOG(INFO) << "debug";
       }
-      // run_transaction(ExecutorStatus::S_PHASE, async_message_num);
+      run_transaction(ExecutorStatus::S_PHASE, async_message_num);
       
       LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
@@ -461,7 +463,19 @@ public:
           // LOG(INFO) << "HAHAH";
           // std::cout << "test" << std::endl;
         }
-        auto result = transaction->execute(id);
+
+        // 
+        transaction->prepare_read_execute(id);
+        bool get_all_router_lock = protocol.lock_router_set(*transaction);
+        if(get_all_router_lock == false){
+          retry_transaction = true;
+          protocol.router_abort(*transaction);
+          continue;
+        }
+        auto result = transaction->read_execute(id, false);
+        transaction->prepare_update_execute(id);
+
+        // auto result = transaction->execute(id);
 
         if (result == TransactionResult::READY_TO_COMMIT) {
           // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
@@ -503,6 +517,122 @@ public:
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
+  }
+
+
+  void run_local_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
+    /**
+     * @brief try to run local transcations in normal C_Phase
+     * @note modified by truth 22-03-25    
+    */
+
+    std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
+    std::size_t query_num = 0;
+
+    ContextType phase_context; //  = c_context;
+
+    if (status == ExecutorStatus::C_PHASE) {
+      partitioner = l_partitioner.get();
+      query_num =
+          LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+      phase_context = context.get_cross_partition_context(); //  c_context; // 
+
+      cur_transactions_queue = &c_transactions_queue;
+
+    } else {
+      CHECK(false);
+    }
+
+    ProtocolType protocol(db, phase_context, *partitioner, id);
+    WorkloadType workload(coordinator_id, db, random, *partitioner);
+
+    uint64_t last_seed = 0;
+
+    auto i = 0u;
+    size_t cur_queue_size = cur_transactions_queue->size();
+    
+    for (auto i = 0u; i < cur_queue_size; i++) {
+      if(cur_transactions_queue->empty()){
+        break;
+      }
+      bool retry_transaction = false;
+
+      transaction =
+              std::move(cur_transactions_queue->front());
+
+      bool is_cross_node = false;
+      TransactionResult result;
+
+      do {
+        // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
+        process_request();
+        last_seed = random.get_seed();
+
+        if (retry_transaction) {
+          transaction->reset();
+        } else {
+          std::size_t partition_id = get_partition_id(status);
+          setupHandlers(*transaction, protocol);
+        }
+        
+        transaction->prepare_read_execute(id);
+        bool get_all_router_lock = protocol.lock_router_set(*transaction);
+        // get all router lock first
+        if(get_all_router_lock == false){
+          retry_transaction = true;
+          protocol.router_abort(*transaction);
+          continue;
+        } else {
+          // check if cross-node transaction
+          is_cross_node = transaction->check_cross_node_txn(true);
+          if(is_cross_node){
+            protocol.router_abort(*transaction);
+            break;
+          }
+        }
+        
+        result = transaction->read_execute(id, true);
+        transaction->prepare_update_execute(id);
+
+        if (result == TransactionResult::READY_TO_COMMIT) {
+          bool commit = protocol.commit(*transaction, messages, async_message_num);
+          n_network_size.fetch_add(transaction->network_size);
+          if (commit) {
+            n_commit.fetch_add(1);
+            retry_transaction = false;
+            q.push(std::move(transaction)); 
+          } else {
+            // release all router lock and retry
+            protocol.router_abort(*transaction);
+            if (transaction->abort_lock) {
+              n_abort_lock.fetch_add(1);
+            } else {
+              DCHECK(transaction->abort_read_validation);
+              n_abort_read_validation.fetch_add(1);
+            }
+            random.set_seed(last_seed);
+            retry_transaction = true;
+          }
+        } else {
+          // release all router lock and abort
+          n_abort_no_retry.fetch_add(1);
+          protocol.router_abort(*transaction);
+        }
+      } while (retry_transaction);
+
+      if(is_cross_node || result != TransactionResult::READY_TO_COMMIT){
+        // wait for later king-C-Phase 
+        cur_transactions_queue->push(std::move(transaction));
+      }
+
+      cur_transactions_queue->pop();
+    }
+
+    if(id == 0){
+      res.push_back(std::make_pair(c_transactions_queue.size(), s_transactions_queue.size()));
+      LOG(INFO) << id << " prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
+        s_transactions_queue.size();
+    }
   }
 
   void onExit() override {
@@ -606,18 +736,6 @@ private:
                      bool local_index_read) -> uint64_t {
       bool local_read = false;
       
-      // block when the tuple is remote-read by others
-      bool is_blocked = true;
-      do {
-        auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-        auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
-        // wait until other txn has done!
-        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-        if(!SiloHelper::is_locked(tid_r.load())){
-          is_blocked = false;
-        }
-      } while(is_blocked == true);
-
 
       if (txn.partitioner.has_master_partition(table_id, partition_id, key) // ||
           // (this->partitioner->is_partition_replicated_on(
@@ -641,58 +759,24 @@ private:
       }
     };
 
-
-    // txn.lock_request_handler =
-    //     [this, &protocol, &txn](std::size_t table_id, std::size_t partition_id,
-    //                  uint32_t key_offset, const void *key, void *value,
-    //                  bool local_index_read, bool write_lock, bool &success,
-    //                  bool &remote) -> uint64_t {
-    //   if (local_index_read) {
-    //     success = true;
-    //     remote = false;
-    //     return protocol.search(table_id, partition_id, key, value);
-    //   }
-
-    //   ITable *table = this->db.find_table(table_id, partition_id);
-
-    //   if (txn.partitioner.has_master_partition(table_id, partition_id, key)) {
-
-    //     remote = false;
-
-    //     std::atomic<uint64_t> &tid = table->search_metadata(key);
-
-    //     if (write_lock) {
-    //       TwoPLHelper::write_lock(tid, success);
-    //     } else {
-    //       TwoPLHelper::read_lock(tid, success);
-    //     }
-
-    //     if (success) {
-    //       return protocol.search(table_id, partition_id, key, value);
-    //     } else {
-    //       return 0;
-    //     }
-
-    //   } else {
-
-    //     remote = true;
-
-    //     auto coordinatorID =
-    //         txn.partitioner.master_coordinator(table_id, partition_id, key);
-
-    //     if (write_lock) {
-    //       txn.network_size += MessageFactoryType::new_write_lock_message(
-    //           *(this->messages[coordinatorID]), *table, key, key_offset);
-    //     } else {
-    //       txn.network_size += MessageFactoryType::new_read_lock_message(
-    //           *(this->messages[coordinatorID]), *table, key, key_offset);
-    //     }
-    //     txn.distributed_transaction = true;
-    //     return 0;
-    //   }
-    // };
+    txn.localReadRequestHandler =
+        [&txn, &protocol](std::size_t table_id, std::size_t partition_id,
+                     uint32_t key_offset, const void *key, void *value,
+                     bool local_index_read) -> uint64_t {
+      bool local_read = false;
 
 
+      if (txn.partitioner.has_master_partition(table_id, partition_id, key)
+           ) {
+        local_read = true;
+      }
+
+      if (local_index_read || local_read) {
+        return protocol.search(table_id, partition_id, key, value);
+      } else {
+        return -1;
+      }
+    };
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
     txn.message_flusher = [this]() { this->flush_messages(messages); };

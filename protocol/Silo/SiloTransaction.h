@@ -42,9 +42,18 @@ public:
     operation.clear();
     readSet.clear();
     writeSet.clear();
+
+    routerSet.clear(); // add by truth 22-03-25
   }
+  virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
+  virtual TransactionResult read_execute(std::size_t worker_id, bool local_read_only) = 0;
+  virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
 
   virtual TransactionResult execute(std::size_t worker_id) = 0;
+
+  virtual TransactionResult local_execute(std::size_t worker_id) = 0;
+
+
 
   virtual void reset_query() = 0;
 
@@ -68,6 +77,9 @@ public:
     readKey.set_read_request_bit();
 
     add_to_read_set(readKey);
+    // add by truth 22-03-25
+    add_to_router_set(readKey);
+    
   }
 
   template <class KeyType, class ValueType>
@@ -85,6 +97,10 @@ public:
     readKey.set_read_request_bit();
 
     add_to_read_set(readKey);
+    
+    // add by truth 22-03-25
+    add_to_router_set(readKey);
+
   }
 
   template <class KeyType, class ValueType>
@@ -102,6 +118,10 @@ public:
     readKey.set_read_request_bit();
 
     add_to_read_set(readKey);
+
+    // add by truth 22-03-25
+    add_to_router_set(readKey);
+
   }
 
   template <class KeyType, class ValueType>
@@ -150,6 +170,39 @@ public:
     return false;
   }
 
+
+  bool process_local_requests(std::size_t worker_id) {
+    /**
+     * @brief 
+     * 
+     * @return true  (not local read)
+     *         false (local read ok) 
+     */
+    // cannot use unsigned type in reverse iteration
+    for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+      // early return
+      if (!readSet[i].get_read_request_bit()) {
+        break;
+      }
+
+      const SiloRWKey &readKey = readSet[i];
+      auto tid =
+          localReadRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
+                             i, readKey.get_key(), readKey.get_value(),
+                             readKey.get_local_index_read_bit());
+      if(tid == -1){
+        return true;
+      } 
+      
+      routerSet[i].set_write_lock_bit();
+
+      readSet[i].clear_read_request_bit();
+      readSet[i].set_tid(tid);
+
+    }
+    return false;
+  }
+
   SiloRWKey *get_read_key(const void *key) {
 
     for (auto i = 0u; i < readSet.size(); i++) {
@@ -171,6 +224,11 @@ public:
     return writeSet.size() - 1;
   }
 
+  std::size_t add_to_router_set(const SiloRWKey &key) {
+    routerSet.push_back(key);
+    return routerSet.size() - 1;
+  }
+
 public:
   std::size_t coordinator_id, partition_id;
   std::chrono::steady_clock::time_point startTime;
@@ -186,6 +244,11 @@ public:
                          const void *, void *, 
                          bool)>
       readRequestHandler;
+  
+  std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
+                       const void *, void *, 
+                       bool)>
+    localReadRequestHandler;
   // processed a request?
   std::function<std::size_t(void)> remote_request_handler;
 
@@ -193,7 +256,7 @@ public:
 
   Partitioner &partitioner;
   Operation operation;
-  std::vector<SiloRWKey> readSet, writeSet;
+  std::vector<SiloRWKey> readSet, writeSet, routerSet;
 };
 
 } // namespace star

@@ -72,11 +72,6 @@ public:
 
       // remote
       auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
-      if(partitioner.is_dynamic()){
-        auto router_table = db.find_router_table(tableId, coordinatorID);
-        std::atomic<uint64_t> &tid_ = router_table->search_metadata(key);
-        HelperType::unlock(tid_);
-      }
 
       if (partitioner.has_master_partition(tableId, partitionId, key)) {
         
@@ -90,7 +85,63 @@ public:
       }
     }
 
+    unlock_all_read_locks(txn);
+    
     sync_messages(txn, false);
+  }
+
+  bool router_abort(TransactionType &txn){
+    auto &routerSet = txn.routerSet;
+
+    for (int i = int(routerSet.size()) - 1; i >= 0; i--) {
+      auto &routerKey = routerSet[i];
+      if(!routerKey.get_write_lock_bit()){
+        // only unlock the locked router-items
+        continue;
+      } else {
+        auto tableId = routerKey.get_table_id();
+        auto partitionId = routerKey.get_partition_id();
+        auto table = db.find_table(tableId, partitionId);
+        auto key = routerKey.get_key();
+            
+        auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+        if(partitioner.is_dynamic()){
+          // unlock dynamic replica
+          auto router_table = db.find_router_table(tableId, coordinatorID);
+          std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+          HelperType::unlock(tid);
+        }
+      }
+    }
+    return true;
+  }
+
+  bool lock_router_set(TransactionType &txn){
+    auto &routerSet = txn.routerSet;
+    for (auto i = 0u; i < routerSet.size(); i++) {
+      auto &routerKey = routerSet[i];
+      auto tableId = routerKey.get_table_id();
+      auto partitionId = routerKey.get_partition_id();
+      auto table = db.find_table(tableId, partitionId);
+      auto key = routerKey.get_key();
+          
+      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+      if(partitioner.is_dynamic()){
+        // unlock dynamic replica
+        auto router_table = db.find_router_table(tableId, coordinatorID);
+        std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+        bool success = true;
+        HelperType::lock(tid, success);
+        if(success == false){
+          return false;
+        } else {
+          routerKey.set_write_lock_bit();
+          routerKey.set_tid(tid);
+        }
+      }
+      
+    }
+    return true;
   }
 
   bool commit(TransactionType &txn,
@@ -127,7 +178,7 @@ private:
                       std::atomic<uint32_t> &async_message_num) {
 
     auto &readSet = txn.readSet;
-    auto &writeSet = txn.writeSet;
+    auto &writeSet = txn.writeSet; // temporary for test ! 
 
     for (auto i = 0u; i < writeSet.size(); i++) {
       auto &writeKey = writeSet[i];
@@ -138,20 +189,6 @@ private:
 
       // 
       auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
-
-      if(partitioner.is_dynamic()){
-        // lock the dynamic replica for concurrency control
-        auto router_table = db.find_router_table(tableId, coordinatorID);
-        std::atomic<uint64_t> &tid_ = router_table->search_metadata(key);
-        bool success_;
-        uint64_t latestTid = HelperType::lock(tid_, success_);
-
-        if (!success_) {
-          txn.abort_lock = true;
-          break;
-        }
-      }
-      // LOG(INFO) << "LOCK " << *(int*)key;
 
       // lock local records
       if (partitioner.has_master_partition(tableId, partitionId, key)) {
@@ -179,6 +216,7 @@ private:
 
       } else {
         // remote reads
+        DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_lock_message(
             *messages[coordinatorID], *table, writeKey.get_key(), i);
@@ -229,15 +267,6 @@ private:
 
       // lock 
       auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
-      if(partitioner.is_dynamic()){
-        auto router_table = db.find_router_table(tableId, coordinatorID);
-        uint64_t latest_tid = router_table->search_metadata(key).load();
-        
-        if (HelperType::is_locked(latest_tid)) { // must be locked by others
-          txn.abort_read_validation = true;
-          break;
-        }
-      }
       if (partitioner.has_master_partition(tableId, partitionId, key)) {
         // local read
         uint64_t latest_tid = table->search_metadata(key).load();
@@ -335,6 +364,7 @@ private:
         auto value = writeKey.get_value();
         table->update(key, value);
       } else {
+        DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_write_message(
             *messages[coordinatorID], *table, writeKey.get_key(),
@@ -379,13 +409,10 @@ private:
           async_message_num.fetch_add(1);
         }
       }
-      
-      
-      // HelperType::unlock(tid_, commit_tid);
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 
-    sync_messages(txn);
+    sync_messages(txn, false);
   }
 
   void release_lock(TransactionType &txn, uint64_t commit_tid,
@@ -416,17 +443,32 @@ private:
         async_message_num.fetch_add(1);
       }
 
-      if(partitioner.is_dynamic()){
-        // unlock dynamic replica
-        auto router_table = db.find_router_table(tableId, coordinatorID);
-        std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-        HelperType::unlock(tid, commit_tid);
-      }
     }
+
+    unlock_all_read_locks(txn);
 
     sync_messages(txn, false);
   }
 
+  void unlock_all_read_locks(TransactionType &txn){
+    auto &readSet = txn.readSet;
+    // release local lock. All data item should be moved to the current node. 
+    for (auto i = 0u; i < readSet.size(); i++) {
+      auto &readKey = readSet[i];
+      auto tableId = readKey.get_table_id();
+      auto partitionId = readKey.get_partition_id();
+      auto table = db.find_table(tableId, partitionId);
+      auto key = readKey.get_key();
+          
+      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+      if(partitioner.is_dynamic()){
+        // unlock dynamic replica
+        auto router_table = db.find_router_table(tableId, coordinatorID);
+        std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+        HelperType::unlock(tid);
+      }
+    }
+  }
   void sync_messages(TransactionType &txn, bool wait_response = true) {
     txn.message_flusher();
     if (wait_response) {

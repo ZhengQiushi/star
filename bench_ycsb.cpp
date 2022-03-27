@@ -17,7 +17,7 @@ DEFINE_int64(n_nop, 0, "total number of nop");
 int main(int argc, char *argv[]) {
 
   google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
+  google::InstallFailureSignalHandler(); 
   google::ParseCommandLineFlags(&argc, &argv, true);
   // FLAGS_log_dir = "/Users/lion/project/01_star/star/logs/";
   // FLAGS_alsologtostderr = 1;

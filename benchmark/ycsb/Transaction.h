@@ -51,11 +51,11 @@ public:
 
       // LOG(INFO) << sizeof(storage.ycsb_keys[i]) << "  " << sizeof(storage.ycsb_values[i]);
 
-      auto key_partition_id = key / context.keysPerPartition;
-      // if(key_partition_id == context.partition_num){
-      //   // 
-      //   return TransactionResult::ABORT;
-      // }
+      auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
+      if(key_partition_id == context.partition_num){
+        // 
+        return TransactionResult::ABORT;
+      }
       
       if (query.UPDATE[i]) {
         this->search_for_update(ycsbTableID, key_partition_id,
@@ -97,14 +97,12 @@ public:
           storage.ycsb_values[i].Y_F10.assign(
               local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         }
-        // auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
-        // if(key_partition_id == context.partition_num){
-        //   // 
-        //   return TransactionResult::ABORT;
-        // }
-        auto key_partition_id = key / context.keysPerPartition;
-
-        this->update(ycsbTableID, key_partition_id,  // key_partition_id
+        auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
+        if(key_partition_id == context.partition_num){
+          // 
+          return TransactionResult::ABORT;
+        }
+        this->update(ycsbTableID, key_partition_id, 
                      storage.ycsb_keys[i], storage.ycsb_values[i]);
       }
     }
@@ -120,7 +118,6 @@ public:
 
     return TransactionResult::READY_TO_COMMIT;
   }
-
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     
     DCHECK(context.keysPerTransaction == keys_num);

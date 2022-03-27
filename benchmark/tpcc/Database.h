@@ -284,7 +284,7 @@ public:
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
-    std::size_t ret = -1;
+    std::size_t ret = coordinator_num;
     // for(int i = 0 ; i < coordinator_num; i ++ ){
     //   ITable* tab = find_router_table(table_id, i);
     //   if(tab->contains(key)){
@@ -292,7 +292,7 @@ public:
     //     break;
     //   }
     // } 
-    DCHECK(ret != -1);
+    DCHECK(ret != coordinator_num);
     return ret;
   }
 

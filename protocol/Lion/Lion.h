@@ -401,12 +401,12 @@ private:
           HelperType::unlock(tid, commit_tid);
 
         } else {
-          txn.pendingResponses++;
-          auto coordinatorID = k;
-          txn.network_size += MessageFactoryType::new_replication_message(
-              *messages[coordinatorID], *table, writeKey.get_key(),
-              writeKey.get_value(), commit_tid);
-          async_message_num.fetch_add(1);
+          // txn.pendingResponses++;
+          // auto coordinatorID = k;
+          // txn.network_size += MessageFactoryType::new_replication_message(
+          //     *messages[coordinatorID], *table, writeKey.get_key(),
+          //     writeKey.get_value(), commit_tid);
+          // async_message_num.fetch_add(1);
         }
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);

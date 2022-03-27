@@ -345,7 +345,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     while (!stopFlag.load()) {
       
       int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
-      auto now = std::chrono::steady_clock::now();
+      // auto now = std::chrono::steady_clock::now();
 
       if(recorder_status.load() == static_cast<int32_t>(ExecutorStatus::START)){
         // 触发了数据迁移
@@ -442,7 +442,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
       }
       else {
-        auto record_start = std::chrono::steady_clock::now();
+        // auto record_start = std::chrono::steady_clock::now();
         // 防止 lock-free queue一直被占用
 
         while(txn_queue.empty()){
@@ -587,7 +587,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
         if(WorkloadType::which_workload == myTestSet::YCSB){
           ycsb::ycsb::key ycsb_keys = rec.key.ycsb_key;
-          ycsb::ycsb::value ycsb_value = rec.value.ycsb_val;
+          // ycsb::ycsb::value ycsb_value = rec.value.ycsb_val;
           // dest_table->insert(&ycsb_keys, &ycsb_value);
           src_table->delete_(&ycsb_keys);
         } else {

@@ -296,7 +296,7 @@ namespace star
             return lhs.degree > rhs.degree;
         }
         return lhs.on_same_coordi < rhs.on_same_coordi;
-    };
+    }
 
     struct NodeCompare
     {
@@ -321,7 +321,7 @@ namespace star
             // it if 'x' is larger
             size_t num = this->size();
             auto beg = this->begin();
-            auto end = this->end();
+            // auto end = this->end();
 
             size_t i;
             for ( i = 0; i < num; i++){

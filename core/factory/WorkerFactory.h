@@ -76,6 +76,8 @@ public:
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
                                                  "Lion"};
+    LOG(INFO) << "context.protocol: " << context.protocol;
+
     CHECK(protocols.count(context.protocol) == 1);
 
     std::vector<std::shared_ptr<Worker>> workers;

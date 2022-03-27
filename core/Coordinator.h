@@ -7,13 +7,18 @@
 #include "common/LockfreeQueue.h"
 #include "common/Message.h"
 #include "common/Socket.h"
+#include "common/PinThreadToCore.h"
+
 #include "core/ControlMessage.h"
 #include "core/Dispatcher.h"
 #include "core/Executor.h"
 #include "core/Worker.h"
 #include "core/factory/WorkerFactory.h"
+
 #include <boost/algorithm/string.hpp>
 #include <glog/logging.h>
+#include <gflags/gflags.h>
+
 #include <thread>
 #include <vector>
 
@@ -84,14 +89,14 @@ public:
     }
 
     // run timeToRun seconds
-    auto timeToRun = context.time_to_run;
-    auto warmup = 10, cooldown = 5;
+    uint64_t timeToRun = context.time_to_run;
+    uint64_t warmup = 10, cooldown = 5;
     auto startTime = std::chrono::steady_clock::now();
 
     uint64_t total_commit = 0, total_abort_no_retry = 0, total_abort_lock = 0,
              total_abort_read_validation = 0, total_local = 0,
              total_si_in_serializable = 0, total_network_size = 0;
-    int count = 0;
+    uint64_t count = 0;
 
     do {
       std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -146,7 +151,7 @@ public:
 
     } while (std::chrono::duration_cast<std::chrono::seconds>(
                  std::chrono::steady_clock::now() - startTime)
-                 .count() < timeToRun);
+                 .count() < (int)timeToRun);
 
     count = timeToRun - warmup - cooldown;
 
@@ -354,6 +359,21 @@ private:
     int rc =
         pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
     CHECK(rc == 0);
+#endif
+
+#ifndef __linux__
+    static std::size_t core_id = context.cpu_core_id;
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id++, &cpuset);
+
+    print_affinity();
+    
+    int rc =
+        pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
+    CHECK(rc == 0);
+
+    print_affinity();
 #endif
   }
 

@@ -190,7 +190,7 @@ public:
           localReadRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
                              i, readKey.get_key(), readKey.get_value(),
                              readKey.get_local_index_read_bit());
-      if(tid == -1){
+      if(tid == INT_MAX){
         return true;
       } 
       

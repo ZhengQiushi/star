@@ -69,11 +69,11 @@ public:
           continue;
         }
 
-        // if (is_record_txn_message_for_recorder(message.get())){
-        //   // 最后一个是manager
-        //   workers[numWorkers - 1]->push_message(message.release());
-        //   continue;
-        // }
+        if (is_record_txn_message_for_recorder(message.get())){
+          // 最后一个是manager
+          workers[numWorkers - 1]->push_message(message.release());
+          continue;
+        }
 
         auto workerId = message->get_worker_id();
         CHECK(workerId % io_thread_num == group_id);
@@ -186,13 +186,13 @@ public:
 
     auto cur_message = message.release();
 
-    // if(from_exe_to_man){
-    //       // 是executor, 需要送到本地的manager
-    //       if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
-    //         // 是 count ， 给本地发一个
-    //         workers[recorder_id]->push_message(cur_message);
-    //       }
-    // }
+    if(from_exe_to_man){
+          // 是executor, 需要送到本地的manager
+          if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
+            // 是 count ， 给本地发一个
+            workers[recorder_id]->push_message(cur_message);
+          }
+    }
     // send the message
     sendMessage(cur_message);
     // message.get());

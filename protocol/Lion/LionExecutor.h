@@ -15,6 +15,7 @@
 #include "protocol/Lion/Lion.h"
 #include "protocol/Lion/LionQueryNum.h"
 
+#include <limits.h>
 #include <chrono>
 #include <queue>
 
@@ -121,7 +122,7 @@ public:
     for (;;) {
 
       ExecutorStatus status;
-      int lion_king_coordinator_id;
+      size_t lion_king_coordinator_id;
 
       do {
         std::tie(lion_king_coordinator_id, status) = split_signal(static_cast<ExecutorStatus>(worker_status.load()));
@@ -167,7 +168,7 @@ public:
         n_started_workers.fetch_add(1);
          LOG(WARNING) << "worker " << id << " ready to process_request";
 
-        run_local_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        // run_local_transaction(ExecutorStatus::C_PHASE, async_message_num);
         
         while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
@@ -274,7 +275,7 @@ public:
      * @note add by truth 22-01-24
      */
     std::size_t query_num = 0;
-    Partitioner *partitioner = nullptr;
+    // Partitioner *partitioner = nullptr;
     ContextType phase_context; 
 
     std::vector<ExecutorStatus> cur_status;
@@ -399,7 +400,7 @@ public:
      *       
     */
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
-    std::size_t query_num = 0;
+    // std::size_t query_num = 0;
 
     
 
@@ -410,17 +411,17 @@ public:
     }
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = l_partitioner.get();
-      query_num =
-          LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
-      phase_context = context.get_cross_partition_context(); //  c_context; // 
+      // query_num =
+      //     LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+      // phase_context = context.get_cross_partition_context(); //  c_context; // 
 
       cur_transactions_queue = &c_transactions_queue;
 
     } else if (status == ExecutorStatus::S_PHASE) {
       partitioner = s_partitioner.get();
-      query_num =
-          LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
-      phase_context = context.get_single_partition_context(); // s_context;// 
+      // query_num =
+      //     LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+      // phase_context = context.get_single_partition_context(); // s_context;// 
 
       cur_transactions_queue = &s_transactions_queue;
     } else {
@@ -527,15 +528,15 @@ public:
     */
 
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
-    std::size_t query_num = 0;
+   // std::size_t query_num = 0;
 
     ContextType phase_context; //  = c_context;
 
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = l_partitioner.get();
-      query_num =
-          LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
-      phase_context = context.get_cross_partition_context(); //  c_context; // 
+      // query_num =
+      //     LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+      // phase_context = context.get_cross_partition_context(); //  c_context; // 
 
       cur_transactions_queue = &c_transactions_queue;
 
@@ -774,7 +775,7 @@ private:
       if (local_index_read || local_read) {
         return protocol.search(table_id, partition_id, key, value);
       } else {
-        return -1;
+        return INT_MAX;
       }
     };
 

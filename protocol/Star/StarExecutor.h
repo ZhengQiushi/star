@@ -263,7 +263,7 @@ public:
      * @note add by truth 22-01-24
      */
     std::size_t query_num = 0;
-    Partitioner *partitioner = nullptr;
+    // Partitioner *partitioner = nullptr;
     ContextType phase_context; 
 
     std::vector<ExecutorStatus> cur_status;
@@ -275,7 +275,7 @@ public:
       auto status = cur_status[round];
 
       if (status == ExecutorStatus::C_PHASE) {
-        partitioner = c_partitioner.get();
+        // partitioner = c_partitioner.get();
         query_num =
              StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
         phase_context = context.get_cross_partition_context(); 
@@ -283,7 +283,7 @@ public:
           // LOG(INFO) << "debug";
         }
       } else if (status == ExecutorStatus::S_PHASE) {
-        partitioner = s_partitioner.get();
+        // partitioner = s_partitioner.get();
         query_num =
             StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
         phase_context = context.get_single_partition_context(); 
@@ -391,7 +391,7 @@ public:
      *       
     */
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
-    std::size_t query_num = 0;
+    // std::size_t query_num = 0;
 
     Partitioner *partitioner = nullptr;
 
@@ -402,16 +402,16 @@ public:
     }
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = c_partitioner.get();
-      query_num =
-          StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+      // query_num =
+      //     StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
       phase_context = context.get_cross_partition_context(); //  c_context; // 
 
       cur_transactions_queue = &c_transactions_queue;
 
     } else if (status == ExecutorStatus::S_PHASE) {
       partitioner = s_partitioner.get();
-      query_num =
-          StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+      // query_num =
+      //     StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
       phase_context = context.get_single_partition_context(); // s_context;// 
 
       cur_transactions_queue = &s_transactions_queue;

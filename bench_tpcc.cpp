@@ -15,7 +15,6 @@ int main(int argc, char *argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
   google::ParseCommandLineFlags(&argc, &argv, true);
-
   star::tpcc::Context context;
   SETUP_CONTEXT(context);
 

@@ -216,7 +216,7 @@ private:
 
       } else {
         // remote reads
-        DCHECK(false);
+        // DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_lock_message(
             *messages[coordinatorID], *table, writeKey.get_key(), i);
@@ -364,7 +364,7 @@ private:
         auto value = writeKey.get_value();
         table->update(key, value);
       } else {
-        DCHECK(false);
+        // DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_write_message(
             *messages[coordinatorID], *table, writeKey.get_key(),

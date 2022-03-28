@@ -288,7 +288,7 @@ public:
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
   };
-  TransactionResult read_execute(std::size_t worker_id, bool local_read_only) override {
+  TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) override {
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
   };
@@ -607,7 +607,7 @@ public:
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
   };
-  TransactionResult read_execute(std::size_t worker_id, bool local_read_only) override {
+  TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) override {
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
   };

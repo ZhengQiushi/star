@@ -45,7 +45,7 @@ public:
     writeSet.clear();
   }
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
-  virtual TransactionResult read_execute(std::size_t worker_id, bool local_read_only) = 0;
+  virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
 
   virtual TransactionResult execute(std::size_t worker_id) = 0;
@@ -254,6 +254,11 @@ public:
     DCHECK(false);
     return false;
   }
+  bool process_read_only_requests(std::size_t worker_id){
+    // 
+    DCHECK(false);
+    return false;
+  } 
   void save_read_count() {
     saved_local_read = local_read.load();
     saved_remote_read = remote_read.load();

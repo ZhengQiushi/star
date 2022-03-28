@@ -46,7 +46,7 @@ public:
     routerSet.clear(); // add by truth 22-03-25
   }
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
-  virtual TransactionResult read_execute(std::size_t worker_id, bool local_read_only) = 0;
+  virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
 
   virtual TransactionResult execute(std::size_t worker_id) = 0;
@@ -171,6 +171,38 @@ public:
   }
 
 
+  bool process_read_only_requests(std::size_t worker_id) {
+    /**
+     * @brief get content for read set？
+     * 
+     * @param i 
+     */
+    // cannot use unsigned type in reverse iteration
+    for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+      // early return
+      if (!readSet[i].get_read_request_bit()) {
+        break;
+      }
+
+      const SiloRWKey &readKey = readSet[i];
+      auto tid =
+          readOnlyRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
+                             i, readKey.get_key(), readKey.get_value(),
+                             readKey.get_local_index_read_bit());
+      readSet[i].clear_read_request_bit();
+      readSet[i].set_tid(tid);
+    }
+
+    if (pendingResponses > 0) {
+      message_flusher();
+      while (pendingResponses > 0) {
+        remote_request_handler();
+      }
+    }
+    return false;
+  }
+
+
   bool process_local_requests(std::size_t worker_id) {
     /**
      * @brief 
@@ -249,6 +281,12 @@ public:
                        const void *, void *, 
                        bool)>
     localReadRequestHandler;
+
+  std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
+                         const void *, void *, 
+                         bool)>
+      readOnlyRequestHandler;
+
   // processed a request?
   std::function<std::size_t(void)> remote_request_handler;
 

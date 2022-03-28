@@ -29,6 +29,12 @@ enum myTestSet {
 
 enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY, NOT_LOCAL_NORETRY };
 
+enum class ReadMethods {
+  REMOTE_READ_WITH_TRANSFER,
+  LOCAL_READ,
+  REMOTE_READ_ONLY
+};
+
 // 64bit
 // 4bit    | 8bit | 12bit | 18bit | 22bit
 // tableID | W_id | D_id  | C_id  | OL_id

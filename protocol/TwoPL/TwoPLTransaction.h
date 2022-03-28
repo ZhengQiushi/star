@@ -43,7 +43,7 @@ public:
     writeSet.clear();
   }
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
-  virtual TransactionResult read_execute(std::size_t worker_id, bool local_read_only) = 0;
+  virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
 
   virtual TransactionResult execute(std::size_t worker_id) = 0;
@@ -185,7 +185,11 @@ public:
     DCHECK(false);
     return false;
   }
-
+  bool process_read_only_requests(std::size_t worker_id){
+    // 
+    DCHECK(false);
+    return false;
+  } 
   TwoPLRWKey *get_read_key(const void *key) {
 
     for (auto i = 0u; i < readSet.size(); i++) {

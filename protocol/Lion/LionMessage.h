@@ -36,6 +36,10 @@ enum class LionMessage {
   REPLICATION_REQUEST,
   REPLICATION_RESPONSE,
   RELEASE_LOCK_REQUEST,
+  SEARCH_REQUEST_ROUTER_ONLY,
+  SEARCH_RESPONSE_ROUTER_ONLY,
+  SEARCH_REQUEST_READ_ONLY,
+  SEARCH_RESPONSE_READ_ONLY,
   NFIELDS
 };
 
@@ -54,7 +58,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::SEARCH_REQUEST), message_size,
+        static_cast<uint32_t>(LionMessage::SEARCH_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -77,7 +81,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::LOCK_REQUEST), message_size,
+        static_cast<uint32_t>(LionMessage::LOCK_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -103,7 +107,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         sizeof(key_offset) + sizeof(tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::READ_VALIDATION_REQUEST),
+        static_cast<uint32_t>(LionMessage::READ_VALIDATION_REQUEST),
         message_size, table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -125,7 +129,7 @@ public:
 
     auto message_size = MessagePiece::get_header_size() + key_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::ABORT_REQUEST), message_size,
+        static_cast<uint32_t>(LionMessage::ABORT_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -147,7 +151,7 @@ public:
 
     auto message_size = MessagePiece::get_header_size() + key_size + field_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::WRITE_REQUEST), message_size,
+        static_cast<uint32_t>(LionMessage::WRITE_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -173,7 +177,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::REPLICATION_REQUEST), message_size,
+        static_cast<uint32_t>(LionMessage::REPLICATION_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -197,7 +201,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::RELEASE_LOCK_REQUEST), message_size,
+        static_cast<uint32_t>(LionMessage::RELEASE_LOCK_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -207,6 +211,55 @@ public:
     message.flush();
     return message_size;
   }
+
+
+  static std::size_t new_search_router_only_message(Message &message, ITable &table,
+                                        const void *key, uint32_t key_offset) {
+
+    /*
+     * The structure of a search request: (primary key, read key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_ROUTER_ONLY), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_search_read_only_message(Message &message, ITable &table,
+                                        const void *key, uint32_t key_offset) {
+
+    /*
+     * The structure of a search request: (primary key, read key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_READ_ONLY), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset;
+    message.flush();
+    return message_size;
+  }
+
+
 };
 
 template <class Database> class LionMessageHandler {
@@ -222,7 +275,7 @@ public:
      * 
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::SEARCH_REQUEST));
+           static_cast<uint32_t>(LionMessage::SEARCH_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -256,7 +309,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + value_size +
                         sizeof(uint64_t) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::SEARCH_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -291,6 +344,9 @@ public:
       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+
+      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+
       router_table_new->insert(key, &coordinator_id_new);
       std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
       SiloHelper::lock(tid_r_new); // locked, not available so far
@@ -309,6 +365,10 @@ public:
       }
       
       SiloHelper::unlock(tid_r_new); 
+    } else {
+
+      // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
+
     }
 
     responseMessage.flush();
@@ -318,7 +378,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::SEARCH_RESPONSE));
+           static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -364,6 +424,10 @@ public:
       auto coordinator_id_new = responseMessage.get_source_node_id(); 
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+
+      // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+
+
       router_table_new->insert(key, &coordinator_id_new);
       std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
       SiloHelper::lock(tid_r_new); // locked, not available so far
@@ -371,7 +435,6 @@ public:
       // delete old value in router and real-replica
       router_table_old->delete_(key);
       // 
-      // LOG(INFO) << *(int*) key << " transform " << coordinator_id_old << " --> " << coordinator_id_new;
 
       // already in static replica
       //!TODO remastering
@@ -390,14 +453,14 @@ public:
                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                    Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::LOCK_REQUEST));
+           static_cast<uint32_t>(LionMessage::LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-
+    LOG(INFO) << "lock_request_handler";
     /*
      * The structure of a lock request: (primary key, write key offset)
      * The structure of a lock response: (success?, tid, write key offset)
@@ -426,7 +489,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + sizeof(bool) +
                         sizeof(uint64_t) + sizeof(uint32_t);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::LOCK_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMessage::LOCK_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -439,7 +502,7 @@ public:
                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::LOCK_RESPONSE));
+           static_cast<uint32_t>(LionMessage::LOCK_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -484,8 +547,9 @@ public:
       writeKey.set_tid(latest_tid);
       writeKey.set_write_lock_bit();
     }
-
     txn->pendingResponses--;
+
+    LOG(INFO) << "lock_response_handler : " << txn->pendingResponses;
     txn->network_size += inputPiece.get_message_length();
 
     if (!success || tid_changed) {
@@ -498,7 +562,7 @@ public:
                                               Database &db, const Context &context,  Partitioner *partitioner, 
                                               Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::READ_VALIDATION_REQUEST));
+           static_cast<uint32_t>(LionMessage::READ_VALIDATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -506,7 +570,7 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-
+    LOG(INFO) << "read_validation_request_handler";
     /*
      * The structure of a read validation request: (primary key, read key
      * offset, tid) The structure of a read validation response: (success?, read
@@ -541,7 +605,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + sizeof(bool) + sizeof(uint32_t);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::READ_VALIDATION_RESPONSE),
+        static_cast<uint32_t>(LionMessage::READ_VALIDATION_RESPONSE),
         message_size, table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -556,7 +620,7 @@ public:
                                                Database &db, const Context &context,  Partitioner *partitioner,
                                                Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::READ_VALIDATION_RESPONSE));
+           static_cast<uint32_t>(LionMessage::READ_VALIDATION_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -579,6 +643,7 @@ public:
 
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
+    LOG(INFO) << "read_validation_response_handler : " << txn->pendingResponses;
 
     if (!success) {
       txn->abort_read_validation = true;
@@ -589,7 +654,7 @@ public:
                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::ABORT_REQUEST));
+           static_cast<uint32_t>(LionMessage::ABORT_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -625,7 +690,7 @@ public:
                                     Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::WRITE_REQUEST));
+           static_cast<uint32_t>(LionMessage::WRITE_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -652,7 +717,7 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::WRITE_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMessage::WRITE_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -665,7 +730,7 @@ public:
                                      Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::WRITE_RESPONSE));
+           static_cast<uint32_t>(LionMessage::WRITE_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -687,7 +752,7 @@ public:
                                           Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::REPLICATION_REQUEST));
+           static_cast<uint32_t>(LionMessage::REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -731,7 +796,7 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(SiloMessage::REPLICATION_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -745,7 +810,7 @@ public:
                                            Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::REPLICATION_RESPONSE));
+           static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -768,7 +833,7 @@ public:
                                            Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(SiloMessage::RELEASE_LOCK_REQUEST));
+           static_cast<uint32_t>(LionMessage::RELEASE_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -806,6 +871,292 @@ public:
     }
   }
 
+
+
+  static void search_request_router_only_handler(MessagePiece inputPiece,
+                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                     Transaction *txn) {
+    /**
+     * @brief directly move the data to the request node!
+     * 
+     */
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_ROUTER_ONLY));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);    
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read request: (primary key, read key offset)
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    // auto row = table.search(key);
+
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset; // index offset in the readSet from source request node
+
+    DCHECK(dec.size() == 0);
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + value_size +
+                        sizeof(uint64_t) + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_ROUTER_ONLY), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+    // void *dest =
+    //     &responseMessage.data[0] + responseMessage.data.size() - value_size;
+    // read to message buffer
+    uint64_t tid = 0; // auto tid = SiloHelper::read(row, dest, value_size);
+
+    encoder << tid << key_offset;
+
+    // lock the router_table 
+    if(partitioner->is_dynamic()){
+      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+      auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+      
+      // wait until other txn has done!
+      bool is_blocked = true;
+      do {
+        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+        if(!SiloHelper::is_locked(tid_r.load())){
+          is_blocked = false;
+          bool success = true;
+          uint64_t latest_tid = SiloHelper::lock(tid_r, success); // locked, release until the global router is updated!
+        }
+      } while(is_blocked == true);
+      
+      // create the new tuple in global router of source request node
+      auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+      DCHECK(coordinator_id_new != coordinator_id_old);
+      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+
+      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+
+      router_table_new->insert(key, &coordinator_id_new);
+      std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+      SiloHelper::lock(tid_r_new); // locked, not available so far
+
+      // delete old value in router and real-replica
+      router_table_old->delete_(key);
+      // if it is on the static replica, it can be reserved as the secondary replica
+      // if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){ // || 
+      //   //!TODO partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
+      //   // local is or new destination is the static replica 
+      //   // pass 
+      // } else {
+      //   // the value should be removed
+      //   // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new ;
+      //   table.delete_(key);
+      // }
+      
+      SiloHelper::unlock(tid_r_new); 
+    } else {
+
+      // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
+
+    }
+
+    responseMessage.flush();
+  }
+
+  static void search_response_router_only_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                      Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_ROUTER_ONLY));
+    // auto table_id = inputPiece.get_table_id();
+    // auto partition_id = inputPiece.get_partition_id();
+    // ITable &table = *db.find_table(table_id, partition_id);
+    // DCHECK(table_id == table.tableID());
+    // DCHECK(partition_id == table.partitionID());
+    // auto key_size = table.key_size();
+    // auto value_size = table.value_size();
+
+    // /*
+    //  * The structure of a read response: (value, tid, read key offset)
+    //  */
+
+    // uint64_t tid;
+    // uint32_t key_offset;
+
+    // DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+    //                                               value_size + sizeof(tid) +
+    //                                               sizeof(key_offset));
+
+    // StringPiece stringPiece = inputPiece.toStringPiece();
+    // stringPiece.remove_prefix(value_size);
+    // Decoder dec(stringPiece);
+    // dec >> tid >> key_offset;
+
+    // SiloRWKey &readKey = txn->readSet[key_offset];
+    // dec = Decoder(inputPiece.toStringPiece());
+    // dec.read_n_bytes(readKey.get_value(), value_size);
+    // readKey.set_tid(tid);
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+
+    // insert remote tuple to local replica 
+    // if(partitioner->is_dynamic()){
+    //   // key && value
+    //   auto key = readKey.get_key();
+    //   auto value = readKey.get_value();
+
+    //   auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+    //   auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+      
+      
+    //   // create the new tuple in global router of source request node
+    //   auto coordinator_id_new = responseMessage.get_source_node_id(); 
+    //   DCHECK(coordinator_id_new != coordinator_id_old);
+    //   auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+
+    //   LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+
+
+    //   router_table_new->insert(key, &coordinator_id_new);
+    //   std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+    //   SiloHelper::lock(tid_r_new); // locked, not available so far
+
+    //   // delete old value in router and real-replica
+    //   router_table_old->delete_(key);
+    //   // 
+
+    //   // already in static replica
+    //   //!TODO remastering
+    //   // if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
+    //   //   // pass
+    //   // } else {
+    //   //   table.insert(key, value); 
+    //   // }
+           
+    //   // SiloHelper::unlock(tid_r_new); 
+    // }
+
+  }
+
+
+  static void search_request_original_handler(MessagePiece inputPiece,
+                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                     Transaction *txn) {
+    /**
+     * @brief directly move the data to the request node!
+     * 
+     */
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_READ_ONLY));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);    
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read request: (primary key, read key offset)
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    auto row = table.search(key);
+
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset; // index offset in the readSet from source request node
+
+    DCHECK(dec.size() == 0);
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + value_size +
+                        sizeof(uint64_t) + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+    void *dest =
+        &responseMessage.data[0] + responseMessage.data.size() - value_size;
+    // read to message buffer
+    auto tid = SiloHelper::read(row, dest, value_size);
+
+    encoder << tid << key_offset;
+
+    responseMessage.flush();
+  }
+
+  static void search_response_original_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                      Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_READ_ONLY));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    uint64_t tid;
+    uint32_t key_offset;
+
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+                                                  value_size + sizeof(tid) +
+                                                  sizeof(key_offset));
+
+    StringPiece stringPiece = inputPiece.toStringPiece();
+    stringPiece.remove_prefix(value_size);
+    Decoder dec(stringPiece);
+    dec >> tid >> key_offset;
+
+    SiloRWKey &readKey = txn->readSet[key_offset];
+    dec = Decoder(inputPiece.toStringPiece());
+    dec.read_n_bytes(readKey.get_value(), value_size);
+    readKey.set_tid(tid);
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+
+  }
+
+
+
+
   static std::vector<
       std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, Transaction *)>>
   get_message_handlers() {
@@ -826,6 +1177,10 @@ public:
     v.push_back(replication_request_handler);
     v.push_back(replication_response_handler);
     v.push_back(release_lock_request_handler);
+    v.push_back(search_request_router_only_handler);
+    v.push_back(search_response_router_only_handler);
+    v.push_back(search_request_original_handler);
+    v.push_back(search_response_original_handler);
     return v;
   }
 };

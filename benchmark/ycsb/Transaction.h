@@ -147,17 +147,28 @@ public:
 
     return TransactionResult::READY_TO_COMMIT;
   };
-  TransactionResult read_execute(std::size_t worker_id, bool local_read_only) override {
+  TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) override {
     TransactionResult ret = TransactionResult::READY_TO_COMMIT; 
-
-    if(local_read_only){
+    switch (local_read_only)
+    {
+    case ReadMethods::REMOTE_READ_ONLY:
+      if (this->process_read_only_requests(worker_id)) {
+        ret = TransactionResult::ABORT;
+      }
+      break;
+    case ReadMethods::LOCAL_READ:
       if (this->process_local_requests(worker_id)) {
         ret = TransactionResult::NOT_LOCAL_NORETRY;
       }
-    } else {
+      break;
+    case ReadMethods::REMOTE_READ_WITH_TRANSFER:
       if (this->process_requests(worker_id)) {
         ret = TransactionResult::ABORT;
       }
+      break;
+    default:
+      DCHECK(false);
+      break;
     }
     return ret;
   };

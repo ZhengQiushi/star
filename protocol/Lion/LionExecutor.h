@@ -67,7 +67,7 @@ public:
       init_message(record_messages[i].get(), i);
     }
 
-    partitioner = nullptr;
+    partitioner = l_partitioner.get(); // nullptr;
 
     messageHandlers = MessageHandlerType::get_message_handlers();
 
@@ -123,6 +123,7 @@ public:
 
       ExecutorStatus status;
       size_t lion_king_coordinator_id;
+      bool is_lion_king = false;
 
       do {
         std::tie(lion_king_coordinator_id, status) = split_signal(static_cast<ExecutorStatus>(worker_status.load()));
@@ -147,14 +148,15 @@ public:
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
       StorageType storage;
 
+      is_lion_king = (coordinator_id == lion_king_coordinator_id);
       // 准备transaction
-      prepare_transactions_to_run(c_workload, s_workload, storage);
+      prepare_transactions_to_run(c_workload, s_workload, storage, is_lion_king);
 
       // c_phase
-      partitioner = l_partitioner.get();
+      // partitioner = l_partitioner.get();
 
       LOG(WARNING) << "worker " << id << " c_phase " << lion_king_coordinator_id;
-      if (coordinator_id == lion_king_coordinator_id) {
+      if (is_lion_king) {
         LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
         run_transaction(ExecutorStatus::C_PHASE, async_message_num);
@@ -166,13 +168,15 @@ public:
       } else {
         
         n_started_workers.fetch_add(1);
-         LOG(WARNING) << "worker " << id << " ready to process_request";
-
-        // run_local_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        LOG(WARNING) << "worker " << id << " ready to process_request";
         
+        run_local_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        
+        LOG(WARNING) << "worker " << id << " local down";
         while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
           process_request();
+        // run_fulfill_transaction(ExecutorStatus::C_PHASE, async_message_num);
         }
          LOG(WARNING) << "worker " << id << " finish to process_request";
         // LOG(WARNING) << "worker " << id << " ready to process_request for replication";
@@ -187,6 +191,7 @@ public:
       
       while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) !=
              ExecutorStatus::S_PHASE) {
+        process_request(); 
         std::this_thread::yield();
       }
        LOG(WARNING) << "worker " << id << " s_phase";
@@ -195,7 +200,7 @@ public:
       commit_transactions();
 
       // s_phase
-      partitioner = s_partitioner.get();
+      // partitioner = s_partitioner.get();
 
       n_started_workers.fetch_add(1);
        LOG(WARNING) << "worker " << id << " ready to run_transaction";
@@ -234,48 +239,14 @@ public:
 
   }
 
-  // bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction, bool& success){
-  //   /**
-  //    * @brief 判断是不是跨分区事务
-  //    * @return true/false
-  //    */
-  //       auto query_keys = cur_transaction->get_query();
 
-  //       int32_t first_key;
-  //       size_t first_key_partition_id;
-  //       bool is_cross_txn = false;
-  //       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-  //         // judge if is cross txn
-  //         if(j == 0){
-  //           first_key = query_keys[j];
-  //           first_key_partition_id = db.getPartitionID(context, first_key);
-  //           if(first_key_partition_id == context.partition_num){
-  //             success = false;
-  //             break;
-  //           }
-  //         } else {
-  //           auto cur_key = query_keys[j];
-  //           auto cur_key_partition_id = db.getPartitionID(context, cur_key);
-  //           if(cur_key_partition_id == context.partition_num) {
-  //             success = false;
-  //             break;
-  //           }
-  //           if(cur_key_partition_id != first_key_partition_id){
-  //             is_cross_txn = true;
-  //             break;
-  //           }
-  //         }
-  //       }
-  //   return is_cross_txn;
-  // }
-
-  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
+  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage, 
+    bool is_lion_king){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
     std::size_t query_num = 0;
-    // Partitioner *partitioner = nullptr;
     ContextType phase_context; 
 
     std::vector<ExecutorStatus> cur_status;
@@ -287,15 +258,13 @@ public:
       auto status = cur_status[round];
 
       if (status == ExecutorStatus::C_PHASE) {
-        partitioner = l_partitioner.get();
         query_num =
-             LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
+             LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size, is_lion_king);
         phase_context = context.get_cross_partition_context(); 
         if(id == 0){
           // LOG(INFO) << "debug";
         }
       } else if (status == ExecutorStatus::S_PHASE) {
-        partitioner = s_partitioner.get();
         query_num =
             LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
         phase_context = context.get_single_partition_context(); 
@@ -333,8 +302,8 @@ public:
         if(is_success){
           if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
             // if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
-              // TODO: 暂时不考虑部分副本处理跨分区事务...
-              c_transactions_queue.push(std::move(cur_transaction));
+            // TODO: 暂时不考虑部分副本处理跨分区事务...
+            c_transactions_queue.push(std::move(cur_transaction));
             // }
           } else {
             s_transactions_queue.push(std::move(cur_transaction));
@@ -400,45 +369,27 @@ public:
      *       
     */
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
-    // std::size_t query_num = 0;
-
-    
-
+    Partitioner* cur_partitioner;
     ContextType phase_context; //  = c_context;
 
-    if(id == 0 && status == ExecutorStatus::C_PHASE){
-      LOG(INFO) << "hi, i'm thread 0";
-    }
     if (status == ExecutorStatus::C_PHASE) {
-      partitioner = l_partitioner.get();
-      // query_num =
-      //     LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
-      // phase_context = context.get_cross_partition_context(); //  c_context; // 
-
+      cur_partitioner = l_partitioner.get();
       cur_transactions_queue = &c_transactions_queue;
-
     } else if (status == ExecutorStatus::S_PHASE) {
-      partitioner = s_partitioner.get();
-      // query_num =
-      //     LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
-      // phase_context = context.get_single_partition_context(); // s_context;// 
-
+      cur_partitioner = s_partitioner.get();
       cur_transactions_queue = &s_transactions_queue;
     } else {
       CHECK(false);
     }
 
-    ProtocolType protocol(db, phase_context, *partitioner, id);
-    WorkloadType workload(coordinator_id, db, random, *partitioner);
+    ProtocolType protocol(db, phase_context, *cur_partitioner, id);
+    WorkloadType workload(coordinator_id, db, random, *cur_partitioner);
 
     uint64_t last_seed = 0;
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue->size();
     
-    if(id == 0){
-      // LOG(INFO) << "debug";
-    }
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
     for (auto i = 0u; i < cur_queue_size; i++) {
       if(cur_transactions_queue->empty()){
@@ -446,8 +397,7 @@ public:
       }
       bool retry_transaction = false;
 
-      transaction =
-              std::move(cur_transactions_queue->front());
+
       do {
         // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
         process_request();
@@ -457,6 +407,10 @@ public:
           transaction->reset();
         } else {
           std::size_t partition_id = get_partition_id(status);
+
+          transaction =
+              std::move(cur_transactions_queue->front());
+
           setupHandlers(*transaction, protocol);
         }
         // LOG(INFO) << "LionExecutor: "<< id << " " << "transaction->execute" << i;
@@ -473,7 +427,119 @@ public:
           protocol.router_abort(*transaction);
           continue;
         }
-        auto result = transaction->read_execute(id, false);
+        auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
+        transaction->prepare_update_execute(id);
+
+        // auto result = transaction->execute(id);
+
+        if (result == TransactionResult::READY_TO_COMMIT) {
+          // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
+
+          bool commit =
+              protocol.commit(*transaction, messages, async_message_num); // sync_messages, async_messages, record_messages, 
+                              // );
+          n_network_size.fetch_add(transaction->network_size);
+          if (commit) {
+            n_commit.fetch_add(1);
+            retry_transaction = false;
+            q.push(std::move(transaction));
+          } else {
+            if (transaction->abort_lock) {
+              n_abort_lock.fetch_add(1);
+            } else {
+              DCHECK(transaction->abort_read_validation);
+              n_abort_read_validation.fetch_add(1);
+            }
+            random.set_seed(last_seed);
+            retry_transaction = true;
+          }
+        } else {
+          n_abort_no_retry.fetch_add(1);
+        }
+      } while (retry_transaction);
+
+      cur_transactions_queue->pop();
+
+      if (i % phase_context.batch_flush == 0) {
+        flush_messages(messages); 
+        flush_async_messages(); 
+        flush_sync_messages();
+        flush_record_messages();
+        
+      }
+    }
+    flush_messages(messages); 
+    flush_async_messages();
+    flush_record_messages();
+    flush_sync_messages();
+  }
+
+  void run_fulfill_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
+    Partitioner* cur_partitioner;
+    ContextType phase_context; //  = c_context;
+
+    if (status == ExecutorStatus::C_PHASE) {
+      cur_partitioner = l_partitioner.get();
+      cur_transactions_queue = &c_transactions_queue;
+    } else if (status == ExecutorStatus::S_PHASE) {
+      cur_partitioner = s_partitioner.get();
+      cur_transactions_queue = &s_transactions_queue;
+    } else {
+      CHECK(false);
+    }
+
+    ProtocolType protocol(db, phase_context, *cur_partitioner, id);
+    WorkloadType workload(coordinator_id, db, random, *cur_partitioner);
+
+    uint64_t last_seed = 0;
+
+    auto i = 0u;
+    size_t cur_queue_size = cur_transactions_queue->size();
+    
+    // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
+    for (auto i = 0u; i < cur_queue_size; i++) {
+      if(cur_transactions_queue->empty() || 
+         static_cast<ExecutorStatus>(worker_status.load()) == ExecutorStatus::S_PHASE){
+        break;
+      }
+      bool retry_transaction = false;
+
+      do {
+        // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
+        process_request();
+        last_seed = random.get_seed();
+
+        if (retry_transaction) {
+          transaction->reset();
+        } else {
+          std::size_t partition_id = get_partition_id(status);
+
+          transaction =
+                  std::move(cur_transactions_queue->front());
+
+          setupHandlers(*transaction, protocol);
+        }
+        // LOG(INFO) << "LionExecutor: "<< id << " " << "transaction->execute" << i;
+        if(id == 0 && status == ExecutorStatus::C_PHASE){
+          // LOG(INFO) << "HAHAH";
+          // std::cout << "test" << std::endl;
+        }
+
+        // 
+        transaction->prepare_read_execute(id);
+        bool get_all_router_lock = protocol.lock_router_set(*transaction);
+        if(get_all_router_lock == false){
+          retry_transaction = true;
+          protocol.router_abort(*transaction);
+          continue;
+        }
+        auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_ONLY);
         transaction->prepare_update_execute(id);
 
         // auto result = transaction->execute(id);
@@ -521,6 +587,7 @@ public:
   }
 
 
+
   void run_local_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
     /**
      * @brief try to run local transcations in normal C_Phase
@@ -529,23 +596,20 @@ public:
 
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
    // std::size_t query_num = 0;
+    Partitioner* cur_partitioner = nullptr;
 
     ContextType phase_context; //  = c_context;
 
     if (status == ExecutorStatus::C_PHASE) {
-      partitioner = l_partitioner.get();
-      // query_num =
-      //     LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
-      // phase_context = context.get_cross_partition_context(); //  c_context; // 
-
+      cur_partitioner = l_partitioner.get();
       cur_transactions_queue = &c_transactions_queue;
 
     } else {
       CHECK(false);
     }
 
-    ProtocolType protocol(db, phase_context, *partitioner, id);
-    WorkloadType workload(coordinator_id, db, random, *partitioner);
+    ProtocolType protocol(db, phase_context, *cur_partitioner, id);
+    WorkloadType workload(coordinator_id, db, random, *cur_partitioner);
 
     uint64_t last_seed = 0;
 
@@ -558,8 +622,6 @@ public:
       }
       bool retry_transaction = false;
 
-      transaction =
-              std::move(cur_transactions_queue->front());
 
       bool is_cross_node = false;
       TransactionResult result;
@@ -573,6 +635,10 @@ public:
           transaction->reset();
         } else {
           std::size_t partition_id = get_partition_id(status);
+          
+          transaction =
+              std::move(cur_transactions_queue->front());
+
           setupHandlers(*transaction, protocol);
         }
         
@@ -592,7 +658,7 @@ public:
           }
         }
         
-        result = transaction->read_execute(id, true);
+        result = transaction->read_execute(id, ReadMethods::LOCAL_READ);
         transaction->prepare_update_execute(id);
 
         if (result == TransactionResult::READY_TO_COMMIT) {
@@ -752,9 +818,20 @@ private:
         ITable *table = this->db.find_table(table_id, partition_id);
         auto coordinatorID =
             txn.partitioner.master_coordinator(table_id, partition_id, key);
-        txn.network_size += MessageFactoryType::new_search_message(
-            *(this->messages[coordinatorID]), *table, key, key_offset);
-        txn.pendingResponses++;
+        
+        for(size_t i = 0; i < context.coordinator_num; i ++ ){
+          if(i == context.coordinator_id){
+            continue;
+          }
+          if(i == coordinatorID){
+            txn.network_size += MessageFactoryType::new_search_message(
+                *(this->messages[i]), *table, key, key_offset);
+          } else {
+            txn.network_size += MessageFactoryType::new_search_router_only_message(
+                *(this->messages[i]), *table, key, key_offset);
+          }            
+          txn.pendingResponses++;
+        }
         txn.distributed_transaction = true;
         return 0;
       }
@@ -776,6 +853,36 @@ private:
         return protocol.search(table_id, partition_id, key, value);
       } else {
         return INT_MAX;
+      }
+    };
+
+    txn.readOnlyRequestHandler =
+        [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
+                     uint32_t key_offset, const void *key, void *value,
+                     bool local_index_read) -> uint64_t {
+      bool local_read = false;
+      
+
+      if (txn.partitioner.has_master_partition(table_id, partition_id, key) // ||
+          // (this->partitioner->is_partition_replicated_on(
+          //      partition_id, this->coordinator_id) &&
+          //  this->context.read_on_replica)
+           ) {
+        local_read = true;
+      }
+
+      if (local_index_read || local_read) {
+        return protocol.search(table_id, partition_id, key, value);
+      } else {
+        ITable *table = this->db.find_table(table_id, partition_id);
+        auto coordinatorID =
+            txn.partitioner.master_coordinator(table_id, partition_id, key);
+        
+        txn.network_size += MessageFactoryType::new_search_read_only_message(
+                *(this->messages[coordinatorID]), *table, key, key_offset);
+        txn.pendingResponses++;
+        txn.distributed_transaction = true;
+        return 0;
       }
     };
 

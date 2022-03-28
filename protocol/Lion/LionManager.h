@@ -149,6 +149,13 @@ public:
         auto s_start = std::chrono::steady_clock::now();
         // start s-phase
 
+        n_completed_workers.store(0);
+        n_started_workers.store(0);
+        signal_worker(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::S_PHASE));
+        LOG(INFO) << "start S-Phase";
+
+        wait_all_workers_start();
+        
         if(WorkloadType::which_workload == myTestSet::YCSB){
           for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
             // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
@@ -166,12 +173,6 @@ public:
             // }
           }
         }
-        LOG(INFO) << "start S-Phase";
-
-        n_completed_workers.store(0);
-        n_started_workers.store(0);
-        signal_worker(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::S_PHASE));
-        wait_all_workers_start();
         
         // LOG(INFO) << "wait_all_workers_finish";
 
@@ -251,24 +252,6 @@ public:
 
         send_lion_ack(lion_king_coordinator_id);
 
-
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
-
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          for(size_t i = 0 ; i < context.partition_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
         LOG(INFO) << "start S-Phase";
         
         // start s-phase
@@ -295,6 +278,26 @@ public:
         // LOG(INFO) << "finished";
 
       }
+    
+    
+            if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
+
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
+    
     return false;
   }
   

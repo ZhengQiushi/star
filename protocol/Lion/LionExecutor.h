@@ -176,8 +176,8 @@ public:
         while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
           process_request();
-        // run_fulfill_transaction(ExecutorStatus::C_PHASE, async_message_num);
         }
+        // run_fulfill_transaction(ExecutorStatus::C_PHASE, async_message_num);
          LOG(WARNING) << "worker " << id << " finish to process_request";
         // LOG(WARNING) << "worker " << id << " ready to process_request for replication";
         // process replication request after all workers stop.
@@ -347,11 +347,23 @@ public:
       // 从当前线程管的分区里随机选一个
 
       // CHECK(coordinator_id == 0);
-      // CHECK(context.partition_num % context.worker_num == 0);
+      CHECK(context.partition_num / context.coordinator_num % context.worker_num == 0);
+      CHECK(context.partition_num % context.coordinator_num == 0);
+      CHECK(context.partition_num % context.worker_num == 0);
+
       auto partition_num_per_thread =
-          context.partition_num / context.worker_num;
-      partition_id = id * partition_num_per_thread +
-                     random.uniform_dist(0, partition_num_per_thread - 1);
+          context.partition_num / context.coordinator_num / context.worker_num;
+      
+      auto partition_num_per_coordinator = 
+          context.partition_num / context.coordinator_num;
+      
+      partition_id = context.partition_num / context.worker_num
+                     * id * partition_num_per_coordinator +
+                     context.coordinator_num * random.uniform_dist(0, partition_num_per_thread - 1) + 
+                     context.coordinator_id;
+
+      // partition_id = id * context.coordinator_num + coordinator_id;
+
     } else if (status == ExecutorStatus::S_PHASE) {
       // 
       partition_id = id * context.coordinator_num + coordinator_id;
@@ -375,9 +387,11 @@ public:
     if (status == ExecutorStatus::C_PHASE) {
       cur_partitioner = l_partitioner.get();
       cur_transactions_queue = &c_transactions_queue;
+      phase_context = c_context;
     } else if (status == ExecutorStatus::S_PHASE) {
       cur_partitioner = s_partitioner.get();
       cur_transactions_queue = &s_transactions_queue;
+      phase_context = s_context;
     } else {
       CHECK(false);
     }
@@ -413,13 +427,8 @@ public:
 
           setupHandlers(*transaction, protocol);
         }
-        // LOG(INFO) << "LionExecutor: "<< id << " " << "transaction->execute" << i;
-        if(id == 0 && status == ExecutorStatus::C_PHASE){
-          // LOG(INFO) << "HAHAH";
-          // std::cout << "test" << std::endl;
-        }
-
-        // 
+        
+        // auto result = transaction->execute(id);
         transaction->prepare_read_execute(id);
         bool get_all_router_lock = protocol.lock_router_set(*transaction);
         if(get_all_router_lock == false){
@@ -429,7 +438,6 @@ public:
         }
         auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
         transaction->prepare_update_execute(id);
-
         // auto result = transaction->execute(id);
 
         if (result == TransactionResult::READY_TO_COMMIT) {
@@ -482,7 +490,7 @@ public:
     */
     std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
     Partitioner* cur_partitioner;
-    ContextType phase_context; //  = c_context;
+    ContextType phase_context = c_context;
 
     if (status == ExecutorStatus::C_PHASE) {
       cur_partitioner = l_partitioner.get();
@@ -598,7 +606,7 @@ public:
    // std::size_t query_num = 0;
     Partitioner* cur_partitioner = nullptr;
 
-    ContextType phase_context; //  = c_context;
+    ContextType phase_context = c_context;
 
     if (status == ExecutorStatus::C_PHASE) {
       cur_partitioner = l_partitioner.get();

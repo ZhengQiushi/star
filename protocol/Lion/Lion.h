@@ -181,6 +181,9 @@ private:
     auto &writeSet = txn.writeSet; // temporary for test ! 
 
     for (auto i = 0u; i < writeSet.size(); i++) {
+      if(txn.is_abort()){
+        break;
+      }
       auto &writeKey = writeSet[i];
       auto tableId = writeKey.get_table_id();
       auto partitionId = writeKey.get_partition_id();
@@ -223,10 +226,11 @@ private:
         async_message_num.fetch_add(1);
       }
     }
-
-    sync_messages(txn);
-
-    return txn.abort_lock;
+    if(!txn.is_abort()){
+      sync_messages(txn);
+    }
+    
+    return txn.is_abort();
   }
 
 
@@ -247,6 +251,9 @@ private:
     };
 
     for (auto i = 0u; i < readSet.size(); i++) {
+      if(txn.is_abort()){
+        break;
+      }
       auto &readKey = readSet[i];
 
       if (readKey.get_local_index_read_bit()) {
@@ -290,10 +297,12 @@ private:
     if (txn.pendingResponses == 0) {
       txn.local_validated = true;
     }
+    if(!txn.is_abort()){
+      sync_messages(txn);
+    }
+    
 
-    sync_messages(txn);
-
-    return !txn.abort_read_validation;
+    return !txn.is_abort(); //txn.abort_read_validation;
   }
 
   uint64_t generate_tid(TransactionType &txn) {
@@ -396,7 +405,7 @@ private:
           std::atomic<uint64_t> &tid = table->search_metadata(key);
 
           uint64_t last_tid = HelperType::lock(tid);
-          DCHECK(last_tid < commit_tid);
+          // DCHECK(last_tid < commit_tid);
           table->update(key, value);
           HelperType::unlock(tid, commit_tid);
 
@@ -465,7 +474,7 @@ private:
         // unlock dynamic replica
         auto router_table = db.find_router_table(tableId, coordinatorID);
         std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-        HelperType::unlock(tid);
+        HelperType::unlock_if_locked(tid);
       }
     }
   }

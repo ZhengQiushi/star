@@ -261,6 +261,10 @@ public:
     return routerSet.size() - 1;
   }
 
+  bool is_abort(){
+    return abort_lock || abort_read_validation;
+  }
+  
 public:
   std::size_t coordinator_id, partition_id;
   std::chrono::steady_clock::time_point startTime;

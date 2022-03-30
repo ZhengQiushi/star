@@ -329,23 +329,21 @@ public:
       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
       auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
       
-      // wait until other txn has done!
-      bool is_blocked = true;
-      do {
-        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-        if(!SiloHelper::is_locked(tid_r.load())){
-          is_blocked = false;
-          bool success = true;
-          uint64_t latest_tid = SiloHelper::lock(tid_r, success); // locked, release until the global router is updated!
-        }
-      } while(is_blocked == true);
-      
+      // preemption
+      bool success;
+      std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+      uint64_t latest_tid = SiloHelper::lock(tid_r, success);
+
+      if(success == false){
+        txn->abort_lock = true;
+      }
+
       // create the new tuple in global router of source request node
       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+      LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
 
       router_table_new->insert(key, &coordinator_id_new);
       std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
@@ -360,7 +358,6 @@ public:
         // pass 
       } else {
         // the value should be removed
-        // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new ;
         table.delete_(key);
       }
       
@@ -425,7 +422,7 @@ public:
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+      LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
 
 
       router_table_new->insert(key, &coordinator_id_new);
@@ -441,6 +438,7 @@ public:
       if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
         // pass
       } else {
+        // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
         table.insert(key, value); 
       }
            
@@ -460,7 +458,6 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-    LOG(INFO) << "lock_request_handler";
     /*
      * The structure of a lock request: (primary key, write key offset)
      * The structure of a lock response: (success?, tid, write key offset)
@@ -475,6 +472,7 @@ public:
 
     const void *key = stringPiece.data();
     std::atomic<uint64_t> &tid = table.search_metadata(key);
+    // LOG(INFO) << "lock_request_handler : " << *(int*)key ;
 
     bool success;
     uint64_t latest_tid = SiloHelper::lock(tid, success);
@@ -549,7 +547,7 @@ public:
     }
     txn->pendingResponses--;
 
-    LOG(INFO) << "lock_response_handler : " << txn->pendingResponses;
+    // LOG(INFO) << "lock_response_handler : " << *(int*)key << " " << txn->pendingResponses;
     txn->network_size += inputPiece.get_message_length();
 
     if (!success || tid_changed) {
@@ -570,7 +568,7 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-    LOG(INFO) << "read_validation_request_handler";
+    // LOG(INFO) << "read_validation_request_handler : " << *(int*)key ;
     /*
      * The structure of a read validation request: (primary key, read key
      * offset, tid) The structure of a read validation response: (success?, read
@@ -643,7 +641,7 @@ public:
 
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
-    LOG(INFO) << "read_validation_response_handler : " << txn->pendingResponses;
+    // LOG(INFO) << "read_validation_response_handler : " << *(int*)key << " " << txn->pendingResponses;
 
     if (!success) {
       txn->abort_read_validation = true;
@@ -675,13 +673,13 @@ public:
     std::atomic<uint64_t> &tid = table.search_metadata(key);
 
     // unlock the key
-    SiloHelper::unlock(tid);
+    SiloHelper::unlock_if_locked(tid);
 
     if(partitioner->is_dynamic()){
       // unlock dynamic replica
       auto router_table = db.find_router_table(table_id, responseMessage.get_source_node_id());
       std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-      SiloHelper::unlock(tid);
+      SiloHelper::unlock_if_locked(tid);
     }
   }
 
@@ -742,8 +740,8 @@ public:
      * The structure of a write response: ()
      */
 
-    txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
+    // txn->pendingResponses--;
+    // txn->network_size += inputPiece.get_message_length();
   }
 
   static void replication_request_handler(MessagePiece inputPiece,
@@ -867,7 +865,11 @@ public:
       // unlock dynamic replica
       auto router_table = db.find_router_table(table_id, responseMessage.get_source_node_id());
       std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-      SiloHelper::unlock(tid);
+      // bool success;
+      SiloHelper::unlock_if_locked(tid);
+      // if(!success){
+      //   LOG(WARNING) << *(int*)key << " not locked before";
+      // }
     }
   }
 
@@ -935,17 +937,15 @@ public:
       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
       auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
       
-      // wait until other txn has done!
-      bool is_blocked = true;
-      do {
-        std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-        if(!SiloHelper::is_locked(tid_r.load())){
-          is_blocked = false;
-          bool success = true;
-          uint64_t latest_tid = SiloHelper::lock(tid_r, success); // locked, release until the global router is updated!
-        }
-      } while(is_blocked == true);
-      
+      // preemption
+      bool success;
+      std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+      uint64_t latest_tid = SiloHelper::lock(tid_r, success);
+
+      if(success == false){
+        txn->abort_lock = true;
+      }
+
       // create the new tuple in global router of source request node
       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
       DCHECK(coordinator_id_new != coordinator_id_old);
@@ -1098,7 +1098,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + value_size +
                         sizeof(uint64_t) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_READ_ONLY), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);

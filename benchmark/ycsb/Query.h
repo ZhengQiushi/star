@@ -8,6 +8,7 @@
 #include "benchmark/ycsb/Random.h"
 #include "common/Zipf.h"
 #include "benchmark/ycsb/Database.h"
+
 namespace star {
 namespace ycsb {
 
@@ -38,7 +39,8 @@ public:
         // 跨分区
         // 保障跨分区 key0 -> partition even
           first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
-                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+                key_range % 2 * my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 + 
+                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 - 1);
     } else {
       // 单分区
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
@@ -105,7 +107,14 @@ public:
   //   return table->get_global_key(key);
   // }
 
-
+  YCSBQuery<N> operator()(const int32_t Y_KEY[N], bool UPDATE[N]) const {
+    YCSBQuery<N> query;
+    for(size_t i = 0 ; i < N; i ++ ){
+      query.Y_KEY[i] = Y_KEY[i];
+      query.UPDATE[i] = UPDATE[i];
+    }
+    return query;
+  }
 };
 } // namespace ycsb
 } // namespace star

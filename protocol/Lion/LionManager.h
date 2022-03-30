@@ -119,8 +119,7 @@ public:
         // current node is the true-coordinator 
         int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
         auto c_start = std::chrono::steady_clock::now();
-        n_completed_workers.store(0);
-        n_started_workers.store(0);
+
         // start c-phase
         LOG(INFO) << "start C-Phase: C" << coordinator_id << " is the king";
 
@@ -155,25 +154,7 @@ public:
         LOG(INFO) << "start S-Phase";
 
         wait_all_workers_start();
-        
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
-
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          for(size_t i = 0 ; i < context.partition_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
-        
+                
         // LOG(INFO) << "wait_all_workers_finish";
 
         wait_all_workers_finish();
@@ -227,8 +208,6 @@ public:
         // start c-phase
 
         DCHECK(signal == ExecutorStatus::C_PHASE);
-        n_completed_workers.store(0);
-        n_started_workers.store(0);
         
         set_worker_status(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::C_PHASE));
         

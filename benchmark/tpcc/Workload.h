@@ -60,6 +60,15 @@ public:
     return p;
   }
 
+  std::unique_ptr<TransactionType> unpack_transaction(const ContextType &context,
+                                                    std::size_t partition_id,
+                                                    StorageType &storage, simpleTransaction& simple_txn) {
+    DCHECK(false);
+    std::unique_ptr<TransactionType>  p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
+                                                 db, context, random,
+                                                 partitioner, storage);
+    return p;
+  }
 private:
   std::size_t coordinator_id;
   DatabaseType &db;

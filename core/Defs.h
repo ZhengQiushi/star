@@ -3,7 +3,7 @@
 //
 
 #pragma once
-
+#include <vector>
 namespace star {
 
 enum class ExecutorStatus {
@@ -35,6 +35,12 @@ enum class ReadMethods {
   REMOTE_READ_ONLY
 };
 
+enum class RouterTxnOps {
+  LOCAL,
+  REMASTER,
+  TRANSFER
+};
+
 // 64bit
 // 4bit    | 8bit | 12bit | 18bit | 22bit
 // tableID | W_id | D_id  | C_id  | OL_id
@@ -49,5 +55,12 @@ enum class ReadMethods {
 #define RECORD_COUNT_D_ID_VALID        0x0fff0000000000
 #define RECORD_COUNT_W_ID_VALID      0x0ff0000000000000
 #define RECORD_COUNT_TABLE_ID_VALID  0xf000000000000000
+
+
+struct simpleTransaction {
+  std::vector<uint64_t> keys;
+  std::vector<bool> update;
+  RouterTxnOps op;
+};
 
 } // namespace star

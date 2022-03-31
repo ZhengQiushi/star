@@ -41,6 +41,17 @@ public:
     return p;
   }
 
+  std::unique_ptr<TransactionType> unpack_transaction(const ContextType &context,
+                                                    std::size_t partition_id,
+                                                    StorageType &storage, simpleTransaction& simple_txn) {
+
+    std::unique_ptr<TransactionType> p =
+        std::make_unique<ReadModifyWrite<Transaction>>(
+            coordinator_id, partition_id, db, context, random, partitioner,
+            storage, simple_txn);
+
+    return p;
+  }
 private:
   std::size_t coordinator_id;
   DatabaseType &db;

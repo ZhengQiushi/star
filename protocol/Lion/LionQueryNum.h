@@ -72,9 +72,9 @@ public:
   static std::size_t get_c_phase_query_num(const star::ycsb::Context &context,
                                            uint32_t batch_size, bool is_lion_king) {
     if(is_lion_king){
-      return context.coordinator_num * batch_size / 2 * (100 - context.crossPartitionProbability) / 100;
+      return context.coordinator_num * batch_size / 2 * context.crossPartitionProbability / 100;
     } else {
-      return context.coordinator_num / (context.coordinator_num - 1) * batch_size / 2  * (100 - context.crossPartitionProbability) / 100;
+      return context.coordinator_num / (context.coordinator_num - 1) * batch_size / 2  * context.crossPartitionProbability / 100;
     }
     
     // context.coordinator_num * batch_size *

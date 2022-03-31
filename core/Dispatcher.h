@@ -174,7 +174,7 @@ public:
      * @brief 
      * @note modified by truth 本地worker同步txn到recorder
      */
-    bool from_exe_to_man = cur_id != recorder_id;
+    // bool from_exe_to_man = cur_id != recorder_id;
     const std::shared_ptr<Worker> worker = workers[cur_id];
 
     Message *raw_message = worker->pop_message();
@@ -186,13 +186,13 @@ public:
 
     auto cur_message = message.release();
 
-    if(from_exe_to_man){
-          // 是executor, 需要送到本地的manager
-          if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
-            // 是 count ， 给本地发一个
-            workers[recorder_id]->push_message(cur_message);
-          }
-    }
+    // if(from_exe_to_man){
+    //       // 是executor, 需要送到本地的manager
+    //       if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
+    //         // 是 count ， 给本地发一个
+    //         workers[recorder_id]->push_message(cur_message);
+    //       }
+    // }
     // send the message
     sendMessage(cur_message);
     // message.get());

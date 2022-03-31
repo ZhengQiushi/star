@@ -37,6 +37,22 @@ public:
         partition_id(partition_id),
         query(makeYCSBQuery<keys_num>()(context, partition_id, random, db)) {}
 
+
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
+                  DatabaseType &db, const ContextType &context,
+                  RandomType &random, Partitioner &partitioner,
+                  Storage &storage, simpleTransaction& simple_txn)
+      : Transaction(coordinator_id, partition_id, partitioner), db(db),
+        context(context), random(random), storage(storage),
+        partition_id(partition_id) {
+          size_t size_ = simple_txn.keys.size();
+          for(size_t i = 0 ; i < size_; i ++ ){
+//             LOG(INFO) << "get " << simple_txn.update[i] << " " << simple_txn.keys[i];
+            query.UPDATE[i] = simple_txn.update[i];
+            query.Y_KEY[i] = simple_txn.keys[i];
+          }
+        }
+
   virtual ~ReadModifyWrite() override = default;
 
   TransactionResult execute(std::size_t worker_id) override {
@@ -318,6 +334,15 @@ public:
     return record_keys;
   }
   
+   const std::vector<bool> get_query_update(){
+     std::vector<bool> ret;
+     for(auto i = 0u; i < keys_num; i ++ ){
+       auto update = query.UPDATE[i];
+       ret.push_back(update);
+     }
+     return ret;
+   };
+
    bool check_cross_txn(bool& success) override{
     /**
      * @brief 判断是不是跨分区事务
@@ -355,51 +380,33 @@ public:
     return is_cross_txn;
   }
 
+   std::set<int> txn_nodes_involved(bool is_dynamic) override {
+      std::set<int> from_nodes_id;
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto query_keys = this->get_query();
+
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        if(is_dynamic){
+          // look-up the dynamic router to find-out where
+          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+        } else {
+          // cal the partition to figure out the coordinator-id
+          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        }
+        from_nodes_id.insert(cur_c_id);
+      }
+     return from_nodes_id;
+   }
+
    bool check_cross_node_txn(bool is_dynamic) override{
     /**
      * @brief must be master and local 判断是不是跨节点事务
      * @return true/false
      */
-    std::set<int> from_nodes_id;
+    std::set<int> from_nodes_id = std::move(txn_nodes_involved(is_dynamic));
     from_nodes_id.insert(context.coordinator_id);
-    
-    size_t ycsbTableID = ycsb::ycsb::tableID;
-    auto query_keys = this->get_query();
-
-    bool is_cross_txn = false;
-    for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-      // judge if is cross txn
-      size_t cur_c_id = -1;
-      if(is_dynamic){
-        // look-up the dynamic router to find-out where
-        cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
-      } else {
-        // cal the partition to figure out the coordinator-id
-        cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
-      }
-      from_nodes_id.insert(cur_c_id);
-
-      // if(j == 0){
-      //   first_key = query_keys[j];
-      //   first_key_coordinator_id = db.getPartitionID(context, ycsbTableID, first_key);
-      //   if(first_key_coordinator_id == context.partition_num){
-      //     // cant find this key in current partition
-      //     success = false;
-      //     break;
-      //   }
-      // } else {
-      //   auto cur_key = query_keys[j];
-      //   auto cur_key_coordinator_id = db.getPartitionID(context, ycsbTableID, cur_key);
-      //   if(cur_key_coordinator_id == context.partition_num) {
-      //     success = false;
-      //     break;
-      //   }
-      //   if(cur_key_coordinator_id != first_key_coordinator_id){
-      //     is_cross_txn = true;
-      //     break;
-      //   }
-      // }
-    }
     return from_nodes_id.size() > 1; 
   }
 private:

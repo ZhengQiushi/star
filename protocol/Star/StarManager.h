@@ -164,26 +164,26 @@ public:
                 .count());
       }
 
-      // start data-transform 
-      static int cur_data_transform_num = 0;
-      if (context.enable_data_transfer == true && 
-          cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
-          (cur_data_transform_num / context.data_transform_interval) % 2 == 0) {
-        // 开始操作 
-        set_record_worker_status(ExecutorStatus::START);
-        LOG(INFO) << "wait_recorder_worker_finish";
-        // wait_recorder_worker_finish();
-      }
-      if (context.enable_data_transfer == true && 
-          cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
-          (cur_data_transform_num / context.data_transform_interval) % 2 == 1) {
-        // 开始操作 
-        set_record_worker_transmit_status(ExecutorStatus::START);
-        LOG(INFO) << "set_record_worker_transmit_status";
-        wait_recorder_worker_finish();
-        LOG(INFO) << "set_record_worker_transmit_status_finish";
+      // // start data-transform 
+      // static int cur_data_transform_num = 0;
+      // if (context.enable_data_transfer == true && 
+      //     cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
+      //     (cur_data_transform_num / context.data_transform_interval) % 2 == 0) {
+      //   // 开始操作 
+      //   set_record_worker_status(ExecutorStatus::START);
+      //   LOG(INFO) << "wait_recorder_worker_finish";
+      //   // wait_recorder_worker_finish();
+      // }
+      // if (context.enable_data_transfer == true && 
+      //     cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
+      //     (cur_data_transform_num / context.data_transform_interval) % 2 == 1) {
+      //   // 开始操作 
+      //   set_record_worker_transmit_status(ExecutorStatus::START);
+      //   LOG(INFO) << "set_record_worker_transmit_status";
+      //   wait_recorder_worker_finish();
+      //   LOG(INFO) << "set_record_worker_transmit_status_finish";
 
-      }
+      // }
       
       //// for debug 
       if(WorkloadType::which_workload == myTestSet::YCSB){
@@ -193,7 +193,7 @@ public:
         }
       }
 
-      cur_data_transform_num ++;
+      // cur_data_transform_num ++;
 
       auto s_start = std::chrono::steady_clock::now();
       // start s-phase

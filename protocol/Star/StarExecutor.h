@@ -150,7 +150,7 @@ public:
         n_started_workers.fetch_add(1);
         run_transaction(ExecutorStatus::C_PHASE, async_message_num);
         
-        replication_fence(ExecutorStatus::C_PHASE);
+        // replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
         LOG(WARNING) << "worker " << id << " finish run_transaction";
 
@@ -194,7 +194,7 @@ public:
       
        LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
-      replication_fence(ExecutorStatus::S_PHASE);
+      // replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
 
        LOG(WARNING) << "worker " << id << " finish run_transaction";

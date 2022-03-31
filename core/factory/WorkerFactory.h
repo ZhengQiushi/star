@@ -130,10 +130,10 @@ public:
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
-      auto recorder = std::make_shared<StarRecorder<WorkloadType> >(  // 
-          coordinator_id, context.worker_num + 1, context, stop_flag, db,
-          manager->recorder_status, manager->transmit_status, 
-          manager->n_completed_workers, manager->n_started_workers);
+      // auto recorder = std::make_shared<StarRecorder<WorkloadType> >(  // 
+      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
+      //     manager->recorder_status, manager->transmit_status, 
+      //     manager->n_completed_workers, manager->n_started_workers);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<StarExecutor<WorkloadType>>(
@@ -142,7 +142,7 @@ public:
             manager->n_started_workers)); // , manager->recorder_status
       }
       workers.push_back(manager);
-      workers.push_back(recorder);
+      // workers.push_back(recorder);
 
     } else if (context.protocol == "Lion") {
 

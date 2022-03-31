@@ -38,9 +38,11 @@ public:
           context.partition_num > 1) {
         // 跨分区
         // 保障跨分区 key0 -> partition even
-          first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
-                key_range % 2 * my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 + 
-                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 - 1);
+        first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+          // first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+          //       key_range % 2 * my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 + 
+          //       random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 - 1);
     } else {
       // 单分区
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
@@ -109,6 +111,7 @@ public:
 
   YCSBQuery<N> operator()(const int32_t Y_KEY[N], bool UPDATE[N]) const {
     YCSBQuery<N> query;
+    std::vector<int> hh;
     for(size_t i = 0 ; i < N; i ++ ){
       query.Y_KEY[i] = Y_KEY[i];
       query.UPDATE[i] = UPDATE[i];

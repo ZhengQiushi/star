@@ -305,6 +305,10 @@ public:
   void reset_query() override {
     query = makeNewOrderQuery()(context, partition_id, random);
   }
+  const std::vector<bool> get_query_update() override {
+    std::vector<bool> ret;
+    return ret; 
+  };
 
   const std::vector<u_int64_t> get_query() override{
     /**
@@ -411,7 +415,10 @@ public:
     }
     return is_cross_txn;
   }
-
+  std::set<int> txn_nodes_involved(bool is_dynamic) override {
+    std::set<int> ret;
+    return ret;
+  }
   bool check_cross_node_txn(bool is_dynamic) override{
     /**TODO**/
     return false;
@@ -631,9 +638,17 @@ public:
     /**TODO**/
     return record_keys;
   }
+  const std::vector<bool> get_query_update() override {
+    std::vector<bool> ret;
+    return ret;
+  }
   bool check_cross_txn(bool& success) override{
     /**TODO**/
     return false;
+  }
+  std::set<int> txn_nodes_involved(bool is_dynamic) override {
+    std::set<int> ret;
+    return ret;
   }
   bool check_cross_node_txn(bool is_dynamic) override{
     /**TODO**/

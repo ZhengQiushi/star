@@ -80,6 +80,8 @@ public:
     s_context = context.get_single_partition_context();
     c_context = context.get_cross_partition_context();
 
+    s_protocol = new ProtocolType(db, s_context, *s_partitioner, id);
+    c_protocol = new ProtocolType(db, c_context, *l_partitioner, id);
     // sync responds that need to be received 
     async_message_num.store(0);
   }
@@ -112,6 +114,17 @@ public:
     }
     async_message_num.store(0);
     async_message_respond_num.store(0);
+  }
+
+  void unpack_route_transaction(WorkloadType& c_workload, StorageType& storage){
+    while(!router_transactions_queue.empty()){
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      router_transactions_queue.pop();
+
+      auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
+
+      r_transactions_queue.push(std::move(p));
+    }
   }
   void start() override {
 
@@ -159,8 +172,7 @@ public:
       if (is_lion_king) {
         LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
-        run_transaction(ExecutorStatus::C_PHASE, async_message_num);
-        
+        run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue, async_message_num);
         // replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
         LOG(WARNING) << "worker " << id << " finish run_transaction";
@@ -176,6 +188,12 @@ public:
         while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
           process_request();
+          unpack_route_transaction(c_workload, storage);
+          if(!r_transactions_queue.empty()){
+            // LOG(INFO) << "receive : " << r_transactions_queue.size();
+            run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue, async_message_num);
+          }
+          
         }
         // run_fulfill_transaction(ExecutorStatus::C_PHASE, async_message_num);
          LOG(WARNING) << "worker " << id << " finish to process_request";
@@ -192,6 +210,11 @@ public:
       while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) !=
              ExecutorStatus::S_PHASE) {
         process_request(); 
+        unpack_route_transaction(c_workload, storage);
+        if(!r_transactions_queue.empty()){
+          LOG(INFO) << "receive : " << r_transactions_queue.size();
+          run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue, async_message_num);
+        }
         std::this_thread::yield();
       }
        LOG(WARNING) << "worker " << id << " s_phase";
@@ -207,7 +230,7 @@ public:
       if(id == 0){
         // LOG(INFO) << "debug";
       }
-      run_transaction(ExecutorStatus::S_PHASE, async_message_num);
+      run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
       
       LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
@@ -373,102 +396,125 @@ public:
 
     return partition_id;
   }
+  bool router_to_other_node(bool is_dynamic){
+    bool ret = false;
 
-  void run_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
+    std::set<int> node = transaction->txn_nodes_involved(is_dynamic);
+    if(node.size() == 1){
+      // 
+      auto it = node.begin();
+      uint32_t router_dest = (*it);
+      if(router_dest == context.coordinator_id){
+        // local single-partition-txn
+
+      } else {
+        // remote node single-parition-txn
+        TransactionType* txn = transaction.get();
+        txn->network_size += MessageFactoryType::new_router_transaction_message(
+            *(this->async_messages[router_dest]), ycsb::ycsb::tableID, txn, 
+            static_cast<uint64_t>(RouterTxnOps::LOCAL));
+        ret = true;
+        flush_async_messages(); 
+      }
+    } else {
+      // 
+
+    }
+    
+    return ret;
+  }
+  void run_transaction(ExecutorStatus status, 
+                       std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue,
+                       std::atomic<uint32_t>& async_message_num) {
     /**
      * @brief 
      * @note modified by truth 22-01-24
      *       
     */
-    std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
-    Partitioner* cur_partitioner;
-    ContextType phase_context; //  = c_context;
+    ProtocolType* protocol;
 
     if (status == ExecutorStatus::C_PHASE) {
-      cur_partitioner = l_partitioner.get();
-      cur_transactions_queue = &c_transactions_queue;
-      phase_context = c_context;
+      protocol = c_protocol;
     } else if (status == ExecutorStatus::S_PHASE) {
-      cur_partitioner = s_partitioner.get();
-      cur_transactions_queue = &s_transactions_queue;
-      phase_context = s_context;
+      protocol = s_protocol;
     } else {
       CHECK(false);
     }
-
-    ProtocolType protocol(db, phase_context, *cur_partitioner, id);
-    WorkloadType workload(coordinator_id, db, random, *cur_partitioner);
 
     uint64_t last_seed = 0;
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue->size();
-    
+    int router_txn_num = 0;
+
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
     for (auto i = 0u; i < cur_queue_size; i++) {
       if(cur_transactions_queue->empty()){
         break;
       }
-      bool retry_transaction = false;
 
-
-      do {
-        // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
-        process_request();
-        last_seed = random.get_seed();
-
-        if (retry_transaction) {
-          transaction->reset();
-        } else {
-          std::size_t partition_id = get_partition_id(status);
-
-          transaction =
+      transaction =
               std::move(cur_transactions_queue->front());
 
-          setupHandlers(*transaction, protocol);
-        }
-        
-        // auto result = transaction->execute(id);
-        transaction->prepare_read_execute(id);
-        bool get_all_router_lock = protocol.lock_router_set(*transaction);
-        if(get_all_router_lock == false){
-          retry_transaction = true;
-          protocol.router_abort(*transaction);
-          continue;
-        }
-        auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
-        transaction->prepare_update_execute(id);
-        // auto result = transaction->execute(id);
+      if(router_to_other_node(status == ExecutorStatus::C_PHASE)){
+        // pass
+        router_txn_num++;
+      } else {
+        bool retry_transaction = false;
 
-        if (result == TransactionResult::READY_TO_COMMIT) {
-          // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
+        do {
+          // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
+          process_request();
+          last_seed = random.get_seed();
 
-          bool commit =
-              protocol.commit(*transaction, messages, async_message_num); // sync_messages, async_messages, record_messages, 
-                              // );
-          n_network_size.fetch_add(transaction->network_size);
-          if (commit) {
-            n_commit.fetch_add(1);
-            retry_transaction = false;
-            q.push(std::move(transaction));
+          if (retry_transaction) {
+            transaction->reset();
           } else {
-            if (transaction->abort_lock) {
-              n_abort_lock.fetch_add(1);
-            } else {
-              DCHECK(transaction->abort_read_validation);
-              n_abort_read_validation.fetch_add(1);
-            }
-            random.set_seed(last_seed);
-            retry_transaction = true;
+            std::size_t partition_id = get_partition_id(status);
+            setupHandlers(*transaction, *protocol);
           }
-        } else {
-          n_abort_no_retry.fetch_add(1);
-        }
-      } while (retry_transaction);
+          // auto result = transaction->execute(id);
+          transaction->prepare_read_execute(id);
+          bool get_all_router_lock = protocol->lock_router_set(*transaction);
+          if(get_all_router_lock == false){
+            retry_transaction = true;
+            protocol->router_abort(*transaction);
+            continue;
+          }
+          auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
+          transaction->prepare_update_execute(id);
+          // auto result = transaction->execute(id);
+
+          if (result == TransactionResult::READY_TO_COMMIT) {
+            // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
+
+            bool commit =
+                protocol->commit(*transaction, messages, async_message_num); // sync_messages, async_messages, record_messages, 
+                                // );
+            n_network_size.fetch_add(transaction->network_size);
+            if (commit) {
+              n_commit.fetch_add(1);
+              retry_transaction = false;
+              q.push(std::move(transaction));
+            } else {
+              if (transaction->abort_lock) {
+                n_abort_lock.fetch_add(1);
+              } else {
+                DCHECK(transaction->abort_read_validation);
+                n_abort_read_validation.fetch_add(1);
+              }
+              random.set_seed(last_seed);
+              retry_transaction = true;
+            }
+          } else {
+            n_abort_no_retry.fetch_add(1);
+          }
+        } while (retry_transaction);
+      }
 
       cur_transactions_queue->pop();
 
-      if (i % phase_context.batch_flush == 0) {
+      if (i % context.batch_flush == 0) {
         flush_messages(messages); 
         flush_async_messages(); 
         flush_sync_messages();
@@ -480,6 +526,9 @@ public:
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
+
+    
+    // LOG(INFO) << "router_txn_num: " << router_txn_num << "   solved: " << cur_queue_size - cur_transactions_queue->size();
   }
 
   void run_fulfill_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
@@ -503,7 +552,6 @@ public:
     }
 
     ProtocolType protocol(db, phase_context, *cur_partitioner, id);
-    WorkloadType workload(coordinator_id, db, random, *cur_partitioner);
 
     uint64_t last_seed = 0;
 
@@ -617,7 +665,6 @@ public:
     }
 
     ProtocolType protocol(db, phase_context, *cur_partitioner, id);
-    WorkloadType workload(coordinator_id, db, random, *cur_partitioner);
 
     uint64_t last_seed = 0;
 
@@ -790,7 +837,8 @@ private:
         messageHandlers[type](messagePiece,
                               *sync_messages[message->get_source_node_id()], 
                               db, context, partitioner,
-                              transaction.get());
+                              transaction.get(), 
+                              &router_transactions_queue);
 
         if (logger) {
           logger->write(messagePiece.toStringPiece().data(),
@@ -950,7 +998,8 @@ private:
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &, Partitioner *, // add partitioner
-                                 TransactionType *)>>
+                                 TransactionType *, 
+                                 std::queue<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue, 
                            sync_queue; // for value sync when phase switching occurs
@@ -958,8 +1007,12 @@ private:
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 
   ContextType s_context, c_context;
+  ProtocolType* s_protocol, *c_protocol;
 
-  std::queue<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue;
+  std::queue<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue, 
+                                               r_transactions_queue;
+
+  std::queue<simpleTransaction> router_transactions_queue;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx
 

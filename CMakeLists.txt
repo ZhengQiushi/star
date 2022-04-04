@@ -43,9 +43,9 @@ if(APPLE)
 else()
     find_package(glog REQUIRED)
     # set(gflags_NAMES libgflags.a)
-    # find_package(gflags REQUIRED)
+    find_package(gflags REQUIRED)
     target_link_libraries(common ${jemalloc_lib} glog gflags) # absl::flat_hash_map  -static)
-    target_link_libraries(common libgflags.a)
+    # target_link_libraries(common libgflags.a)
     
 endif()
 

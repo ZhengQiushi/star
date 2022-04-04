@@ -35,6 +35,8 @@ public:
     c.star_sync_in_single_master_phase = this->star_sync_in_single_master_phase;
     return c;
   }
+  std::size_t keysPerTransaction = 10;
+  std::size_t keysPerPartition = 200000;
 
   int newOrderCrossPartitionProbability = 10; // out of 100
   int paymentCrossPartitionProbability = 15;  // out of 100

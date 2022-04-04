@@ -595,7 +595,7 @@ public:
     int* txn_cost_min = new int[txn_size]();//  = {0};
     int** txn_tuple_distribute = new_2d_array<int>(txn_size, coordinator_num_);//  = {0};
 
-    int* key_coordinator_id = new int[2400000]();
+    int* key_coordinator_id = new int[context.partition_num * context.keysPerPartition]();
     // std::vector<int> ** key_within_txn = new std::vector<int> *[2400000]();
 
     // std::unordered_map<int, int> key_coordinator_id;

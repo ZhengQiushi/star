@@ -191,12 +191,12 @@ public:
         n_started_workers.fetch_add(1);
 
         LOG(INFO) << "planning_ratio: " << planning_ratio;
-        // if(planning_ratio > 0){
-        //   transaction_planning();
-        //   run_transaction_with_router(ExecutorStatus::C_PHASE, async_message_num);
-        // } else {
+        if(planning_ratio > 0){
+          transaction_planning();
+          run_transaction_with_router(ExecutorStatus::C_PHASE, async_message_num);
+        } else {
           run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue, async_message_num, true);
-        // }
+        }
         
         // transaction_planning();
         // run_transaction(ExecutorStatus::C_PHASE, &execution_plan_txn_queue, async_message_num);
@@ -443,8 +443,7 @@ public:
       auto partition_num_per_coordinator = 
           context.partition_num / context.coordinator_num;
       
-      partition_id = context.partition_num / context.worker_num
-                     * id * partition_num_per_coordinator +
+      partition_id = context.partition_num / context.worker_num * id + // partition_num_per_coordinator
                      context.coordinator_num * random.uniform_dist(0, partition_num_per_thread - 1) + 
                      context.coordinator_id;
 
@@ -457,6 +456,7 @@ public:
       CHECK(false);
     }
 
+    DCHECK(context.partition_num > partition_id);
     return partition_id;
   }
 

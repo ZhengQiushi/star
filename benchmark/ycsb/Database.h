@@ -48,6 +48,14 @@ public:
         break;
       }
     }
+
+    // if(ret == coordinator_num){
+    //   for(size_t i = 0 ; i < coordinator_num; i ++ ){
+    //     ITable* tab = find_router_table(table_id, i);
+    //     LOG(INFO) << "fuck " << i << ": " << tab->table_record_num();
+    //   }
+    // }
+
     DCHECK(ret != coordinator_num);
     return ret;
   }
@@ -74,6 +82,9 @@ public:
           int router_coordinator = partitionID % context.coordinator_num;
           ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
           table_router->insert(&key, &router_coordinator);
+          // if(*(int*)(&key) == 7200034){
+          //   LOG(INFO) << "*(int*)(key) == 7200034 " << router_coordinator ;
+          // }
         }
       } else {
         // use round-robin hash partitioning

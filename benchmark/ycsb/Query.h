@@ -25,6 +25,8 @@ public:
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
                           Random &random, DatabaseType &db) const {
     // 
+    DCHECK(context.partition_num > partitionID);
+
     YCSBQuery<N> query;
     int readOnly = random.uniform_dist(1, 100);
     int crossPartition = random.uniform_dist(1, 100);
@@ -94,6 +96,9 @@ public:
         query.Y_KEY[i] = key;
 
         for (auto k = 0u; k < i; k++) {
+          // if(query.Y_KEY[k] > 7000000){
+          //   LOG(INFO) << "query.Y_KEY[k] > 7400000 : " << query.Y_KEY[k];
+          // }
           if (query.Y_KEY[k] == query.Y_KEY[i]) {
             retry = true;
             break;

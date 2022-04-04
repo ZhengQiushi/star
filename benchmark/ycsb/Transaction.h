@@ -386,6 +386,7 @@ public:
       auto query_keys = this->get_query();
 
       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
         // judge if is cross txn
         size_t cur_c_id = -1;
         if(is_dynamic){

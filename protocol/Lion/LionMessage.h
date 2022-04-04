@@ -298,7 +298,7 @@ public:
   static void search_request_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -373,7 +373,7 @@ std::queue<simpleTransaction>* router_txn_queue
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+//       LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
 
       router_table_new->insert(key, &coordinator_id_new);
       std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
@@ -404,7 +404,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void search_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE));
@@ -454,7 +454,7 @@ std::queue<simpleTransaction>* router_txn_queue
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+//      LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
 
 
       router_table_new->insert(key, &coordinator_id_new);
@@ -482,7 +482,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void lock_request_handler(MessagePiece inputPiece,
                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                    Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::LOCK_REQUEST));
@@ -533,7 +533,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void lock_response_handler(MessagePiece inputPiece,
                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::LOCK_RESPONSE));
@@ -595,7 +595,7 @@ std::queue<simpleTransaction>* router_txn_queue
                                               Message &responseMessage,
                                               Database &db, const Context &context,  Partitioner *partitioner, 
                                               Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::READ_VALIDATION_REQUEST));
@@ -655,7 +655,7 @@ std::queue<simpleTransaction>* router_txn_queue
                                                Message &responseMessage,
                                                Database &db, const Context &context,  Partitioner *partitioner,
                                                Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::READ_VALIDATION_RESPONSE));
@@ -691,7 +691,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void abort_request_handler(MessagePiece inputPiece,
                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::ABORT_REQUEST));
@@ -728,7 +728,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void write_request_handler(MessagePiece inputPiece,
                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -770,7 +770,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void write_response_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -794,7 +794,7 @@ std::queue<simpleTransaction>* router_txn_queue
                                           Message &responseMessage,
                                           Database &db, const Context &context,  Partitioner *partitioner, 
                                           Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -854,7 +854,7 @@ std::queue<simpleTransaction>* router_txn_queue
                                            Message &responseMessage,
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -879,7 +879,7 @@ std::queue<simpleTransaction>* router_txn_queue
                                            Message &responseMessage, 
                                            Database &db, const Context &context,  Partitioner *partitioner, 
                                            Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -931,7 +931,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void search_request_router_only_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -1025,7 +1025,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void search_response_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_ROUTER_ONLY));
@@ -1039,7 +1039,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void search_request_original_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::queue<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -1101,7 +1101,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void search_response_original_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-                                      std::queue<simpleTransaction>* router_txn_queue
+                                      std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_READ_ONLY));
@@ -1142,7 +1142,7 @@ std::queue<simpleTransaction>* router_txn_queue
   static void router_transaction_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-                                      std::queue<simpleTransaction>* router_txn_queue
+                                      std::deque<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION));
@@ -1179,19 +1179,19 @@ std::queue<simpleTransaction>* router_txn_queue
     }
 
     new_router_txn.op = static_cast<RouterTxnOps>(op);
-    router_txn_queue->push(new_router_txn);
+    router_txn_queue->push_back(new_router_txn);
   }
 
   static std::vector<
       std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, 
                          Transaction *, 
-                         std::queue<simpleTransaction>* )>>
+                         std::deque<simpleTransaction>* )>>
   get_message_handlers() {
 
     std::vector<
         std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, 
                            Transaction *,
-                           std::queue<simpleTransaction>* )>>
+                           std::deque<simpleTransaction>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(search_request_handler);

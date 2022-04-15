@@ -55,8 +55,7 @@ public:
   }
 
   void abort(TransactionType &txn,
-             std::vector<std::unique_ptr<Message>> &messages,
-             std::atomic<uint32_t> &async_message_num) {
+             std::vector<std::unique_ptr<Message>> &messages) {
 
     auto &writeSet = txn.writeSet;
     // unlock locked records
@@ -81,7 +80,6 @@ public:
         
         txn.network_size += MessageFactoryType::new_abort_message(
             *messages[coordinatorID], *table, writeKey.get_key());
-        async_message_num.fetch_add(1);
       }
     }
 
@@ -149,14 +147,14 @@ public:
               std::atomic<uint32_t> &async_message_num) {
 
     // lock write set
-    if (lock_write_set(txn, messages, async_message_num)) {
-      abort(txn, messages, async_message_num);
+    if (lock_write_set(txn, messages)) {
+      abort(txn, messages);
       return false;
     }
 
     // commit phase 2, read validation
-    if (!validate_read_set(txn, messages, async_message_num)) {
-      abort(txn, messages, async_message_num);
+    if (!validate_read_set(txn, messages)) {
+      abort(txn, messages);
       return false;
     }
 
@@ -167,15 +165,14 @@ public:
     write_and_replicate(txn, commit_tid, messages, async_message_num);
 
     // release locks
-    release_lock(txn, commit_tid, messages, async_message_num);
+    release_lock(txn, commit_tid, messages);
 
     return true;
   }
 
 private:
   bool lock_write_set(TransactionType &txn,
-                      std::vector<std::unique_ptr<Message>> &messages,
-                      std::atomic<uint32_t> &async_message_num) {
+                      std::vector<std::unique_ptr<Message>> &messages) {
 
     auto &readSet = txn.readSet;
     auto &writeSet = txn.writeSet; // temporary for test ! 
@@ -223,7 +220,6 @@ private:
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_lock_message(
             *messages[coordinatorID], *table, writeKey.get_key(), i);
-        async_message_num.fetch_add(1);
       }
     }
     if(!txn.is_abort()){
@@ -235,8 +231,7 @@ private:
 
 
   bool validate_read_set(TransactionType &txn,
-                         std::vector<std::unique_ptr<Message>> &messages,
-                         std::atomic<uint32_t> &async_message_num) {
+                         std::vector<std::unique_ptr<Message>> &messages) {
 
     auto &readSet = txn.readSet;
     auto &writeSet = txn.writeSet;
@@ -290,7 +285,6 @@ private:
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_read_validation_message(
             *messages[coordinatorID], *table, key, i, tid);
-        async_message_num.fetch_add(1);
       }
     }
 
@@ -378,7 +372,6 @@ private:
         txn.network_size += MessageFactoryType::new_write_message(
             *messages[coordinatorID], *table, writeKey.get_key(),
             writeKey.get_value());
-        async_message_num.fetch_add(1);
       }
 
       // value replicate
@@ -425,8 +418,7 @@ private:
   }
 
   void release_lock(TransactionType &txn, uint64_t commit_tid,
-                    std::vector<std::unique_ptr<Message>> &messages,
-                    std::atomic<uint32_t> &async_message_num) {
+                    std::vector<std::unique_ptr<Message>> &messages) {
 
     auto &readSet = txn.readSet;
     auto &writeSet = txn.writeSet;
@@ -449,7 +441,6 @@ private:
       } else {
         txn.network_size += MessageFactoryType::new_release_lock_message(
             *messages[coordinatorID], *table, writeKey.get_key(), commit_tid);
-        async_message_num.fetch_add(1);
       }
 
     }

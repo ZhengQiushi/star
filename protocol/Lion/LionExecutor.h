@@ -113,10 +113,14 @@ public:
   }
 
   void replication_fence(ExecutorStatus status){
+    
+    auto i = async_message_num.load();
+    auto ii = async_message_respond_num.load();
+
     while(async_message_num.load() != async_message_respond_num.load()){
-      if(status == ExecutorStatus::S_PHASE){
-        process_request();
-      }
+      // if(status == ExecutorStatus::S_PHASE){
+      process_request();
+      // }
       std::this_thread::yield();
     }
     async_message_num.store(0);
@@ -179,7 +183,7 @@ public:
         // LOG(INFO) << "debug";
         LOG(INFO) << id << " prepare_transactions_to_run \n" << 
         "c cross \\ single = " << c_transactions_queue.size() << " \\" << c_single_transactions_queue.size() << " \n" << 
-        "r cross \\ single = " << r_transactions_queue.size() << " \\" << r_transactions_queue.size() << " \n" << 
+        "r cross \\ single = " << r_transactions_queue.size() << " \\" << r_single_transactions_queue.size() << " \n" << 
         "s single = " << s_transactions_queue.size();
       }
 
@@ -212,7 +216,7 @@ public:
 
         // 
         // run_transaction_with_router(ExecutorStatus::C_PHASE, async_message_num);
-        // replication_fence(ExecutorStatus::C_PHASE);
+        replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
         LOG(WARNING) << "worker " << id << " finish run_transaction_with_router";
 
@@ -266,7 +270,7 @@ public:
         // LOG(INFO) << "debug";
         LOG(INFO) << id << " prepare_transactions_to_run \n" << 
         "c cross \\ single = " << c_transactions_queue.size() << " \\" << c_single_transactions_queue.size() << " \n" << 
-        "r cross \\ single = " << r_transactions_queue.size() << " \\" << r_transactions_queue.size() << " \n" << 
+        "r cross \\ single = " << r_transactions_queue.size() << " \\" << r_single_transactions_queue.size() << " \n" << 
         "s single = " << s_transactions_queue.size();
       }
 
@@ -282,7 +286,7 @@ public:
       
       LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
-      // replication_fence(ExecutorStatus::S_PHASE);
+      replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
 
        LOG(WARNING) << "worker " << id << " finish run_transaction_transaction";
@@ -1868,15 +1872,13 @@ public:
         auto messagePiece = *it;
         auto message_type = messagePiece.get_message_type();
         //!TODO replica 
-        
-        // if(message_type == static_cast<int>(LionMessage::SYNC_VALUE_REPLICATION_RESPONSE)){
-        //   auto message_length = messagePiece.get_message_length();
-        //   static int total_async = 0;
+        if(message_type == static_cast<int>(LionMessage::REPLICATION_RESPONSE)){
+          auto message_length = messagePiece.get_message_length();
           
-        //   // LOG(INFO) << "recv : " << ++total_async;
-        //   // async_message_num.fetch_sub(1);
-        //   async_message_respond_num.fetch_add(1);
-        // }
+          // LOG(INFO) << "recv : " << ++total_async;
+          // async_message_num.fetch_sub(1);
+          async_message_respond_num.fetch_add(1);
+        }
       }
 
     in_queue.push(message);

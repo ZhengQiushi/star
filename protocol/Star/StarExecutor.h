@@ -378,9 +378,9 @@ public:
       CHECK(false);
     }
 
-    if(partition_id > 10 && status == ExecutorStatus::S_PHASE){
-      LOG(INFO) << "TEST";
-    }
+    // if(partition_id > 10 && status == ExecutorStatus::S_PHASE){
+    //   LOG(INFO) << "TEST";
+    // }
     return partition_id;
   }
 

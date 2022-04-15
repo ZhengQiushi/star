@@ -34,6 +34,43 @@ public:
         partition_id(partition_id),
         query(makeNewOrderQuery()(context, partition_id + 1, random)) {}
 
+
+  NewOrder(std::size_t coordinator_id, std::size_t partition_id,
+                  DatabaseType &db, const ContextType &context,
+                  RandomType &random, Partitioner &partitioner,
+                  Storage &storage, simpleTransaction& simple_txn)
+      : Transaction(coordinator_id, partition_id, partitioner), db(db),
+        context(context), random(random), storage(storage),
+        partition_id(partition_id) {
+          size_t size_ = simple_txn.keys.size();
+
+          DCHECK(simple_txn.keys.size() == 13);
+          // 
+          auto c_record_key = simple_txn.keys[2];
+
+          int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+          int32_t d_id = (c_record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+          int32_t c_id = (c_record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+
+          query.W_ID = w_id;
+          query.D_ID = d_id;
+
+          query.C_ID = c_id;
+          query.O_OL_CNT = 10; // random.uniform_dist(5, 10);
+
+          for (auto i = 0; i < query.O_OL_CNT; i++) {
+            auto cur_key = simple_txn.keys[3 + i];
+
+            int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+            int32_t s_id = (c_record_key & RECORD_COUNT_OL_ID_VALID);
+
+            query.INFO[i].OL_I_ID = s_id;// (query.C_ID - 1) * query.O_OL_CNT + i + 1;// (query.W_ID - 1) * 3000 + query.C_ID;
+            query.INFO[i].OL_SUPPLY_W_ID = w_id;
+            query.INFO[i].OL_QUANTITY = 5;// random.uniform_dist(1, 10);
+          }
+
+        }
+
   virtual ~NewOrder() override = default;
 
   TransactionResult execute(std::size_t worker_id) override {
@@ -285,28 +322,300 @@ public:
 
 
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
-    DCHECK(false);
+    
+    int32_t W_ID = this->partition_id + 1;
+
+    // The input data (see Clause 2.4.3.2) are communicated to the SUT.
+
+    int32_t D_ID = query.D_ID;
+    int32_t C_ID = query.C_ID;
+
+    // The row in the WAREHOUSE table with matching W_ID is selected and W_TAX,
+    // the warehouse tax rate, is retrieved.
+
+    auto warehouseTableID = warehouse::tableID;
+    storage.warehouse_key = warehouse::key(W_ID);
+
+    auto key_partition_id = this->partition_id; // db.getPartitionID(context, warehouseTableID, storage.warehouse_key);
+    // if(key_partition_id == context.partition_num){
+    //   return TransactionResult::ABORT_NORETRY;
+    // }
+    this->search_for_read(warehouseTableID, key_partition_id, storage.warehouse_key,
+                          storage.warehouse_value);
+
+    // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
+    // D_TAX, the district tax rate, is retrieved, and D_NEXT_O_ID, the next
+    // available order number for the district, is retrieved and incremented by
+    // one.
+
+    auto districtTableID = district::tableID;
+    storage.district_key = district::key(W_ID, D_ID);
+    key_partition_id = this->partition_id; // db.getPartitionID(context, districtTableID, storage.district_key);
+    // if(key_partition_id == context.partition_num){
+    //   return TransactionResult::ABORT_NORETRY;
+    // }
+    this->search_for_update(districtTableID, key_partition_id, storage.district_key,
+                            storage.district_value);
+
+    // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
+    // selected and C_DISCOUNT, the customer's discount rate, C_LAST, the
+    // customer's last name, and C_CREDIT, the customer's credit status, are
+    // retrieved.
+
+    auto customerTableID = customer::tableID;
+    storage.customer_key = customer::key(W_ID, D_ID, C_ID);
+    key_partition_id = this->partition_id; // db.getPartitionID(context, customerTableID, storage.customer_key);
+    // if(key_partition_id == context.partition_num){
+    //   return TransactionResult::ABORT_NORETRY;
+    // }
+    this->search_for_read(customerTableID, key_partition_id, storage.customer_key,
+                          storage.customer_value);
+
+    auto itemTableID = item::tableID;
+    auto stockTableID = stock::tableID;
+
+    for (int i = 0; i < query.O_OL_CNT; i++) {
+
+      // The row in the ITEM table with matching I_ID (equals OL_I_ID) is
+      // selected and I_PRICE, the price of the item, I_NAME, the name of the
+      // item, and I_DATA are retrieved. If I_ID has an unused value (see
+      // Clause 2.4.1.5), a "not-found" condition is signaled, resulting in a
+      // rollback of the database transaction (see Clause 2.4.2.3).
+
+      int32_t OL_I_ID = query.INFO[i].OL_I_ID;
+      int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
+      int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
+
+      storage.item_keys[i] = item::key(OL_I_ID);
+
+      // If I_ID has an unused value, rollback.
+      // In OCC, rollback can return without going through commit protocal
+
+      if (storage.item_keys[i].I_ID == 0) {
+        // abort();
+        return TransactionResult::ABORT_NORETRY;
+      }
+
+      // this->search_local_index(itemTableID, 0, storage.item_keys[i],
+      //                          storage.item_values[i]);
+
+      // The row in the STOCK table with matching S_I_ID (equals OL_I_ID) and
+      // S_W_ID (equals OL_SUPPLY_W_ID) is selected.
+
+      storage.stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
+
+      key_partition_id = OL_SUPPLY_W_ID - 1;//this->partition_id; // db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      // if(key_partition_id == context.partition_num){
+      //   return TransactionResult::ABORT_NORETRY;
+      // }
+      this->search_for_update(stockTableID, key_partition_id,
+                              storage.stock_keys[i], storage.stock_values[i]);
+    }
+
+
     return TransactionResult::READY_TO_COMMIT;
   };
+  
   TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) override {
-    DCHECK(false);
-    return TransactionResult::READY_TO_COMMIT;
+    TransactionResult ret = TransactionResult::READY_TO_COMMIT; 
+    switch (local_read_only)
+    {
+    case ReadMethods::REMOTE_READ_ONLY:
+      if (this->process_read_only_requests(worker_id)) {
+        ret = TransactionResult::ABORT;
+      }
+      break;
+    case ReadMethods::LOCAL_READ:
+      if (this->process_local_requests(worker_id)) {
+        ret = TransactionResult::NOT_LOCAL_NORETRY;
+      }
+      break;
+    case ReadMethods::REMOTE_READ_WITH_TRANSFER:
+      if (this->process_requests(worker_id)) {
+        ret = TransactionResult::ABORT;
+      }
+      break;
+    default:
+      DCHECK(false);
+      break;
+    }
+    return ret;
   };
+
   TransactionResult prepare_update_execute(std::size_t worker_id) override {
-    DCHECK(false);
+
+    int32_t W_ID = this->partition_id + 1;
+    int32_t D_ID = query.D_ID;
+    int32_t C_ID = query.C_ID;
+
+    auto warehouseTableID = warehouse::tableID;
+    auto districtTableID = district::tableID;
+    auto customerTableID = customer::tableID;
+    auto itemTableID = item::tableID;
+    auto stockTableID = stock::tableID;
+    float W_TAX = storage.warehouse_value.W_YTD;
+
+    float D_TAX = storage.district_value.D_TAX;
+    int32_t D_NEXT_O_ID = storage.district_value.D_NEXT_O_ID;
+
+    storage.district_value.D_NEXT_O_ID += 1;
+
+    auto key_partition_id = this->partition_id;// db.getPartitionID(context, districtTableID, storage.district_key);
+    // if(key_partition_id == context.partition_num){
+    //   return TransactionResult::ABORT_NORETRY;
+    // }
+    this->update(districtTableID, key_partition_id, storage.district_key,
+                 storage.district_value);
+
+    if (context.operation_replication) {
+      Encoder encoder(this->operation.data);
+      this->operation.partition_id = this->partition_id;
+      encoder << true << storage.district_key.D_W_ID
+              << storage.district_key.D_ID
+              << storage.district_value.D_NEXT_O_ID;
+    }
+
+    float C_DISCOUNT = storage.customer_value.C_DISCOUNT;
+
+    // A new row is inserted into both the NEW-ORDER table and the ORDER table
+    // to reflect the creation of the new order. O_CARRIER_ID is set to a null
+    // value. If the order includes only home order-lines, then O_ALL_LOCAL is
+    // set to 1, otherwise O_ALL_LOCAL is set to 0.
+
+    storage.new_order_key = new_order::key(W_ID, D_ID, D_NEXT_O_ID);
+
+    storage.order_key = order::key(W_ID, D_ID, D_NEXT_O_ID);
+
+    storage.order_value.O_ENTRY_D = Time::now();
+    storage.order_value.O_CARRIER_ID = 0;
+    storage.order_value.O_OL_CNT = query.O_OL_CNT;
+    storage.order_value.O_C_ID = query.C_ID;
+    storage.order_value.O_ALL_LOCAL = !query.isRemote();
+
+    float total_amount = 0;
+
+    auto orderLineTableID = stock::tableID;
+
+    for (int i = 0; i < query.O_OL_CNT; i++) {
+
+      int32_t OL_I_ID = query.INFO[i].OL_I_ID;
+      int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
+      int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
+
+      float I_PRICE = storage.item_values[i].I_PRICE;
+
+      // S_QUANTITY, the quantity in stock, S_DIST_xx, where xx represents the
+      // district number, and S_DATA are retrieved. If the retrieved value for
+      // S_QUANTITY exceeds OL_QUANTITY by 10 or more, then S_QUANTITY is
+      // decreased by OL_QUANTITY; otherwise S_QUANTITY is updated to
+      // (S_QUANTITY - OL_QUANTITY)+91. S_YTD is increased by OL_QUANTITY and
+      // S_ORDER_CNT is incremented by 1. If the order-line is remote, then
+      // S_REMOTE_CNT is incremented by 1.
+
+      if (storage.stock_values[i].S_QUANTITY >= OL_QUANTITY + 10) {
+        storage.stock_values[i].S_QUANTITY -= OL_QUANTITY;
+      } else {
+        storage.stock_values[i].S_QUANTITY =
+            storage.stock_values[i].S_QUANTITY - OL_QUANTITY + 91;
+      }
+
+      storage.stock_values[i].S_YTD += OL_QUANTITY;
+      storage.stock_values[i].S_ORDER_CNT++;
+
+      if (OL_SUPPLY_W_ID != W_ID) {
+        storage.stock_values[i].S_REMOTE_CNT++;
+      }
+
+      key_partition_id = OL_SUPPLY_W_ID - 1; // db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      // if(key_partition_id == context.partition_num){
+      //   return TransactionResult::ABORT_NORETRY;
+      // }
+      this->update(stockTableID, key_partition_id, storage.stock_keys[i],
+                   storage.stock_values[i]);
+
+      if (context.operation_replication) {
+        Encoder encoder(this->operation.data);
+        encoder << storage.stock_keys[i].S_W_ID << storage.stock_keys[i].S_I_ID
+                << storage.stock_values[i].S_QUANTITY
+                << storage.stock_values[i].S_YTD
+                << storage.stock_values[i].S_ORDER_CNT
+                << storage.stock_values[i].S_REMOTE_CNT;
+      }
+
+      if (this->execution_phase) {
+        float OL_AMOUNT = I_PRICE * OL_QUANTITY;
+        storage.order_line_keys[i] =
+            order_line::key(W_ID, D_ID, D_NEXT_O_ID, i + 1);
+
+        storage.order_line_values[i].OL_I_ID = OL_I_ID;
+        storage.order_line_values[i].OL_SUPPLY_W_ID = OL_SUPPLY_W_ID;
+        storage.order_line_values[i].OL_DELIVERY_D = 0;
+        storage.order_line_values[i].OL_QUANTITY = OL_QUANTITY;
+        storage.order_line_values[i].OL_AMOUNT = OL_AMOUNT;
+
+        switch (D_ID) {
+        case 1:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_01;
+          break;
+        case 2:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_02;
+          break;
+        case 3:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_03;
+          break;
+        case 4:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_04;
+          break;
+        case 5:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_05;
+          break;
+        case 6:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_06;
+          break;
+        case 7:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_07;
+          break;
+        case 8:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_08;
+          break;
+        case 9:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_09;
+          break;
+        case 10:
+          storage.order_line_values[i].OL_DIST_INFO =
+              storage.stock_values[i].S_DIST_10;
+          break;
+        default:
+          DCHECK(false);
+          break;
+        }
+        total_amount += OL_AMOUNT * (1 - C_DISCOUNT) * (1 + W_TAX + D_TAX);
+      }
+    }
+
+
     return TransactionResult::READY_TO_COMMIT;
   };
 
-  TransactionResult local_execute(std::size_t worker_id) override {
-    // TODO
-    DCHECK(false);
-    return TransactionResult::NOT_LOCAL_NORETRY;
-  }
+  
+
   void reset_query() override {
     query = makeNewOrderQuery()(context, partition_id, random);
   }
   const std::vector<bool> get_query_update() override {
     std::vector<bool> ret;
+    for(int8_t i = 0; i < query.O_OL_CNT; i ++ ){
+      ret.push_back(true);
+    }
     return ret; 
   };
 
@@ -319,6 +628,11 @@ public:
     std::vector<T> record_keys;
     // 4bit    | 6bit | 10bit | 15bit | 20bit
     // tableID | W_id | D_id  | C_id  | Lo_id
+
+    // record_keys
+    // record_keys[0-2]: w_record_key, d_record_key, c_record_key
+    // record_keys[3-13]: ol_supply_w_record_keys
+    //
 
     T W_ID = this->partition_id + 1; 
     T D_ID = query.D_ID;
@@ -415,13 +729,58 @@ public:
     }
     return is_cross_txn;
   }
+
+
   std::set<int> txn_nodes_involved(bool is_dynamic) override {
-    std::set<int> ret;
-    return ret;
+    std::set<int> from_nodes_id;
+
+    int32_t W_ID = this->partition_id + 1;
+    int32_t D_ID = query.D_ID;
+    int32_t C_ID = query.C_ID;
+    auto itemTableID = item::tableID;
+    auto stockTableID = stock::tableID;
+
+    auto warehouse_key = warehouse::key(W_ID);
+    auto district_key = district::key(W_ID, D_ID);
+    auto customer_key = customer::key(W_ID, D_ID, C_ID);
+    std::vector<item::key> item_keys;
+    std::vector<stock::key> stock_keys;
+
+    bool is_cross_txn = false; // ret
+
+    get_item_stock_keys_query(item_keys, stock_keys);
+    if(is_dynamic){
+      size_t ware_coordinator_id = db.get_dynamic_coordinator_id(context.coordinator_num, warehouse::tableID, (void*)& warehouse_key);
+      size_t dist_coordinator_id = db.get_dynamic_coordinator_id(context.coordinator_num, district::tableID, (void*)& district_key);
+      size_t cust_coordinator_id = db.get_dynamic_coordinator_id(context.coordinator_num, customer::tableID, (void*)& customer_key);
+      
+      DCHECK(ware_coordinator_id == dist_coordinator_id &&
+             dist_coordinator_id == cust_coordinator_id);
+
+      from_nodes_id.insert(ware_coordinator_id);
+      from_nodes_id.insert(dist_coordinator_id);
+      from_nodes_id.insert(cust_coordinator_id);
+
+      for(size_t i = 0 ; i < stock_keys.size(); i ++ ){
+        size_t stock_coordinator_id = db.get_dynamic_coordinator_id(context.coordinator_num, stock::tableID, (void*)& stock_keys[i]);
+        from_nodes_id.insert(stock_coordinator_id);
+      }
+    } else {
+      for(size_t i = 0 ; i < stock_keys.size(); i ++ ){
+        from_nodes_id.insert(stock_keys[i].S_W_ID - 1);
+      }
+    }
+    return from_nodes_id;
   }
-  bool check_cross_node_txn(bool is_dynamic) override{
-    /**TODO**/
-    return false;
+
+   bool check_cross_node_txn(bool is_dynamic) override{
+    /**
+     * @brief must be master and local 判断是不是跨节点事务
+     * @return true/false
+     */
+    std::set<int> from_nodes_id = std::move(txn_nodes_involved(is_dynamic));
+    from_nodes_id.insert(context.coordinator_id);
+    return from_nodes_id.size() > 1; 
   }
 
 private:
@@ -623,11 +982,11 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   };
 
-  TransactionResult local_execute(std::size_t worker_id) override {
-    // TODO
-    DCHECK(false);
-    return TransactionResult::NOT_LOCAL_NORETRY;
-  }
+  // TransactionResult local_execute(std::size_t worker_id) override {
+  //   // TODO
+  //   DCHECK(false);
+  //   return TransactionResult::NOT_LOCAL_NORETRY;
+  // }
   void reset_query() override {
     query = makePaymentQuery()(context, partition_id, random);
   }
@@ -636,10 +995,14 @@ public:
 
     std::vector<T> record_keys;
     /**TODO**/
+    DCHECK(false);
     return record_keys;
   }
   const std::vector<bool> get_query_update() override {
     std::vector<bool> ret;
+    for(size_t i = 0; i < 1; i ++ ){
+      ret.push_back(true);
+    }
     return ret;
   }
   bool check_cross_txn(bool& success) override{
@@ -650,10 +1013,16 @@ public:
     std::set<int> ret;
     return ret;
   }
-  bool check_cross_node_txn(bool is_dynamic) override{
-    /**TODO**/
-    return false;
+   bool check_cross_node_txn(bool is_dynamic) override{
+    /**
+     * @brief must be master and local 判断是不是跨节点事务
+     * @return true/false
+     */
+    std::set<int> from_nodes_id = std::move(txn_nodes_involved(is_dynamic));
+    from_nodes_id.insert(context.coordinator_id);
+    return from_nodes_id.size() > 1; 
   }
+
 private:
   DatabaseType &db;
   const ContextType &context;

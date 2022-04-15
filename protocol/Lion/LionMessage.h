@@ -373,7 +373,7 @@ std::deque<simpleTransaction>* router_txn_queue
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-//       LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
       // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       //   ITable* tab = db.find_router_table(table_id, i);
       //   LOG(INFO) << i << ": " << tab->table_record_num();
@@ -458,7 +458,7 @@ std::deque<simpleTransaction>* router_txn_queue
       DCHECK(coordinator_id_new != coordinator_id_old);
       auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-//       LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+      // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
       // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       //   ITable* tab = db.find_router_table(table_id, i);
       //   LOG(INFO) << i << ": " << tab->table_record_num();

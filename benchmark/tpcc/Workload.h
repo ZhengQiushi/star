@@ -63,10 +63,9 @@ public:
   std::unique_ptr<TransactionType> unpack_transaction(const ContextType &context,
                                                     std::size_t partition_id,
                                                     StorageType &storage, simpleTransaction& simple_txn) {
-    DCHECK(false);
-    std::unique_ptr<TransactionType>  p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
+    std::unique_ptr<TransactionType>  p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
                                                  db, context, random,
-                                                 partitioner, storage);
+                                                 partitioner, storage, simple_txn);
     return p;
   }
 private:

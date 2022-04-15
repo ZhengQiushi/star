@@ -50,7 +50,7 @@ public:
     // The non-uniform random customer number (C_ID) is selected using the
     // NURand(1023,1,3000) function from the selected district number (C_D_ID =
     // D_ID) and the home warehouse number (C_W_ID = W_ID).
-    double my_thresh = 0.01;
+    double my_thresh = 0.3;
     int x = random.uniform_dist(1, 100);
     if (x <= context.newOrderCrossPartitionProbability &&
              context.partition_num > 1) {
@@ -121,7 +121,7 @@ public:
       } else {
         query.INFO[i].OL_SUPPLY_W_ID = W_ID;
       }
-      query.INFO[i].OL_QUANTITY = random.uniform_dist(1, 10);
+      query.INFO[i].OL_QUANTITY = 5; // random.uniform_dist(1, 10);
     }
 
     return query;

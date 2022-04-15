@@ -295,7 +295,7 @@ public:
       }   
 
       
-      LOG(INFO) << sizeof(storage);
+      // LOG(INFO) << sizeof(storage);
 
       uint64_t last_seed = 0;
 

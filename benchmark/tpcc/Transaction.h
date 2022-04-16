@@ -143,11 +143,7 @@ public:
 
       storage.stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
 
-      auto key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
-      if(key_partition_id == context.partition_num){
-        return TransactionResult::ABORT_NORETRY;
-      }
-      this->search_for_update(stockTableID, key_partition_id,
+      this->search_for_update(stockTableID, OL_SUPPLY_W_ID - 1,
                               storage.stock_keys[i], storage.stock_values[i]);
     }
 
@@ -224,11 +220,7 @@ public:
         storage.stock_values[i].S_REMOTE_CNT++;
       }
 
-      auto key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
-      if(key_partition_id == context.partition_num){
-        return TransactionResult::ABORT_NORETRY;
-      }
-      this->update(stockTableID, key_partition_id, storage.stock_keys[i],
+      this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage.stock_keys[i],
                    storage.stock_values[i]);
 
       if (context.operation_replication) {

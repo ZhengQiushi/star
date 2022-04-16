@@ -67,7 +67,7 @@ public:
 
       // LOG(INFO) << sizeof(storage.ycsb_keys[i]) << "  " << sizeof(storage.ycsb_values[i]);
 
-      auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
+      auto key_partition_id = key / context.keysPerPartition; // db.getPartitionID(context, ycsbTableID, key);
       if(key_partition_id == context.partition_num){
         // 
         return TransactionResult::ABORT;
@@ -113,7 +113,7 @@ public:
           storage.ycsb_values[i].Y_F10.assign(
               local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         }
-        auto key_partition_id = db.getPartitionID(context, ycsbTableID, key);
+        auto key_partition_id = key / context.keysPerPartition; // db.getPartitionID(context, ycsbTableID, key);
         if(key_partition_id == context.partition_num){
           // 
           return TransactionResult::ABORT;

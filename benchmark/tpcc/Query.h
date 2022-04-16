@@ -54,9 +54,9 @@ public:
     int x = random.uniform_dist(1, 100);
     if (x <= context.newOrderCrossPartitionProbability &&
              context.partition_num > 1) {
-        query.C_ID = random.non_uniform_distribution(1023, 1, 3000 * my_thresh);
+        query.C_ID = random.uniform_dist(1, 3000 * my_thresh);
     } else {
-        query.C_ID = random.non_uniform_distribution(1023, 3000 * my_thresh + 1, 3000);
+        query.C_ID = random.uniform_dist(3000 * my_thresh + 1, 3000);
     }
 
     // The number of items in the order (ol_cnt) is randomly selected within [5

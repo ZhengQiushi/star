@@ -87,12 +87,7 @@ public:
 
     auto warehouseTableID = warehouse::tableID;
     storage.warehouse_key = warehouse::key(W_ID);
-
-    auto key_partition_id = db.getPartitionID(context, warehouseTableID, storage.warehouse_key);
-    if(key_partition_id == context.partition_num){
-      return TransactionResult::ABORT_NORETRY;
-    }
-    this->search_for_read(warehouseTableID, key_partition_id, storage.warehouse_key,
+    this->search_for_read(warehouseTableID, W_ID - 1, storage.warehouse_key,
                           storage.warehouse_value);
 
     // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
@@ -102,11 +97,7 @@ public:
 
     auto districtTableID = district::tableID;
     storage.district_key = district::key(W_ID, D_ID);
-    key_partition_id = db.getPartitionID(context, districtTableID, storage.district_key);
-    if(key_partition_id == context.partition_num){
-      return TransactionResult::ABORT_NORETRY;
-    }
-    this->search_for_update(districtTableID, key_partition_id, storage.district_key,
+    this->search_for_update(districtTableID, W_ID - 1, storage.district_key,
                             storage.district_value);
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
@@ -116,11 +107,7 @@ public:
 
     auto customerTableID = customer::tableID;
     storage.customer_key = customer::key(W_ID, D_ID, C_ID);
-    key_partition_id = db.getPartitionID(context, customerTableID, storage.customer_key);
-    if(key_partition_id == context.partition_num){
-      return TransactionResult::ABORT_NORETRY;
-    }
-    this->search_for_read(customerTableID, key_partition_id, storage.customer_key,
+    this->search_for_read(customerTableID, W_ID - 1, storage.customer_key,
                           storage.customer_value);
 
     auto itemTableID = item::tableID;
@@ -156,7 +143,7 @@ public:
 
       storage.stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
 
-      key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      auto key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
       if(key_partition_id == context.partition_num){
         return TransactionResult::ABORT_NORETRY;
       }
@@ -175,11 +162,7 @@ public:
 
     storage.district_value.D_NEXT_O_ID += 1;
 
-    key_partition_id = db.getPartitionID(context, districtTableID, storage.district_key);
-    if(key_partition_id == context.partition_num){
-      return TransactionResult::ABORT_NORETRY;
-    }
-    this->update(districtTableID, key_partition_id, storage.district_key,
+    this->update(districtTableID, W_ID - 1, storage.district_key,
                  storage.district_value);
 
     if (context.operation_replication) {
@@ -241,7 +224,7 @@ public:
         storage.stock_values[i].S_REMOTE_CNT++;
       }
 
-      key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      auto key_partition_id = db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
       if(key_partition_id == context.partition_num){
         return TransactionResult::ABORT_NORETRY;
       }

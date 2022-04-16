@@ -47,8 +47,8 @@ public:
   static std::size_t get_c_phase_query_num(const star::tpcc::Context &context,
                                            uint32_t batch_size, bool is_lion_king) {
     if (context.workloadType == star::tpcc::TPCCWorkloadType::NEW_ORDER_ONLY) {
-      return context.coordinator_num * batch_size *
-             context.newOrderCrossPartitionProbability / 100;
+      return  batch_size *
+             context.newOrderCrossPartitionProbability / 100; // context.coordinator_num *
     } else if (context.workloadType ==
                star::tpcc::TPCCWorkloadType::PAYMENT_ONLY) {
       return context.coordinator_num * batch_size *

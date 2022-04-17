@@ -20,11 +20,13 @@ enum class StarMessage {
   SYNC_VALUE_REPLICATION_REQUEST,
   SYNC_VALUE_REPLICATION_RESPONSE,
   OPERATION_REPLICATION_REQUEST,
+  ROUTER_TRANSACTION_REQUEST,
+  ROUTER_TRANSACTION_RESPONSE,
   NFIELDS
 };
 
 class StarMessageFactory {
-
+using Transaction = SiloTransaction;
 public:
   static std::size_t new_async_value_replication_message(Message &message,
                                                          ITable &table,
@@ -136,7 +138,50 @@ public:
     message.flush();
     return message_size;
   }
+
+  static std::size_t new_router_transaction_message(Message &message, int table_id, 
+                                                    Transaction *txn, uint64_t op){
+    // 
+    // op = src_coordinator_id
+    auto update_ = txn->get_query_update();
+    auto key_ = txn->get_query();
+    uint64_t txn_size = (uint64_t)key_.size();
+    auto key_size = sizeof(uint64_t);
+    
+    auto message_size =
+        MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(StarMessage::ROUTER_TRANSACTION_REQUEST), message_size,
+        table_id, 0);
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder << op << txn_size;
+    for(size_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key = key_[i];
+      bool update = update_[i];
+      encoder.write_n_bytes((void*) &key, key_size);
+      encoder.write_n_bytes((void*) &update, sizeof(bool));
+//      LOG(INFO) <<  key_[i] << " " << update_[i];
+    }
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t router_transaction_response_message(Message &message){
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(StarMessage::ROUTER_TRANSACTION_RESPONSE), message_size,
+        0, 0);
+
+    star::Encoder encoder(message.data);
+    encoder << message_piece_header;
+    message.flush();
+    return message_size;
+  }
 };
+
 
 template <class Database> class StarMessageHandler {
 
@@ -146,7 +191,8 @@ public:
   static void async_value_replication_request_handler(MessagePiece inputPiece,
                                                       Message &responseMessage,
                                                       Database &db,
-                                                      Transaction *txn) {
+                                                      Transaction *txn,
+                                      std::deque<simpleTransaction>* router_txn_queue) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::ASYNC_VALUE_REPLICATION_REQUEST));
@@ -204,7 +250,8 @@ public:
   static void sync_value_replication_request_handler(MessagePiece inputPiece,
                                                      Message &responseMessage,
                                                      Database &db,
-                                                     Transaction *txn) {
+                                                     Transaction *txn,
+                                      std::deque<simpleTransaction>* router_txn_queue) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
@@ -270,7 +317,8 @@ public:
   static void sync_value_replication_response_handler(MessagePiece inputPiece,
                                                       Message &responseMessage,
                                                       Database &db,
-                                                      Transaction *txn) {
+                                                      Transaction *txn,
+                                      std::deque<simpleTransaction>* router_txn_queue) {
     return ;
     // DCHECK(false);
     // never come in
@@ -295,7 +343,8 @@ public:
   static void operation_replication_request_handler(MessagePiece inputPiece,
                                                     Message &responseMessage,
                                                     Database &db,
-                                                    Transaction *txn) {
+                                                    Transaction *txn,
+                                      std::deque<simpleTransaction>* router_txn_queue) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::OPERATION_REPLICATION_REQUEST));
@@ -316,17 +365,72 @@ public:
     db.apply_operation(operation);
   }
 
+  static void router_transaction_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db,
+                                      Transaction *txn,
+                                      std::deque<simpleTransaction>* router_txn_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(StarMessage::ROUTER_TRANSACTION_REQUEST));
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint64_t txn_size, op;
+    simpleTransaction new_router_txn;
+
+    // get op
+    op = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(op));
+
+    // get key_size
+    txn_size = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(txn_size));
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + 
+           (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
+
+    star::Decoder dec(stringPiece);
+    for(uint64_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key;
+      bool update;
+
+      key = *(uint64_t*)stringPiece.data();
+      stringPiece.remove_prefix(sizeof(key));
+
+      update = *(bool*)stringPiece.data();
+      stringPiece.remove_prefix(sizeof(update));
+
+      new_router_txn.keys.push_back(key);
+      new_router_txn.update.push_back(update);
+    }
+
+    new_router_txn.op = static_cast<RouterTxnOps>(op);
+    router_txn_queue->push_back(new_router_txn);
+
+  }
+  static void router_transaction_response_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db,
+                                      Transaction *txn,
+                                      std::deque<simpleTransaction>* router_txn_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(StarMessage::ROUTER_TRANSACTION_RESPONSE));
+    return;
+
+}
   static std::vector<
-      std::function<void(MessagePiece, Message &, Database &, Transaction *)>>
+      std::function<void(MessagePiece, Message &, Database &, Transaction *, std::deque<simpleTransaction>* )>>
   get_message_handlers() {
     std::vector<
-        std::function<void(MessagePiece, Message &, Database &, Transaction *)>>
+        std::function<void(MessagePiece, Message &, Database &, Transaction *, std::deque<simpleTransaction>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(StarMessageHandler::async_value_replication_request_handler);
     v.push_back(StarMessageHandler::sync_value_replication_request_handler);
     v.push_back(StarMessageHandler::sync_value_replication_response_handler);
     v.push_back(StarMessageHandler::operation_replication_request_handler);
+    v.push_back(StarMessageHandler::router_transaction_handler);
+    v.push_back(StarMessageHandler::router_transaction_response_handler);
     return v;
   }
 };

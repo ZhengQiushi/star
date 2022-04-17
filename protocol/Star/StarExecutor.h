@@ -16,7 +16,7 @@
 #include "protocol/Star/StarQueryNum.h"
 
 #include <chrono>
-#include <queue>
+#include <deque>
 
 namespace star {
 
@@ -76,6 +76,9 @@ public:
 
     // sync responds that need to be received 
     async_message_num.store(0);
+
+    router_transaction_done.store(0);
+    router_transactions_send.store(0);
   }
   void trace_txn(){
     if(coordinator_id == 0 && id == 0){
@@ -106,6 +109,47 @@ public:
     }
     async_message_num.store(0);
     async_message_respond_num.store(0);
+  }
+
+  void router_fence(){
+
+    
+    while(router_transaction_done.load() != router_transactions_send.load()){
+
+
+      process_request();
+    }
+    router_transaction_done.store(0);
+    router_transactions_send.store(0);
+  }
+
+  void unpack_route_transaction(WorkloadType& c_workload, StorageType& storage){
+    while(!router_transactions_queue.empty()){
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      router_transactions_queue.pop_front();
+
+      auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
+      r_transactions_queue.push_back(std::move(p));
+
+      r_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
+    }
+  }
+  
+  void router_transaction_to_coordinator(){
+    DCHECK(context.coordinator_id != 0);
+    
+    size_t batch_size = c_transactions_queue.size();
+    for(size_t i = 0; i < batch_size; i ++ ){
+      TransactionType* txn = c_transactions_queue.front().get();
+      txn->network_size += MessageFactoryType::new_router_transaction_message(
+          *(this->async_messages[0]), ycsb::ycsb::tableID, txn, 
+          context.coordinator_id);
+
+      router_transactions_send.fetch_add(1);
+      c_transactions_queue.pop_front();
+      flush_async_messages();
+    }
+    
   }
   void start() override {
 
@@ -148,16 +192,19 @@ public:
       if (coordinator_id == 0) {
         LOG(WARNING) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
-        run_transaction(ExecutorStatus::C_PHASE, async_message_num);
+        run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
         
-        // replication_fence(ExecutorStatus::C_PHASE);
         n_complete_workers.fetch_add(1);
         LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       } else {
         
         n_started_workers.fetch_add(1);
-         LOG(WARNING) << "worker " << id << " ready to process_request";
+        LOG(WARNING) << "worker " << id << " ready to process_request";
+        router_transaction_to_coordinator(); // c_txn send to coordinator
+        auto router_num = router_transactions_send.load();
+        LOG(INFO) << "C" << context.coordinator_id << " -> " << "C0 : " << router_num; 
+        router_fence(); // wait for coordinator to response
 
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
                ExecutorStatus::C_PHASE) {
@@ -176,9 +223,23 @@ public:
       
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
-        std::this_thread::yield();
+        process_request(); 
+        unpack_route_transaction(c_workload, storage); // 
+        if(r_transactions_queue.size() > 0){
+          size_t r_size = r_transactions_queue.size();
+          run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue, async_message_num); // 
+          for(size_t r = 0; r < r_size; r ++ ){
+            // 发回原地...
+            size_t router_return_coordinator_id = r_source_coordinator_ids[r];
+            StarMessageFactory::router_transaction_response_message(*(this->async_messages[router_return_coordinator_id]));
+            flush_async_messages();
+          }
+          
+        }
       }
-       LOG(WARNING) << "worker " << id << " s_phase";
+
+      replication_fence(ExecutorStatus::C_PHASE);
+      LOG(WARNING) << "worker " << id << " s_phase";
 
       // commit transaction in c_phase;
       commit_transactions();
@@ -190,17 +251,18 @@ public:
       if(id == 0){
         // LOG(INFO) << "debug";
       }
-      run_transaction(ExecutorStatus::S_PHASE, async_message_num);
+      run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
       
        LOG(WARNING) << "worker " << id << " ready to replication_fence";
 
-      // replication_fence(ExecutorStatus::S_PHASE);
+      replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
 
        LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       // once all workers are stop, we need to process the replication
       // requests
+
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::S_PHASE) {
         process_request();
@@ -221,41 +283,6 @@ public:
 
 
   }
-
-  // bool check_cross_txn(std::unique_ptr<TransactionType>& cur_transaction, bool& success){
-  //   /**
-  //    * @brief 判断是不是跨分区事务
-  //    * @return true/false
-  //    */
-  //       auto query_keys = cur_transaction->get_query();
-
-  //       int32_t first_key;
-  //       size_t first_key_partition_id;
-  //       bool is_cross_txn = false;
-  //       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-  //         // judge if is cross txn
-  //         if(j == 0){
-  //           first_key = query_keys[j];
-  //           first_key_partition_id = db.getPartitionID(context, first_key);
-  //           if(first_key_partition_id == context.partition_num){
-  //             success = false;
-  //             break;
-  //           }
-  //         } else {
-  //           auto cur_key = query_keys[j];
-  //           auto cur_key_partition_id = db.getPartitionID(context, cur_key);
-  //           if(cur_key_partition_id == context.partition_num) {
-  //             success = false;
-  //             break;
-  //           }
-  //           if(cur_key_partition_id != first_key_partition_id){
-  //             is_cross_txn = true;
-  //             break;
-  //           }
-  //         }
-  //       }
-  //   return is_cross_txn;
-  // }
 
   void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
     /** 
@@ -309,50 +336,29 @@ public:
           cur_transaction = s_workload.next_transaction(s_context, partition_id, storage);
         }
         // 甄别一下？
-        bool is_success = true;
+        bool is_cross_txn_dynamic = cur_transaction->check_cross_node_txn(true);
+        bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
 
-        bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
-        if(is_success){
-          if(is_cross_txn && status == ExecutorStatus::S_PHASE){
-            LOG(INFO) << "what?";
-            bool is_cross_txn = cur_transaction->check_cross_txn(is_success);
-          }
+        if(is_cross_txn_dynamic || is_cross_txn_static){ //cur_status == ExecutorStatus::C_PHASE){
+          // if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
+            // TODO: 暂时不考虑部分副本处理跨分区事务...
+          c_transactions_queue.push_back(std::move(cur_transaction));
+          // }
+        } else {
+          s_transactions_queue.push_back(std::move(cur_transaction));
         }
-        if(is_success){
-          if(is_cross_txn){ //cur_status == ExecutorStatus::C_PHASE){
-            if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
-              // TODO: 暂时不考虑部分副本处理跨分区事务...
-              c_transactions_queue.push(std::move(cur_transaction));
-            }
-          } else {
-            s_transactions_queue.push(std::move(cur_transaction));
-          }
-        }
-
       } // END FOR
     }
-    if(id == 0){
-      res.push_back(std::make_pair(c_transactions_queue.size(), s_transactions_queue.size()));
-      LOG(INFO) << id << " prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
-        s_transactions_queue.size();
-    }
+
     return;
   }
-  
-  void commit_transactions() {
-    /**
-     * @brief 
-     * 
-     */
 
+  void commit_transactions() {
     while (!q.empty()) {
       auto &ptr = q.front();
       auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
                          std::chrono::steady_clock::now() - ptr->startTime)
                          .count();
-      // if (context.star_sync_in_single_master_phase){
-      //   Star<DatabaseType>::sync_messages(*ptr);
-      // }
       percentile.add(latency);
       q.pop();
     }
@@ -364,7 +370,6 @@ public:
 
     if (status == ExecutorStatus::C_PHASE) {
       // 从当前线程管的分区里随机选一个
-
       // CHECK(coordinator_id == 0);
       // CHECK(context.partition_num % context.worker_num == 0);
       auto partition_num_per_thread =
@@ -372,25 +377,22 @@ public:
       partition_id = id * partition_num_per_thread +
                      random.uniform_dist(0, partition_num_per_thread - 1);
     } else if (status == ExecutorStatus::S_PHASE) {
-      // 
       partition_id = id * context.coordinator_num + coordinator_id;
     } else {
       CHECK(false);
     }
 
-    // if(partition_id > 10 && status == ExecutorStatus::S_PHASE){
-    //   LOG(INFO) << "TEST";
-    // }
     return partition_id;
   }
 
-  void run_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
+  void run_transaction(ExecutorStatus status, 
+                       std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue, 
+                       std::atomic<uint32_t>& async_message_num) {
     /**
      * @brief 
      * @note modified by truth 22-01-24
      *       
     */
-    std::queue<std::unique_ptr<TransactionType>>* cur_transactions_queue = nullptr;
     // std::size_t query_num = 0;
 
     Partitioner *partitioner = nullptr;
@@ -406,7 +408,6 @@ public:
       //     StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
       phase_context = context.get_cross_partition_context(); //  c_context; // 
 
-      cur_transactions_queue = &c_transactions_queue;
 
     } else if (status == ExecutorStatus::S_PHASE) {
       partitioner = s_partitioner.get();
@@ -414,7 +415,6 @@ public:
       //     StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
       phase_context = context.get_single_partition_context(); // s_context;// 
 
-      cur_transactions_queue = &s_transactions_queue;
     } else {
       CHECK(false);
     }
@@ -482,7 +482,7 @@ public:
         }
       } while (retry_transaction);
 
-      cur_transactions_queue->pop();
+      cur_transactions_queue->pop_front();
 
       if (i % phase_context.batch_flush == 0) {
         flush_async_messages(); 
@@ -528,6 +528,14 @@ public:
           // LOG(INFO) << "recv : " << ++total_async;
           // async_message_num.fetch_sub(1);
           async_message_respond_num.fetch_add(1);
+        } else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_RESPONSE)){
+          static int router_done = 0;
+          
+          // LOG(INFO) << "recv : " << ++router_done;
+          router_transaction_done.fetch_add(1);
+        } else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_REQUEST)){
+           static int router_recv = 0;
+          // LOG(INFO) << "recv ROUTER_TRANSACTION_REQUEST : " << ++ router_recv;
         }
       }
 
@@ -573,7 +581,8 @@ private:
 
         messageHandlers[type](messagePiece,
                               *sync_messages[message->get_source_node_id()], db,
-                              transaction.get());
+                              transaction.get(),
+                              &router_transactions_queue);
         if (logger) {
           logger->write(messagePiece.toStringPiece().data(),
                         messagePiece.get_message_length());
@@ -636,6 +645,9 @@ private:
   RandomType random;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> async_message_num;
+
+  std::atomic<uint32_t> router_transactions_send, router_transaction_done;
+
   std::atomic<uint32_t> async_message_respond_num;
 
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
@@ -647,16 +659,20 @@ private:
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
-                                 TransactionType *)>>
+                                 TransactionType *, std::deque<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue, 
                            sync_queue; // for value sync when phase switching occurs
+
+  std::deque<simpleTransaction> router_transactions_queue;
 
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 
   ContextType s_context, c_context;
 
-  std::queue<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue;
+  std::deque<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue, 
+                                               r_transactions_queue;
+  std::deque<uint64_t> r_source_coordinator_ids;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx
 

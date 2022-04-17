@@ -37,14 +37,10 @@ public:
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
                   const void *key, void *value) const {
-    /**
-     * @brief read value from the key in table[table_id] from partition[partition_id]
-     * 
-     */
+
     ITable *table = db.find_table(table_id, partition_id);
     auto value_bytes = table->value_size();
     auto row = table->search(key);
-
     return SiloHelper::read(row, value, value_bytes);
   }
 
@@ -131,6 +127,7 @@ private:
 
       bool success;
       uint64_t latestTid = SiloHelper::lock(tid, success);
+
       if (!success) {
         txn.abort_lock = true;
         cur_ptr = i;
@@ -150,6 +147,7 @@ private:
 
       writeKey.set_tid(latestTid);
     }
+
     return txn.abort_lock;
   }
 
@@ -271,11 +269,6 @@ private:
       auto value = writeKey.get_value();
 
       std::atomic<uint64_t> &tid = table->search_metadata(key);
-      if(!SiloHelper::is_locked(tid.load())){
-        DCHECK(false);
-      }
-      // 1000057
-      // 200002
       tids.push_back(&tid);
       table->update(key, value);
     }
@@ -349,13 +342,7 @@ private:
     // }
 
     for (auto i = 0u; i < tids.size(); i++) {
-      auto tmp = tids[i]->load();
-      if(SiloHelper::is_locked(tmp)){
-        SiloHelper::unlock(*tids[i], commit_tid);
-      } else {
-        DCHECK(false);
-      }
-      
+      SiloHelper::unlock(*tids[i], commit_tid);
     }
   }
 

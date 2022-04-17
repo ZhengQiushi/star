@@ -16,7 +16,6 @@
 
 namespace star {
 
-
 class SiloTransaction {
 public:
   using MetaDataType = std::atomic<uint64_t>;

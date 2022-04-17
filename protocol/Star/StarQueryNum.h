@@ -46,15 +46,16 @@ public:
 
   static std::size_t get_c_phase_query_num(const star::tpcc::Context &context,
                                            uint32_t batch_size) {
+                                             // context.coordinator_num *
     if (context.workloadType == star::tpcc::TPCCWorkloadType::NEW_ORDER_ONLY) {
-      return context.coordinator_num * batch_size *
+      return batch_size *
              context.newOrderCrossPartitionProbability / 100;
     } else if (context.workloadType ==
                star::tpcc::TPCCWorkloadType::PAYMENT_ONLY) {
-      return context.coordinator_num * batch_size *
+      return batch_size *
              context.paymentCrossPartitionProbability / 100;
     } else {
-      return context.coordinator_num *
+      return 
              (batch_size * context.newOrderCrossPartitionProbability / 100 +
               batch_size * context.paymentCrossPartitionProbability / 100) /
              2;
@@ -71,8 +72,8 @@ public:
 
   static std::size_t get_c_phase_query_num(const star::ycsb::Context &context,
                                            uint32_t batch_size) {
-    return context.coordinator_num * batch_size *
-           context.crossPartitionProbability / 100;
+    return batch_size *
+           context.crossPartitionProbability / 100; // context.coordinator_num * 
   }
 };
 } // namespace star

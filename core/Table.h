@@ -12,12 +12,6 @@
 
 namespace star {
 
-// struct RTable {
-//   // std::tuple<int, int> dynamic_dst; // <coordinator_id, is_master>
-//   // std::tuple<int, int> static_dst;
-//   size_t dynamic_coordinator_id;
-// };
-
 class ITable {
 public:
   using MetaDataType = std::atomic<uint64_t>;
@@ -37,8 +31,6 @@ public:
   virtual void delete_(const void *key) = 0;
 
   virtual void deserialize_value(const void *key, StringPiece stringPiece) = 0;
-
-  // virtual void deserialize_value_insert(const void *key, StringPiece stringPiece) = 0;
 
   virtual void serialize_value(Encoder &enc, const void *value) = 0;
 
@@ -115,6 +107,7 @@ public:
   }
 
   void deserialize_value(const void *key, StringPiece stringPiece) override {
+
     std::size_t size = stringPiece.size();
     const auto &k = *static_cast<const KeyType *>(key);
     bool ok = map_.contains(k);
@@ -127,29 +120,6 @@ public:
 
     DCHECK(size - dec.size() == ClassOf<ValueType>::size());
   }
-
-  // void deserialize_value_insert(const void *key, StringPiece stringPiece) override {
-  //   /**
-  //    * @brief update 
-  //    * 
-  //    */
-  //   std::size_t size = stringPiece.size();
-  //   const auto &k = *static_cast<const KeyType *>(key);
-    
-  //   // insert 
-  //   bool ok = map_.contains(k);
-  //   DCHECK(ok == false);
-  //   auto &row = map_[k];
-  //   std::get<0>(row).store(0);
-
-  //   // update
-  //   auto &v = std::get<1>(row);
-
-  //   Decoder dec(stringPiece);
-  //   dec >> v;
-
-  //   DCHECK(size - dec.size() == ClassOf<ValueType>::size());
-  // }
 
   void serialize_value(Encoder &enc, const void *value) override {
 

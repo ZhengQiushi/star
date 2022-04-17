@@ -187,24 +187,24 @@ public:
     CHECK(false); // not supported
   }
 
-  template<typename KeyType>
-  std::size_t getPartitionID(const star::Context &context, std::size_t table_id, KeyType key) const{
-    /**
-     * @brief 返回这个key所在的partition
-     * @note key 如果不在local 副本，则返回context.partition_num
-     * 
-     */
-    size_t i = 0;
-    for( ; i < context.partition_num; i ++ ){
-      ITable *table = tbl_ycsb_vec[i].get();
-      bool is_exist = table->contains((void*)& key);
+  // template<typename KeyType>
+  // std::size_t getPartitionID(const star::Context &context, std::size_t table_id, KeyType key) const{
+  //   /**
+  //    * @brief 返回这个key所在的partition
+  //    * @note key 如果不在local 副本，则返回context.partition_num
+  //    * 
+  //    */
+  //   size_t i = 0;
+  //   for( ; i < context.partition_num; i ++ ){
+  //     ITable *table = tbl_ycsb_vec[i].get();
+  //     bool is_exist = table->contains((void*)& key);
       
-      if(is_exist)
-        break;
-    }
-    // DCHECK(i != context.partition_num);
-    return i;
-  }
+  //     if(is_exist)
+  //       break;
+  //   }
+  //   // DCHECK(i != context.partition_num);
+  //   return i;
+  // }
 
   template<typename KeyType>
   std::set<int32_t> getPartitionIDs(const star::Context &context, KeyType key) const{

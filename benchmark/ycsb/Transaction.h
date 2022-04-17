@@ -242,81 +242,6 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   };
 
-  
-  // TransactionResult local_execute(std::size_t worker_id) override {
-
-  //   DCHECK(context.keysPerTransaction == keys_num);
-
-  //   int ycsbTableID = ycsb::tableID;
-
-  //   for (auto i = 0u; i < keys_num; i++) {
-  //     auto key = query.Y_KEY[i];
-  //     storage.ycsb_keys[i].Y_KEY = key;
-
-  //     auto key_partition_id = key / context.keysPerPartition;
-      
-  //     if (query.UPDATE[i]) {
-  //       this->search_for_update(ycsbTableID, key_partition_id,
-  //                               storage.ycsb_keys[i], storage.ycsb_values[i]);
-  //     } else {
-  //       this->search_for_read(ycsbTableID, key_partition_id,
-  //                             storage.ycsb_keys[i], storage.ycsb_values[i]);
-  //     }
-  //   }
-
-  //   if (this->process_local_requests(worker_id)) {
-  //     // 
-
-  //     return TransactionResult::NOT_LOCAL_NORETRY;
-  //   }
-
-  //   for (auto i = 0u; i < keys_num; i++) {
-  //     auto key = query.Y_KEY[i];
-  //     if (query.UPDATE[i]) {
-
-  //       if (this->execution_phase) {
-  //         RandomType local_random;
-  //         storage.ycsb_values[i].Y_F01.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F02.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F03.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F04.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F05.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F06.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F07.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F08.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F09.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //         storage.ycsb_values[i].Y_F10.assign(
-  //             local_random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
-  //       }
-
-  //       auto key_partition_id = key / context.keysPerPartition;
-
-  //       this->update(ycsbTableID, key_partition_id,  // key_partition_id
-  //                    storage.ycsb_keys[i], storage.ycsb_values[i]);
-  //     }
-  //   }
-
-  //   if (this->execution_phase && context.nop_prob > 0) {
-  //     auto x = random.uniform_dist(1, 10000);
-  //     if (x <= context.nop_prob) {
-  //       for (auto i = 0u; i < context.n_nop; i++) {
-  //         asm("nop");
-  //       }
-  //     }
-  //   }
-
-  //   return TransactionResult::READY_TO_COMMIT;
-  // }
-
 
   void reset_query() override {
     query = makeYCSBQuery<keys_num>()(context, partition_id, random, db);
@@ -358,7 +283,7 @@ public:
           // judge if is cross txn
           if(j == 0){
             first_key = query_keys[j];
-            first_key_partition_id = db.getPartitionID(context, ycsbTableID, first_key);
+            first_key_partition_id = context.getPartitionID(first_key);// db.getPartitionID(context, ycsbTableID, first_key);
             if(first_key_partition_id == context.partition_num){
               // cant find this key in current partition
               success = false;
@@ -366,7 +291,7 @@ public:
             }
           } else {
             auto cur_key = query_keys[j];
-            auto cur_key_partition_id = db.getPartitionID(context, ycsbTableID, cur_key);
+            auto cur_key_partition_id = context.getPartitionID(cur_key);
             if(cur_key_partition_id == context.partition_num) {
               success = false;
               break;

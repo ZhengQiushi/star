@@ -373,9 +373,14 @@ public:
         bool is_success = true;
         // first figure out which can be execute on S_Phase(static_replica)
         bool is_cross_txn_static = cur_transaction->check_cross_node_txn(false);
-        bool is_cross_txn_dynamic = cur_transaction->check_cross_node_txn(true);
 
-        bool is_cross_node_global = cur_transaction->txn_nodes_involved(true).size() > 1;
+        std::set<int> from_nodes_id = std::move(cur_transaction->txn_nodes_involved(true));
+        bool is_cross_node_global = from_nodes_id.size() > 1; // on the same-node or not
+
+        from_nodes_id.insert(context.coordinator_id);
+        bool is_cross_txn_dynamic = from_nodes_id.size() > 1;
+
+        
         
         // bool is_cross_txn = cur_transaction->check_cross_txn_with_remastering(is_success, status == ExecutorStatus::C_PHASE);
         // if(is_success){

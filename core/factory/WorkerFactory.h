@@ -26,13 +26,11 @@
 #include "protocol/Star/Star.h"
 #include "protocol/Star/StarExecutor.h"
 #include "protocol/Star/StarManager.h"
-#include "protocol/Star/StarRecorder.h"
 
 
 #include "protocol/Lion/Lion.h"
 #include "protocol/Lion/LionExecutor.h"
 #include "protocol/Lion/LionManager.h"
-#include "protocol/Lion/LionRecorder.h"
 
 #include "protocol/Calvin/Calvin.h"
 #include "protocol/Calvin/CalvinExecutor.h"

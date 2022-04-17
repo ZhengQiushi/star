@@ -289,6 +289,7 @@ public:
   std::size_t master_coordinator(std::size_t partition_id) const override {
     return 0;
   }
+
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
     DCHECK(false);
     return (partition_id) % coordinator_num;
@@ -297,7 +298,6 @@ public:
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id < coordinator_num);
 
-    // 全副本节点上，所有分区都有
     if (coordinator_id == 0)
       return true;
     // 非全副本节点需要判断
@@ -595,7 +595,7 @@ public:
     DCHECK(false);    
     return true;// coordinator_id == master_id || coordinator_id == secondary_id;
   }
-  
+
   bool is_backup() const override { return coordinator_id != 0; }
 
   bool is_dynamic() const override { return false; };
@@ -603,7 +603,6 @@ public:
 private:
   DatabaseType& db;
 };
-
 
 class CalvinPartitioner : public Partitioner {
 

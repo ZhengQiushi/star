@@ -71,6 +71,9 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
 
+    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -92,6 +95,10 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
 
+    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+
+
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -112,6 +119,9 @@ public:
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
+    
+    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
     readKey.set_key(&key);
     readKey.set_value(&value);
@@ -132,6 +142,10 @@ public:
 
     writeKey.set_table_id(table_id);
     writeKey.set_partition_id(partition_id);
+
+    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    writeKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+
 
     writeKey.set_key(&key);
     // the object pointed by value will not be updated

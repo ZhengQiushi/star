@@ -186,12 +186,12 @@ public:
       // }
       
       //// for debug 
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-        for(int i = 0 ; i < 12; i ++ ){
-          ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-          LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-        }
-      }
+      // if(WorkloadType::which_workload == myTestSet::YCSB){
+      //   for(int i = 0 ; i < 12; i ++ ){
+      //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+      //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+      //   }
+      // }
 
       // cur_data_transform_num ++;
 

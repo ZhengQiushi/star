@@ -22,3 +22,5 @@ cmake/*
 !core/
 !protocol/
 !scripts/
+
+*.py

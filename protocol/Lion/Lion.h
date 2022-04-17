@@ -70,9 +70,9 @@ public:
       auto key = writeKey.get_key();
 
       // remote
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+      auto coordinatorID = writeKey.get_dynamic_coordinator_id();
 
-      if (partitioner.has_master_partition(tableId, partitionId, key)) {
+      if (coordinatorID == context.coordinator_id) {
         
         std::atomic<uint64_t> &tid = table->search_metadata(key);
         HelperType::unlock(tid);
@@ -102,9 +102,9 @@ public:
         auto table = db.find_table(tableId, partitionId);
         auto key = routerKey.get_key();
             
-        auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
         if(partitioner.is_dynamic()){
           // unlock dynamic replica
+          auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
           auto router_table = db.find_router_table(tableId, coordinatorID);
           std::atomic<uint64_t> &tid = router_table->search_metadata(key);
           HelperType::unlock(tid);
@@ -123,9 +123,10 @@ public:
       auto table = db.find_table(tableId, partitionId);
       auto key = routerKey.get_key();
           
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
       if(partitioner.is_dynamic()){
         // unlock dynamic replica
+        auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
+        
         auto router_table = db.find_router_table(tableId, coordinatorID);
         std::atomic<uint64_t> &tid = router_table->search_metadata(key);
         bool success = true;
@@ -188,10 +189,10 @@ private:
       auto key = writeKey.get_key();
 
       // 
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+      auto coordinatorID = writeKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
 
       // lock local records
-      if (partitioner.has_master_partition(tableId, partitionId, key)) {
+      if (coordinatorID == context.coordinator_id) {
         
         std::atomic<uint64_t> &tid = table->search_metadata(key);
         bool success;
@@ -268,8 +269,8 @@ private:
 
 
       // lock 
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
-      if (partitioner.has_master_partition(tableId, partitionId, key)) {
+      auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
+      if (coordinatorID == context.coordinator_id) {
         // local read
         uint64_t latest_tid = table->search_metadata(key).load();
         if (HelperType::remove_lock_bit(latest_tid) != tid) {
@@ -353,7 +354,7 @@ private:
       auto key = writeKey.get_key();
 
       // lock dynamic replica
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+      auto coordinatorID = writeKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       // auto router_table = db.find_router_table(tableId, coordinatorID);
       // std::atomic<uint64_t> &tid_ = router_table->search_metadata(key);
 
@@ -362,7 +363,7 @@ private:
       // LOG(INFO) << "LOCK " << *(int*)key;
       
       // write
-      if (partitioner.has_master_partition(tableId, partitionId, key)) {
+      if (coordinatorID == context.coordinator_id) {
         
         auto value = writeKey.get_value();
         table->update(key, value);
@@ -386,7 +387,7 @@ private:
         }
 
         // already write
-        if (k == partitioner.master_coordinator(tableId, partitionId, key)) {
+        if (k == coordinatorID) {
           continue;
         }
 
@@ -430,9 +431,9 @@ private:
       auto table = db.find_table(tableId, partitionId);
       auto key = writeKey.get_key();
 
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
+      auto coordinatorID = writeKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       // write
-      if (partitioner.has_master_partition(tableId, partitionId, key)) {
+      if (coordinatorID == context.coordinator_id) {
         
         auto value = writeKey.get_value();
         std::atomic<uint64_t> &tid = table->search_metadata(key);
@@ -460,9 +461,10 @@ private:
       auto table = db.find_table(tableId, partitionId);
       auto key = readKey.get_key();
           
-      auto coordinatorID = partitioner.master_coordinator(tableId, partitionId, key);
       if(partitioner.is_dynamic()){
         // unlock dynamic replica
+        auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
+
         auto router_table = db.find_router_table(tableId, coordinatorID);
         std::atomic<uint64_t> &tid = router_table->search_metadata(key);
         HelperType::unlock_if_locked(tid);

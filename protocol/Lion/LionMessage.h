@@ -482,6 +482,8 @@ std::deque<simpleTransaction>* router_txn_queue
       }
            
       // SiloHelper::unlock(tid_r_new); 
+      // update txn->writekey dynamic coordinator_id
+      readKey.set_dynamic_coordinator_id(coordinator_id_new);
     }
 
   }

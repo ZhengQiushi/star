@@ -89,6 +89,9 @@ public:
 
     s_protocol = new ProtocolType(db, s_context, *s_partitioner, id);
     c_protocol = new ProtocolType(db, c_context, *l_partitioner, id);
+
+    my_batch_size = batch_size;
+
     // sync responds that need to be received 
     async_message_num.store(0);
   }
@@ -148,14 +151,14 @@ public:
     // C-Phase to S-Phase, to C-phase ...
 
     for (;;) {
-
+      auto begin = std::chrono::steady_clock::now();
       ExecutorStatus status;
       size_t lion_king_coordinator_id;
       bool is_lion_king = false;
 
       do {
         std::tie(lion_king_coordinator_id, status) = split_signal(static_cast<ExecutorStatus>(worker_status.load()));
-        
+        process_request();
         if (status == ExecutorStatus::EXIT) {
           // commit transaction in s_phase;
           commit_transactions();
@@ -178,7 +181,18 @@ public:
 
       is_lion_king = (coordinator_id == lion_king_coordinator_id);
       // 准备transaction
+      auto now = std::chrono::steady_clock::now();
+      
+
       prepare_transactions_to_run(c_workload, s_workload, storage, is_lion_king);
+
+      LOG(INFO) << "prepare_transactions_to_run "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
       if(id == 0){
         // LOG(INFO) << "debug";
         LOG(INFO) << id << " prepare_transactions_to_run \n" << 
@@ -196,12 +210,17 @@ public:
 
         LOG(INFO) << "planning_ratio: " << planning_ratio;
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          if(planning_ratio > 0){
-            transaction_planning();
-            run_transaction_with_router(ExecutorStatus::C_PHASE, async_message_num);
+          if(planning_ratio == 0){
+            my_batch_size = batch_size; // 10000;
           } else {
-            run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue, async_message_num, true);
+            my_batch_size = batch_size; // int(1000 / planning_ratio);
           }
+          // if(planning_ratio > 0){
+          //   transaction_planning();
+          //   run_transaction_with_router(ExecutorStatus::C_PHASE, async_message_num);
+          // } else {
+            run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue, async_message_num, true);
+          // }
         } else if(WorkloadType::which_workload == myTestSet::TPCC){
           run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue, async_message_num, true);
         } else {
@@ -246,6 +265,14 @@ public:
          LOG(WARNING) << "worker " << id << " finish process_request for replication";
       }
 
+
+      LOG(INFO) << "c_phase "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
       // wait to s_phase
       LOG(WARNING) << "worker " << id << " wait to s_phase";
       
@@ -258,6 +285,13 @@ public:
       }
        LOG(WARNING) << "worker " << id << " s_phase";
 
+      LOG(INFO) << "wait for switch "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
       // commit transaction in c_phase;
       commit_transactions();
 
@@ -265,7 +299,7 @@ public:
       // partitioner = s_partitioner.get();
 
       n_started_workers.fetch_add(1);
-       LOG(WARNING) << "worker " << id << " ready to run_transaction_single_phase";
+      LOG(WARNING) << "worker " << id << " ready to run_transaction_single_phase";
       if(id == 0){
         // LOG(INFO) << "debug";
         LOG(INFO) << id << " prepare_transactions_to_run \n" << 
@@ -274,13 +308,22 @@ public:
         "s single = " << s_transactions_queue.size();
       }
 
-      if(is_lion_king){
-        run_local_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num, 
-                              c_single_transactions_queue.size());
-      } else {
-        run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 
-                              r_single_transactions_queue.size());
-      }
+      // if(is_lion_king){
+      //   run_local_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num, 
+      //                         c_single_transactions_queue.size());
+      // } else {
+      //   run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 
+      //                         r_single_transactions_queue.size());
+      // }
+      
+      run_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num);
+
+      LOG(INFO) << "c_single_transactions_queue "
+       << std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - now)
+              .count()
+       << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
       run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
       
@@ -290,6 +333,13 @@ public:
       n_complete_workers.fetch_add(1);
 
        LOG(WARNING) << "worker " << id << " finish run_transaction_transaction";
+
+      LOG(INFO) << "s_phase "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
       // once all workers are stop, we need to process the replication
       // requests
@@ -308,10 +358,18 @@ public:
       n_complete_workers.fetch_add(1);
        LOG(WARNING) << "worker " << id << " finish process_request for replication";
 
-    //   if(id == 0){
-    //   LOG(INFO) << id << " over prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
-    //     s_transactions_queue.size();
-    // }
+      LOG(INFO) << "wait for switch back "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
+      LOG(INFO) << "whole batch "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
     }
 
 
@@ -341,14 +399,14 @@ public:
 
       if (status == ExecutorStatus::C_PHASE) {
         query_num =
-             LionQueryNum<ContextType>::get_c_phase_query_num(context, batch_size, is_lion_king);
+             LionQueryNum<ContextType>::get_c_phase_query_num(context, my_batch_size, is_lion_king);
         phase_context = context.get_cross_partition_context(); 
         if(id == 0){
           // LOG(INFO) << "debug";
         }
       } else if (status == ExecutorStatus::S_PHASE) {
         query_num =
-            LionQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
+            LionQueryNum<ContextType>::get_s_phase_query_num(context, my_batch_size);
         phase_context = context.get_single_partition_context(); 
         if(id == 0){
           // LOG(INFO) << "debug";
@@ -412,13 +470,6 @@ public:
     }
 
     planning_ratio /= query_num_sum;
-    // if(id == 0){
-    //   res.push_back(std::make_pair(c_transactions_queue.size(), s_transactions_queue.size()));
-    //   LOG(INFO) << id << " prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
-    //     c_single_transactions_queue.size() << " " << 
-    //     r_transactions_queue.size() << " " << 
-    //     s_transactions_queue.size();
-    // }
     return;
   }
   
@@ -496,6 +547,7 @@ public:
 
       } else {
         // remote node single-parition-txn
+        DCHECK(false);
         TransactionType* txn = transaction.get();
         txn->network_size += MessageFactoryType::new_router_transaction_message(
             *(this->async_messages[router_dest]), ycsb::ycsb::tableID, txn, 
@@ -1550,6 +1602,11 @@ public:
       CHECK(false);
     }
 
+    int time1 = 0;
+    int time2 = 0;
+    int time3 = 0;
+    int time4 = 0;
+
     uint64_t last_seed = 0;
 
     auto i = 0u;
@@ -1565,7 +1622,7 @@ public:
       transaction =
               std::move(cur_transactions_queue->front());
 
-      if(naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
+      if(false){ //naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
         // pass
         router_txn_num++;
       } else {
@@ -1581,18 +1638,38 @@ public:
           } else {
             setupHandlers(*transaction, *protocol);
           }
+
+          auto now = std::chrono::steady_clock::now();
+
           // auto result = transaction->execute(id);
           transaction->prepare_read_execute(id);
+
+          time4 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+          
           bool get_all_router_lock = protocol->lock_router_set(*transaction);
           if(get_all_router_lock == false){
             retry_transaction = true;
             protocol->router_abort(*transaction);
+            LOG(INFO) << "OMG!!!";
             continue;
           }
+
+          time1 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+          
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
 
           auto result2 = transaction->prepare_update_execute(id);
           // auto result = transaction->execute(id);
+          time2 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
 
           if (result == TransactionResult::READY_TO_COMMIT && 
               result2 == TransactionResult::READY_TO_COMMIT) {
@@ -1601,6 +1678,12 @@ public:
             bool commit =
                 protocol->commit(*transaction, messages, async_message_num); // sync_messages, async_messages, record_messages, 
                                 // );
+            
+            time3 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+
             n_network_size.fetch_add(transaction->network_size);
             if (commit) {
               n_commit.fetch_add(1);
@@ -1636,9 +1719,8 @@ public:
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
-
-    
-    LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
+    LOG(INFO) << "prepare: " << time4 / 1000 << "  execute: " << time2 / 1000 << "  commit: " << time3 / 1000 << "  router : " << time1 / 1000; 
+    // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 
   // void run_fulfill_transaction(ExecutorStatus status, std::atomic<uint32_t>& async_message_num) {
@@ -1843,13 +1925,6 @@ public:
       cur_transactions_queue->pop_front();
     }
 
-    // if(id == 0){
-    //   res.push_back(std::make_pair(c_transactions_queue.size(), s_transactions_queue.size()));
-    //   LOG(INFO) << id << " prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
-    //     c_single_transactions_queue.size() << " " << 
-    //     r_transactions_queue.size() << " " << 
-    //     s_transactions_queue.size();
-    // }
   }
 
   void onExit() override {
@@ -1952,8 +2027,9 @@ private:
                      bool local_index_read) -> uint64_t {
       bool local_read = false;
       
+      auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
 
-      if (txn.partitioner.has_master_partition(table_id, partition_id, key) // ||
+      if (coordinatorID == coordinator_id // ||
           // (this->partitioner->is_partition_replicated_on(
           //      partition_id, this->coordinator_id) &&
           //  this->context.read_on_replica)
@@ -1966,11 +2042,9 @@ private:
       } else {
         // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
         ITable *table = this->db.find_table(table_id, partition_id);
-        auto coordinatorID =
-            txn.partitioner.master_coordinator(table_id, partition_id, key);
         
         for(size_t i = 0; i < context.coordinator_num; i ++ ){
-          if(i == context.coordinator_id){
+          if(i == coordinator_id){
             continue;
           }
           if(i == coordinatorID){
@@ -1988,13 +2062,15 @@ private:
     };
 
     txn.localReadRequestHandler =
-        [&txn, &protocol](std::size_t table_id, std::size_t partition_id,
+        [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
                      uint32_t key_offset, const void *key, void *value,
                      bool local_index_read) -> uint64_t {
       bool local_read = false;
 
 
-      if (txn.partitioner.has_master_partition(table_id, partition_id, key)
+      auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
+
+      if (coordinatorID == coordinator_id
            ) {
         local_read = true;
       }
@@ -2012,8 +2088,9 @@ private:
                      bool local_index_read) -> uint64_t {
       bool local_read = false;
       
+      auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
 
-      if (txn.partitioner.has_master_partition(table_id, partition_id, key) // ||
+      if (coordinatorID == coordinator_id // ||
           // (this->partitioner->is_partition_replicated_on(
           //      partition_id, this->coordinator_id) &&
           //  this->context.read_on_replica)
@@ -2025,8 +2102,8 @@ private:
         return protocol.search(table_id, partition_id, key, value);
       } else {
         ITable *table = this->db.find_table(table_id, partition_id);
-        auto coordinatorID =
-            txn.partitioner.master_coordinator(table_id, partition_id, key);
+        // auto coordinatorID =
+        //     txn.partitioner.master_coordinator(table_id, partition_id, key);
         
         txn.network_size += MessageFactoryType::new_search_read_only_message(
                 *(this->messages[coordinatorID]), *table, key, key_offset);
@@ -2108,7 +2185,7 @@ private:
                                                r_transactions_queue, r_single_transactions_queue;
   // 
   double planning_ratio;
-
+  int my_batch_size;
 
   std::deque<std::unique_ptr<TransactionType>> execution_plan_txn_queue;
   std::deque<ExecutionStep> execution_plan;

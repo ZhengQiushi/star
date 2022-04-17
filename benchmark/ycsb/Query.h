@@ -39,9 +39,16 @@ public:
     if (crossPartition <= context.crossPartitionProbability &&
           context.partition_num > 1) {
         // 跨分区
-        // 保障跨分区 key0 -> partition even
-        first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
-                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+        // 保障跨分区
+        if(key_range % 2 == 0){ // partition even
+          first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+                  random.uniform_dist(0, 
+                                      my_threshold / 2 * (static_cast<int>(context.keysPerPartition) - 1));
+        } else { // partition odd
+          first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+                  random.uniform_dist(my_threshold / 2 * (static_cast<int>(context.keysPerPartition) - 1) + 1, 
+                                      my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+        }
           // first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
           //       key_range % 2 * my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 + 
           //       random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 - 1);

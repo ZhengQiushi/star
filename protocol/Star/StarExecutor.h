@@ -158,6 +158,7 @@ public:
     // C-Phase to S-Phase, to C-phase ...
 
     for (;;) {
+      auto begin = std::chrono::steady_clock::now();
 
       ExecutorStatus status;
 
@@ -183,9 +184,16 @@ public:
       WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get());
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
       StorageType storage;
+      auto now = std::chrono::steady_clock::now();
 
       // 准备transaction
       prepare_transactions_to_run(c_workload, s_workload, storage);
+      LOG(INFO) << "prepare_transactions_to_run "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
       // c_phase
       LOG(WARNING) << "worker " << id << " c_phase";
@@ -217,7 +225,12 @@ public:
         n_complete_workers.fetch_add(1);
          LOG(WARNING) << "worker " << id << " finish process_request for replication";
       }
-
+      LOG(INFO) << "C_phase "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
       // wait to s_phase
       LOG(WARNING) << "worker " << id << " wait to s_phase";
       
@@ -243,6 +256,12 @@ public:
 
       // commit transaction in c_phase;
       commit_transactions();
+      LOG(INFO) << "C_phase router done "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
       // s_phase
 
@@ -257,6 +276,12 @@ public:
 
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
+      LOG(INFO) << "S_phase done "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
        LOG(WARNING) << "worker " << id << " finish run_transaction";
 
@@ -268,6 +293,13 @@ public:
         process_request();
       }
 
+      LOG(INFO) << "wait back "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
        LOG(WARNING) << "worker " << id << " finish process_request";
 
       // n_complete_workers has been cleared
@@ -275,6 +307,13 @@ public:
       n_complete_workers.fetch_add(1);
        LOG(WARNING) << "worker " << id << " finish process_request for replication";
 
+
+
+      LOG(INFO) << "whole batch "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
     //   if(id == 0){
     //   LOG(INFO) << id << " over prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
     //     s_transactions_queue.size();

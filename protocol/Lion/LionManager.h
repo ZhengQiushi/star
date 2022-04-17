@@ -259,38 +259,38 @@ public:
       }
     
     
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        } else {
-            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_router_table(tpcc::stock::tableID, i);
-              LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
+        // if(WorkloadType::which_workload == myTestSet::YCSB){
+        //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        //       ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
+        //       LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
+        //     // }
+        //   }
+        // } else {
+        //     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        //       ITable *dest_table = db.find_router_table(tpcc::stock::tableID, i);
+        //       LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
+        //     // }
+        //   }
+        // }
 
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          for(size_t i = 0 ; i < context.partition_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        } else {
-            for(size_t i = 0 ; i < context.partition_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        // if(WorkloadType::which_workload == myTestSet::YCSB){
+        //   for(size_t i = 0 ; i < context.partition_num; i ++ ){
+        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+        //       LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
+        //     // }
+        //   }
+        // } else {
+        //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
+        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
               
-              ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
-              LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
+        //       ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
+        //       LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
+        //     // }
+        //   }
+        // }
     
     return false;
   }

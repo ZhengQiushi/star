@@ -41,6 +41,7 @@ enum class LionMessage {
   SEARCH_REQUEST_READ_ONLY,
   SEARCH_RESPONSE_READ_ONLY,
   ROUTER_TRANSACTION,
+  IGNORE,
   NFIELDS
 };
 
@@ -179,6 +180,33 @@ public:
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::REPLICATION_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    table.serialize_value(encoder, value);
+    encoder << commit_tid;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t ignore_message(Message &message, ITable &table,
+                                             const void *key, const void *value,
+                                             uint64_t commit_tid) {
+
+    /*
+     * The structure of a replication request: (primary key, field value,
+     * commit_tid)
+     */
+
+    auto key_size = table.key_size();
+    auto field_size = table.field_size();
+
+    auto message_size = MessagePiece::get_header_size() + key_size +
+                        field_size + sizeof(commit_tid);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::IGNORE), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -355,7 +383,6 @@ std::deque<simpleTransaction>* router_txn_queue
     SiloHelper::read(row, dest, value_size);
 
     uint64_t latest_tid = SiloHelper::lock(tid, success);
-    SiloHelper::unlock_if_locked(tid);
     
     encoder << tid << key_offset << success;
 
@@ -410,7 +437,7 @@ std::deque<simpleTransaction>* router_txn_queue
 
     }
 
-
+    SiloHelper::unlock_if_locked(tid);
 
     responseMessage.flush();
   }
@@ -1219,6 +1246,32 @@ std::deque<simpleTransaction>* router_txn_queue
     router_txn_queue->push_back(new_router_txn);
   }
 
+
+  static void ignore_handler(MessagePiece inputPiece,
+                                           Message &responseMessage,
+                                           Database &db, const Context &context,  Partitioner *partitioner,
+                                           Transaction *txn,
+std::deque<simpleTransaction>* router_txn_queue
+) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::IGNORE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a replication response: ()
+     */
+
+    // txn->pendingResponses--;
+    // txn->network_size += inputPiece.get_message_length();
+  }
+
   static std::vector<
       std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, 
                          Transaction *, 
@@ -1248,6 +1301,7 @@ std::deque<simpleTransaction>* router_txn_queue
     v.push_back(search_request_original_handler);
     v.push_back(search_response_original_handler);
     v.push_back(router_transaction_handler);
+    v.push_back(ignore_handler);
     return v;
   }
 };

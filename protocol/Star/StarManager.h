@@ -294,14 +294,14 @@ public:
       LOG(INFO) << "send_ack";
 
       send_ack();
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-        for(int i = 0 ; i < 12; i ++ ){
-          if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-            ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-            LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-          }
-        }
-      }
+      // if(WorkloadType::which_workload == myTestSet::YCSB){
+      //   for(int i = 0 ; i < 12; i ++ ){
+      //     if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+      //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+      //       LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+      //     }
+      //   }
+      // }
 
       LOG(INFO) << "start S-Phase";
       

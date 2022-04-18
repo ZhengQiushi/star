@@ -379,6 +379,8 @@ private:
 
       std::size_t replicate_count = 0;
       
+      bool send_replica = false;
+
       for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
         
         // k does not have this partition
@@ -410,7 +412,14 @@ private:
               *messages[coordinatorID], *table, writeKey.get_key(),
               writeKey.get_value(), commit_tid);
           async_message_num.fetch_add(1);
+          send_replica = true;
         }
+      }
+      
+      if(send_replica == false){
+        txn.network_size += MessageFactoryType::ignore_message(
+              *messages[coordinatorID], *table, writeKey.get_key(),
+              writeKey.get_value(), commit_tid);
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }

@@ -315,7 +315,8 @@ public:
       //   run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 
       //                         r_single_transactions_queue.size());
       // }
-      
+
+      run_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num);
       run_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num);
 
       LOG(INFO) << "c_single_transactions_queue "
@@ -547,7 +548,7 @@ public:
 
       } else {
         // remote node single-parition-txn
-        DCHECK(false);
+        // DCHECK(false);
         TransactionType* txn = transaction.get();
         txn->network_size += MessageFactoryType::new_router_transaction_message(
             *(this->async_messages[router_dest]), ycsb::ycsb::tableID, txn, 
@@ -1628,7 +1629,7 @@ public:
       transaction =
               std::move(cur_transactions_queue->front());
 
-      if(false){ //naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
+      if(naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
         // pass
         router_txn_num++;
       } else {
@@ -1883,21 +1884,7 @@ public:
         }
         
         transaction->prepare_read_execute(id);
-        // bool get_all_router_lock = protocol->lock_router_set(*transaction);
-        // // get all router lock first
-        // if(get_all_router_lock == false){
-        //   retry_transaction = true;
-        //   protocol->router_abort(*transaction);
-        //   continue;
-        // } else {
-        //   // check if cross-node transaction
-        //   // is_cross_node = transaction->check_cross_node_txn(true);
-        //   // if(is_cross_node){
-        //   //   protocol.router_abort(*transaction);
-        //   //   break;
-        //   // }
-        // }
-        
+                
         result = transaction->read_execute(id, ReadMethods::LOCAL_READ);
         if(result != TransactionResult::READY_TO_COMMIT){
           if(result == TransactionResult::ABORT){

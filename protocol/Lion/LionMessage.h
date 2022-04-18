@@ -321,6 +321,7 @@ std::deque<simpleTransaction>* router_txn_queue
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
+    bool success;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + sizeof(key_offset));
@@ -337,7 +338,7 @@ std::deque<simpleTransaction>* router_txn_queue
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + value_size +
-                        sizeof(uint64_t) + sizeof(key_offset);
+                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE), message_size,
         table_id, partition_id);
@@ -350,57 +351,66 @@ std::deque<simpleTransaction>* router_txn_queue
     void *dest =
         &responseMessage.data[0] + responseMessage.data.size() - value_size;
     // read to message buffer
-    auto tid = SiloHelper::read(row, dest, value_size);
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    SiloHelper::read(row, dest, value_size);
 
-    encoder << tid << key_offset;
+    uint64_t latest_tid = SiloHelper::lock(tid, success);
+    SiloHelper::unlock_if_locked(tid);
+    
+    encoder << tid << key_offset << success;
 
-    // lock the router_table 
-    if(partitioner->is_dynamic()){
-      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-      auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
-      
-      // preemption
-      bool success;
-      std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-      uint64_t latest_tid = SiloHelper::lock(tid_r, success);
+    if(success == true){
+      // lock the router_table 
+      if(partitioner->is_dynamic()){
+        auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+        auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+        
+        // preemption
+        // bool success;
+        // // std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+        // // uint64_t latest_tid = SiloHelper::lock(tid_r, success);
 
-      if(success == false){
-        txn->abort_lock = true;
-      }
+        // if(success == false){
+        //   txn->abort_lock = true;
+        // }
 
-      // create the new tuple in global router of source request node
-      auto coordinator_id_new = responseMessage.get_dest_node_id(); 
-      DCHECK(coordinator_id_new != coordinator_id_old);
-      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+        // create the new tuple in global router of source request node
+        auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+        DCHECK(coordinator_id_new != coordinator_id_old);
+        auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
-      // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      //   ITable* tab = db.find_router_table(table_id, i);
-      //   LOG(INFO) << i << ": " << tab->table_record_num();
-      // }
+        // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+        // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        //   ITable* tab = db.find_router_table(table_id, i);
+        //   LOG(INFO) << i << ": " << tab->table_record_num();
+        // }
 
-      router_table_new->insert(key, &coordinator_id_new);
-      std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
-      SiloHelper::lock(tid_r_new); // locked, not available so far
+        router_table_new->insert(key, &coordinator_id_new);
+        // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+        // SiloHelper::lock(tid_r_new); // locked, not available so far
 
-      // delete old value in router and real-replica
-      router_table_old->delete_(key);
-      // if it is on the static replica, it can be reserved as the secondary replica
-      if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){ // || 
-        //!TODO partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
-        // local is or new destination is the static replica 
-        // pass 
+        // delete old value in router and real-replica
+        router_table_old->delete_(key);
+        // if it is on the static replica, it can be reserved as the secondary replica
+        if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){ // || 
+          //!TODO partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
+          // local is or new destination is the static replica 
+          // pass 
+          
+        } else {
+          // the value should be removed
+          table.delete_(key);
+        }
+        
+        // SiloHelper::unlock(tid_r_new); 
       } else {
-        // the value should be removed
-        table.delete_(key);
+        // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
       }
-      
-      SiloHelper::unlock(tid_r_new); 
     } else {
 
-      // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
-
     }
+
+
 
     responseMessage.flush();
   }
@@ -426,64 +436,73 @@ std::deque<simpleTransaction>* router_txn_queue
 
     uint64_t tid;
     uint32_t key_offset;
+    bool success;
 
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   value_size + sizeof(tid) +
-                                                  sizeof(key_offset));
+                                                  sizeof(key_offset) + sizeof(success));
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     stringPiece.remove_prefix(value_size);
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset;
+    dec >> tid >> key_offset >> success;
 
-    SiloRWKey &readKey = txn->readSet[key_offset];
-    dec = Decoder(inputPiece.toStringPiece());
-    dec.read_n_bytes(readKey.get_value(), value_size);
-    readKey.set_tid(tid);
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
 
-    // insert remote tuple to local replica 
-    if(partitioner->is_dynamic()){
-      // key && value
-      auto key = readKey.get_key();
-      auto value = readKey.get_value();
+    
+    if(success == true){
+      SiloRWKey &readKey = txn->readSet[key_offset];
+      dec = Decoder(inputPiece.toStringPiece());
+      dec.read_n_bytes(readKey.get_value(), value_size);
+      readKey.set_tid(tid);
 
-      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-      auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
-      
-      
-      // create the new tuple in global router of source request node
-      auto coordinator_id_new = responseMessage.get_source_node_id(); 
-      DCHECK(coordinator_id_new != coordinator_id_old);
-      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+      // insert remote tuple to local replica 
+      if(partitioner->is_dynamic()){
+        // key && value
+        auto key = readKey.get_key();
+        auto value = readKey.get_value();
 
-      // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
-      // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      //   ITable* tab = db.find_router_table(table_id, i);
-      //   LOG(INFO) << i << ": " << tab->table_record_num();
-      // }
+        auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+        auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+        
+        
+        // create the new tuple in global router of source request node
+        auto coordinator_id_new = responseMessage.get_source_node_id(); 
+        DCHECK(coordinator_id_new != coordinator_id_old);
+        auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      router_table_new->insert(key, &coordinator_id_new);
-      std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
-      SiloHelper::lock(tid_r_new); // locked, not available so far
-
-      // delete old value in router and real-replica
-      router_table_old->delete_(key);
-      // 
-
-      // already in static replica
-      //!TODO remastering
-      if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
-        // pass
-      } else {
         // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
-        table.insert(key, value); 
+        // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        //   ITable* tab = db.find_router_table(table_id, i);
+        //   LOG(INFO) << i << ": " << tab->table_record_num();
+        // }
+
+        router_table_new->insert(key, &coordinator_id_new);
+        std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+        SiloHelper::lock(tid_r_new); // locked, not available so far
+
+        // delete old value in router and real-replica
+        router_table_old->delete_(key);
+        // 
+
+        // already in static replica
+        //!TODO remastering
+        if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
+          // pass
+        } else {
+          // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+          table.insert(key, value); 
+        }
+            
+        // SiloHelper::unlock(tid_r_new); 
+        // update txn->writekey dynamic coordinator_id
+        readKey.set_dynamic_coordinator_id(coordinator_id_new);
+
       }
-           
-      // SiloHelper::unlock(tid_r_new); 
-      // update txn->writekey dynamic coordinator_id
-      readKey.set_dynamic_coordinator_id(coordinator_id_new);
+
+    } else {
+      txn->abort_lock = true;
     }
 
   }
@@ -842,7 +861,14 @@ std::deque<simpleTransaction>* router_txn_queue
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
 
-    uint64_t last_tid = SiloHelper::lock(tid);
+    bool success;
+    SiloHelper::lock(tid, success);
+    while(success != true){
+      std::this_thread::yield();
+      // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
+      SiloHelper::lock(tid, success);
+    }
+
     //! TODO logic needs to be checked
     // DCHECK(last_tid < commit_tid);
     table.deserialize_value(key, valueStringPiece);
@@ -944,6 +970,7 @@ std::deque<simpleTransaction>* router_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
+     * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
      * 
      */
     DCHECK(inputPiece.get_message_type() ==
@@ -999,13 +1026,13 @@ std::deque<simpleTransaction>* router_txn_queue
       auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
       
       // preemption
-      bool success;
-      std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-      uint64_t latest_tid = SiloHelper::lock(tid_r, success);
+      // bool success;
+      // std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
+      // uint64_t latest_tid = SiloHelper::lock(tid_r, success);
 
-      if(success == false){
-        txn->abort_lock = true;
-      }
+      // if(success == false){
+      //   txn->abort_lock = true;
+      // }
 
       // create the new tuple in global router of source request node
       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
@@ -1015,13 +1042,13 @@ std::deque<simpleTransaction>* router_txn_queue
       // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
 
       router_table_new->insert(key, &coordinator_id_new);
-      std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
-      SiloHelper::lock(tid_r_new); // locked, not available so far
+      // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+      // SiloHelper::lock(tid_r_new); // locked, not available so far
 
       // delete old value in router and real-replica
       router_table_old->delete_(key);
       
-      SiloHelper::unlock(tid_r_new); 
+      // SiloHelper::unlock(tid_r_new); 
     } else {
 
       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
@@ -1052,6 +1079,7 @@ std::deque<simpleTransaction>* router_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
+     *  最原始的只读
      * 
      */
     DCHECK(inputPiece.get_message_type() ==

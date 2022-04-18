@@ -83,65 +83,65 @@ public:
       }
     }
 
-    unlock_all_read_locks(txn);
+    // unlock_all_read_locks(txn);
     
     sync_messages(txn, false);
   }
 
-  bool router_abort(TransactionType &txn){
-    auto &routerSet = txn.routerSet;
+  // bool router_abort(TransactionType &txn){
+  //   auto &routerSet = txn.routerSet;
 
-    for (int i = int(routerSet.size()) - 1; i >= 0; i--) {
-      auto &routerKey = routerSet[i];
-      if(!routerKey.get_write_lock_bit()){
-        // only unlock the locked router-items
-        continue;
-      } else {
-        auto tableId = routerKey.get_table_id();
-        auto partitionId = routerKey.get_partition_id();
-        auto table = db.find_table(tableId, partitionId);
-        auto key = routerKey.get_key();
+  //   for (int i = int(routerSet.size()) - 1; i >= 0; i--) {
+  //     auto &routerKey = routerSet[i];
+  //     if(!routerKey.get_write_lock_bit()){
+  //       // only unlock the locked router-items
+  //       continue;
+  //     } else {
+  //       auto tableId = routerKey.get_table_id();
+  //       auto partitionId = routerKey.get_partition_id();
+  //       auto table = db.find_table(tableId, partitionId);
+  //       auto key = routerKey.get_key();
             
-        if(partitioner.is_dynamic()){
-          // unlock dynamic replica
-          auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
-          auto router_table = db.find_router_table(tableId, coordinatorID);
-          std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-          HelperType::unlock(tid);
-        }
-      }
-    }
-    return true;
-  }
+  //       if(partitioner.is_dynamic()){
+  //         // unlock dynamic replica
+  //         auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
+  //         auto router_table = db.find_router_table(tableId, coordinatorID);
+  //         std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+  //         HelperType::unlock(tid);
+  //       }
+  //     }
+  //   }
+  //   return true;
+  // }
 
-  bool lock_router_set(TransactionType &txn){
-    auto &routerSet = txn.routerSet;
-    for (auto i = 0u; i < routerSet.size(); i++) {
-      auto &routerKey = routerSet[i];
-      auto tableId = routerKey.get_table_id();
-      auto partitionId = routerKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-      auto key = routerKey.get_key();
+  // bool lock_router_set(TransactionType &txn){
+  //   auto &routerSet = txn.routerSet;
+  //   for (auto i = 0u; i < routerSet.size(); i++) {
+  //     auto &routerKey = routerSet[i];
+  //     auto tableId = routerKey.get_table_id();
+  //     auto partitionId = routerKey.get_partition_id();
+  //     auto table = db.find_table(tableId, partitionId);
+  //     auto key = routerKey.get_key();
           
-      if(partitioner.is_dynamic()){
-        // unlock dynamic replica
-        auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
+  //     if(partitioner.is_dynamic()){
+  //       // unlock dynamic replica
+  //       auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
         
-        auto router_table = db.find_router_table(tableId, coordinatorID);
-        std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-        bool success = true;
-        HelperType::lock(tid, success);
-        if(success == false){
-          return false;
-        } else {
-          routerKey.set_write_lock_bit();
-          routerKey.set_tid(tid);
-        }
-      }
+  //       auto router_table = db.find_router_table(tableId, coordinatorID);
+  //       std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+  //       bool success = true;
+  //       HelperType::lock(tid, success);
+  //       if(success == false){
+  //         return false;
+  //       } else {
+  //         routerKey.set_write_lock_bit();
+  //         routerKey.set_tid(tid);
+  //       }
+  //     }
       
-    }
-    return true;
-  }
+  //   }
+  //   return true;
+  // }
 
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &messages,
@@ -446,31 +446,31 @@ private:
 
     }
 
-    unlock_all_read_locks(txn);
+    // unlock_all_read_locks(txn);
 
     sync_messages(txn, false);
   }
 
-  void unlock_all_read_locks(TransactionType &txn){
-    auto &readSet = txn.readSet;
-    // release local lock. All data item should be moved to the current node. 
-    for (auto i = 0u; i < readSet.size(); i++) {
-      auto &readKey = readSet[i];
-      auto tableId = readKey.get_table_id();
-      auto partitionId = readKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-      auto key = readKey.get_key();
+  // void unlock_all_read_locks(TransactionType &txn){
+  //   auto &readSet = txn.readSet;
+  //   // release local lock. All data item should be moved to the current node. 
+  //   for (auto i = 0u; i < readSet.size(); i++) {
+  //     auto &readKey = readSet[i];
+  //     auto tableId = readKey.get_table_id();
+  //     auto partitionId = readKey.get_partition_id();
+  //     auto table = db.find_table(tableId, partitionId);
+  //     auto key = readKey.get_key();
           
-      if(partitioner.is_dynamic()){
-        // unlock dynamic replica
-        auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
+  //     // if(partitioner.is_dynamic()){
+  //     //   // unlock dynamic replica
+  //     //   auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
 
-        auto router_table = db.find_router_table(tableId, coordinatorID);
-        std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-        HelperType::unlock_if_locked(tid);
-      }
-    }
-  }
+  //     //   auto router_table = db.find_router_table(tableId, coordinatorID);
+  //     //   std::atomic<uint64_t> &tid = router_table->search_metadata(key);
+  //     //   HelperType::unlock_if_locked(tid);
+  //     // }
+  //   }
+  // }
   void sync_messages(TransactionType &txn, bool wait_response = true) {
     txn.message_flusher();
     if (wait_response) {

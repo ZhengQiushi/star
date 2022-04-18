@@ -1521,18 +1521,24 @@ public:
           }
           // auto result = transaction->execute(id);
           transaction->prepare_read_execute(id);
-          bool get_all_router_lock = protocol->lock_router_set(*transaction);
-          if(get_all_router_lock == false){
-            retry_transaction = true;
-            protocol->router_abort(*transaction);
-            continue;
-          }
+          // bool get_all_router_lock = protocol->lock_router_set(*transaction);
+          // if(get_all_router_lock == false){
+          //   retry_transaction = true;
+          //   protocol->router_abort(*transaction);
+          //   continue;
+          // }
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
-          auto result2 = transaction->prepare_update_execute(id);
+          if(result != TransactionResult::READY_TO_COMMIT){
+            if(result == TransactionResult::ABORT){
+                  retry_transaction = true;
+                  continue;
+            }
+          } else {
+            result = transaction->prepare_update_execute(id);
+          }
           // auto result = transaction->execute(id);
 
-          if (result == TransactionResult::READY_TO_COMMIT && 
-              result2 == TransactionResult::READY_TO_COMMIT) {
+          if (result == TransactionResult::READY_TO_COMMIT) {
             // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
 
             bool commit =
@@ -1649,13 +1655,13 @@ public:
               .count();
           now = std::chrono::steady_clock::now();
           
-          bool get_all_router_lock = protocol->lock_router_set(*transaction);
-          if(get_all_router_lock == false){
-            retry_transaction = true;
-            protocol->router_abort(*transaction);
-            LOG(INFO) << "OMG!!!";
-            continue;
-          }
+          // bool get_all_router_lock = protocol->lock_router_set(*transaction);
+          // if(get_all_router_lock == false){
+          //   retry_transaction = true;
+          //   protocol->router_abort(*transaction);
+          //   LOG(INFO) << "OMG!!!";
+          //   continue;
+          // }
 
           time1 += std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - now)
@@ -1663,16 +1669,21 @@ public:
           now = std::chrono::steady_clock::now();
           
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
-
-          auto result2 = transaction->prepare_update_execute(id);
+          if(result != TransactionResult::READY_TO_COMMIT){
+            if(result == TransactionResult::ABORT){
+                  retry_transaction = true;
+                  continue;
+            }
+          } else {
+            result = transaction->prepare_update_execute(id);
+          }
           // auto result = transaction->execute(id);
           time2 += std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - now)
               .count();
           now = std::chrono::steady_clock::now();
 
-          if (result == TransactionResult::READY_TO_COMMIT && 
-              result2 == TransactionResult::READY_TO_COMMIT) {
+          if (result == TransactionResult::READY_TO_COMMIT) {
             // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
 
             bool commit =
@@ -1872,26 +1883,32 @@ public:
         }
         
         transaction->prepare_read_execute(id);
-        bool get_all_router_lock = protocol->lock_router_set(*transaction);
-        // get all router lock first
-        if(get_all_router_lock == false){
-          retry_transaction = true;
-          protocol->router_abort(*transaction);
-          continue;
-        } else {
-          // check if cross-node transaction
-          // is_cross_node = transaction->check_cross_node_txn(true);
-          // if(is_cross_node){
-          //   protocol.router_abort(*transaction);
-          //   break;
-          // }
-        }
+        // bool get_all_router_lock = protocol->lock_router_set(*transaction);
+        // // get all router lock first
+        // if(get_all_router_lock == false){
+        //   retry_transaction = true;
+        //   protocol->router_abort(*transaction);
+        //   continue;
+        // } else {
+        //   // check if cross-node transaction
+        //   // is_cross_node = transaction->check_cross_node_txn(true);
+        //   // if(is_cross_node){
+        //   //   protocol.router_abort(*transaction);
+        //   //   break;
+        //   // }
+        // }
         
         result = transaction->read_execute(id, ReadMethods::LOCAL_READ);
-        auto result2 = transaction->prepare_update_execute(id);
+        if(result != TransactionResult::READY_TO_COMMIT){
+          if(result == TransactionResult::ABORT){
+                retry_transaction = true;
+                continue;
+          }
+        } else {
+          result = transaction->prepare_update_execute(id);
+        }
 
-        if (result == TransactionResult::READY_TO_COMMIT && 
-            result2 == TransactionResult::READY_TO_COMMIT) {
+        if (result == TransactionResult::READY_TO_COMMIT) {
           bool commit = protocol->commit(*transaction, messages, async_message_num);
           n_network_size.fetch_add(transaction->network_size);
           if (commit) {
@@ -1900,7 +1917,7 @@ public:
             q.push(std::move(transaction)); 
           } else {
             // release all router lock and retry
-            protocol->router_abort(*transaction);
+            // protocol->router_abort(*transaction);
             if (transaction->abort_lock) {
               n_abort_lock.fetch_add(1);
             } else {
@@ -1913,7 +1930,7 @@ public:
         } else {
           // release all router lock and abort
           n_abort_no_retry.fetch_add(1);
-          protocol->router_abort(*transaction);
+          // protocol->router_abort(*transaction);
         }
       } while (retry_transaction);
 

@@ -113,11 +113,8 @@ public:
 
   void router_fence(){
 
-    
     while(router_transaction_done.load() != router_transactions_send.load()){
-
-
-      process_request();
+      process_request(); 
     }
     router_transaction_done.store(0);
     router_transactions_send.store(0);
@@ -243,7 +240,8 @@ public:
           run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue, async_message_num); // 
           for(size_t r = 0; r < r_size; r ++ ){
             // 发回原地...
-            size_t router_return_coordinator_id = r_source_coordinator_ids[r];
+            size_t router_return_coordinator_id = r_source_coordinator_ids.front();
+            r_source_coordinator_ids.pop_front();
             StarMessageFactory::router_transaction_response_message(*(this->async_messages[router_return_coordinator_id]));
             flush_async_messages();
           }

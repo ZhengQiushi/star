@@ -174,8 +174,7 @@ public:
 
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
-    DCHECK(false);
-    return false;
+    return master_coordinator(partition_id);
 
   }
 
@@ -252,9 +251,7 @@ public:
 
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
-    DCHECK(false);
-    return false;
-
+    return master_coordinator(partition_id);
   }
 
   
@@ -317,8 +314,7 @@ public:
 
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
-    DCHECK(false);
-    return false;
+    return master_coordinator(partition_id);
 
   }
 

@@ -74,6 +74,9 @@ public:
     auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
     readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
+    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
+    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
+
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -98,6 +101,8 @@ public:
     auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
     readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
+    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
+    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
 
     readKey.set_key(&key);
     readKey.set_value(&value);
@@ -123,6 +128,9 @@ public:
     auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
     readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
+    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
+    // writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
+
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -145,7 +153,9 @@ public:
 
     auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
     writeKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
+    
+    auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
+    writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
 
     writeKey.set_key(&key);
     // the object pointed by value will not be updated
@@ -258,6 +268,16 @@ public:
       }
     }
 
+    return nullptr;
+  }
+
+  SiloRWKey *get_write_key(const void *key) {
+
+    for (auto i = 0u; i < writeSet.size(); i++) {
+      if (writeSet[i].get_key() == key) {
+        return &writeSet[i];
+      }
+    }
     return nullptr;
   }
 

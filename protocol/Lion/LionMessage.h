@@ -392,44 +392,57 @@ std::deque<simpleTransaction>* router_txn_queue
         auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
         auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
         
-        // preemption
-        // bool success;
-        // // std::atomic<uint64_t> &tid_r = router_table_old->search_metadata(key);
-        // // uint64_t latest_tid = SiloHelper::lock(tid_r, success);
-
-        // if(success == false){
-        //   txn->abort_lock = true;
-        // }
+        uint64_t old_secondary_coordinator_id = *(uint64_t*)router_table_old->search_value(key);
+        uint64_t static_coordinator_id = partition_id % context.coordinator_num; //; partitioner->secondary_coordinator(partition_id);
 
         // create the new tuple in global router of source request node
         auto coordinator_id_new = responseMessage.get_dest_node_id(); 
         DCHECK(coordinator_id_new != coordinator_id_old);
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-        // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+//        LOG(INFO) << table_id << *(int*) key << " switch " << coordinator_id_old << " --> " << coordinator_id_new;
         // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
         // }
 
-        router_table_new->insert(key, &coordinator_id_new);
         // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
         // SiloHelper::lock(tid_r_new); // locked, not available so far
 
+        size_t new_secondary_coordinator_id;
+        // be related with static replica
+        // 涉及 静态副本 
+        if(coordinator_id_new == static_coordinator_id || 
+           coordinator_id_old == static_coordinator_id ){ 
+          // local is or new destination has a replica 
+          if(coordinator_id_new == static_coordinator_id) {
+            // move to static replica 迁移到 静态副本, 
+            // 动态从副本 为 原来的位置
+            new_secondary_coordinator_id = coordinator_id_old;
+          } else {
+            // 从静态副本迁出
+            // 动态从副本 为 静态副本的位置
+            new_secondary_coordinator_id = static_coordinator_id;
+          }
+
+          // 从静态副本迁出，且迁出地不是动态从副本的地方！
+          //!TODO 需要删除原从副本 
+          //
+
+        } else {
+          // 非静态 迁到 新的非静态
+          // 1. delete old
+          table.delete_(key);
+          // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+          // 2. 
+          new_secondary_coordinator_id = static_coordinator_id;
+
+        }
+        // 修改路由表
+        router_table_new->insert(key, &new_secondary_coordinator_id); // 
         // delete old value in router and real-replica
         router_table_old->delete_(key);
-        // if it is on the static replica, it can be reserved as the secondary replica
-        if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_old)){ // || 
-          //!TODO partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
-          // local is or new destination is the static replica 
-          // pass 
-          
-        } else {
-          // the value should be removed
-          table.delete_(key);
-        }
-        
-        // SiloHelper::unlock(tid_r_new); 
+
       } else {
         // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
       }
@@ -480,6 +493,7 @@ std::deque<simpleTransaction>* router_txn_queue
     
     if(success == true){
       SiloRWKey &readKey = txn->readSet[key_offset];
+
       dec = Decoder(inputPiece.toStringPiece());
       dec.read_n_bytes(readKey.get_value(), value_size);
       readKey.set_tid(tid);
@@ -493,39 +507,68 @@ std::deque<simpleTransaction>* router_txn_queue
         auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
         auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
         
-        
+        uint64_t old_secondary_coordinator_id = *(uint64_t*)router_table_old->search_value(key);
+        uint64_t static_coordinator_id = partition_id % context.coordinator_num; //; partitioner->secondary_coordinator(partition_id);
+
         // create the new tuple in global router of source request node
         auto coordinator_id_new = responseMessage.get_source_node_id(); 
         DCHECK(coordinator_id_new != coordinator_id_old);
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-        // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+//        LOG(INFO) << table_id << *(int*) key << " switch " << coordinator_id_old << " --> " << coordinator_id_new;
         // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
         // }
 
-        router_table_new->insert(key, &coordinator_id_new);
-        std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
-        SiloHelper::lock(tid_r_new); // locked, not available so far
 
-        // delete old value in router and real-replica
-        router_table_old->delete_(key);
         // 
+        size_t new_secondary_coordinator_id;
+        // be related with static replica
+        // 涉及 静态副本 
+        if(coordinator_id_new == static_coordinator_id || 
+           coordinator_id_old == static_coordinator_id ){ 
+          // local is or new destination has a replica 
+          if(coordinator_id_new == static_coordinator_id) {
+            // move to static replica 迁移到 静态副本, 
+            // 动态从副本 为 原来的位置
+            new_secondary_coordinator_id = coordinator_id_old;
+          } else {
+            // 从静态副本迁出
+            // 动态从副本 为 静态副本的位置
+            new_secondary_coordinator_id = static_coordinator_id;
+          }
 
-        // already in static replica
-        //!TODO remastering
-        if(partitioner->is_partition_replicated_on(table_id, partition_id, key, coordinator_id_new)){
-          // pass
+          // 从静态副本迁出，且迁出地不是动态从副本的地方！
+          if(coordinator_id_old == static_coordinator_id && 
+             coordinator_id_new != old_secondary_coordinator_id){
+            //!TODO 现在可能会重复插入
+            table.insert(key, value); 
+            // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+
+          }
+
         } else {
-          // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+          // 非静态 迁到 新的非静态
+          // 1. insert new
           table.insert(key, value); 
+          // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+
+          // 2. 
+          new_secondary_coordinator_id = static_coordinator_id;
         }
+
+        // 修改路由表
+        router_table_new->insert(key, &new_secondary_coordinator_id);
+        router_table_old->delete_(key);
             
-        // SiloHelper::unlock(tid_r_new); 
         // update txn->writekey dynamic coordinator_id
         readKey.set_dynamic_coordinator_id(coordinator_id_new);
-
+        SiloRWKey *writeKey = txn->get_write_key(readKey.get_key());
+        if(writeKey != nullptr){
+          writeKey->set_dynamic_coordinator_id(coordinator_id_new);
+          writeKey->set_dynamic_secondary_coordinator_id(new_secondary_coordinator_id);
+        }
       }
 
     } else {

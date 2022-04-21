@@ -102,9 +102,7 @@ public:
 
   void replication_fence(ExecutorStatus status){
     while(async_message_num.load() != async_message_respond_num.load()){
-      if(status == ExecutorStatus::S_PHASE){
-        process_request();
-      }
+      process_request();
       std::this_thread::yield();
     }
     async_message_num.store(0);
@@ -154,10 +152,13 @@ public:
 
     // C-Phase to S-Phase, to C-phase ...
 
+    int times = 0;
+
     for (;;) {
       auto begin = std::chrono::steady_clock::now();
 
       ExecutorStatus status;
+      times ++ ;
 
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
@@ -165,10 +166,8 @@ public:
         if (status == ExecutorStatus::EXIT) {
           // commit transaction in s_phase;
           commit_transactions();
-          LOG(WARNING) << "Executor " << id << " exits.";
-          // debug
-          trace_txn();
-
+          LOG(INFO) << "Executor " << id << " exits.";
+          VLOG(DEBUG_V) << "TIMES : " << times; 
           return;
         }
       } while (status != ExecutorStatus::C_PHASE);
@@ -176,7 +175,7 @@ public:
       // commit transaction in s_phase;
       commit_transactions();
 
-      // LOG(WARNING) << "worker " << id << " prepare_transactions_to_run";
+      VLOG(DEBUG_V) << "worker " << id << " prepare_transactions_to_run";
 
       WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get());
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
@@ -185,7 +184,8 @@ public:
 
       // 准备transaction
       prepare_transactions_to_run(c_workload, s_workload, storage);
-      LOG(INFO) << "prepare_transactions_to_run "
+
+      VLOG(DEBUG_V) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -193,43 +193,45 @@ public:
       now = std::chrono::steady_clock::now();
 
       // c_phase
-      LOG(WARNING) << "worker " << id << " c_phase";
+      VLOG(DEBUG_V) << "worker " << id << " c_phase";
       if (coordinator_id == 0) {
-        LOG(WARNING) << "worker " << id << " ready to run_transaction";
+        VLOG(DEBUG_V) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
         run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
-        
         n_complete_workers.fetch_add(1);
-        LOG(WARNING) << "worker " << id << " finish run_transaction";
-
+        VLOG(DEBUG_V) << "worker " << id << " finish run_transaction";
       } else {
         
         n_started_workers.fetch_add(1);
-        LOG(WARNING) << "worker " << id << " ready to process_request";
+
+        VLOG(DEBUG_V) << "worker " << id << " ready to process_request";
+
         router_transaction_to_coordinator(); // c_txn send to coordinator
         auto router_num = router_transactions_send.load();
-        LOG(INFO) << "C" << context.coordinator_id << " -> " << "C0 : " << router_num; 
-        router_fence(); // wait for coordinator to response
 
+        VLOG(DEBUG_V) << "C" << context.coordinator_id << " -> " << "C0 : " << router_num; 
+
+        router_fence(); // wait for coordinator to response
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
                ExecutorStatus::C_PHASE) {
           process_request();
         }
-         LOG(WARNING) << "worker " << id << " finish to process_request";
-        // LOG(WARNING) << "worker " << id << " ready to process_request for replication";
         // process replication request after all workers stop.
         process_request();
         n_complete_workers.fetch_add(1);
-         LOG(WARNING) << "worker " << id << " finish process_request for replication";
+        
+        VLOG(DEBUG_V) << "worker " << id << " finish to process_request";
       }
-      LOG(INFO) << "C_phase "
+
+
+      VLOG(DEBUG_V) << "C_phase - local "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
       // wait to s_phase
-      LOG(WARNING) << "worker " << id << " wait to s_phase";
+      VLOG(DEBUG_V) << "worker " << id << " wait to s_phase";
       
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
@@ -250,11 +252,10 @@ public:
       }
 
       replication_fence(ExecutorStatus::C_PHASE);
-      LOG(WARNING) << "worker " << id << " s_phase";
 
       // commit transaction in c_phase;
       commit_transactions();
-      LOG(INFO) << "C_phase router done "
+      VLOG(DEBUG_V) << "C_phase router done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -264,24 +265,20 @@ public:
       // s_phase
 
       n_started_workers.fetch_add(1);
-       LOG(WARNING) << "worker " << id << " ready to run_transaction";
-      if(id == 0){
-        // LOG(INFO) << "debug";
-      }
+      VLOG(DEBUG_V) << "worker " << id << " ready to run_transaction";
+
       run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
       
-       LOG(WARNING) << "worker " << id << " ready to replication_fence";
+      VLOG(DEBUG_V) << "worker " << id << " ready to replication_fence";
 
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
-      LOG(INFO) << "S_phase done "
+      VLOG(DEBUG_V) << "S_phase done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
-
-       LOG(WARNING) << "worker " << id << " finish run_transaction";
 
       // once all workers are stop, we need to process the replication
       // requests
@@ -291,32 +288,27 @@ public:
         process_request();
       }
 
-      LOG(INFO) << "wait back "
+      VLOG(DEBUG_V) << "wait back "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-       LOG(WARNING) << "worker " << id << " finish process_request";
 
       // n_complete_workers has been cleared
       process_request();
       n_complete_workers.fetch_add(1);
-       LOG(WARNING) << "worker " << id << " finish process_request for replication";
 
 
 
-      LOG(INFO) << "whole batch "
+      VLOG(DEBUG_V) << "whole batch "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-    //   if(id == 0){
-    //   LOG(INFO) << id << " over prepare_transactions_to_run " << c_transactions_queue.size() << " " << 
-    //     s_transactions_queue.size();
-    // }
     }
+    VLOG(DEBUG_V) << "TIMES : " << times; 
 
 
   }
@@ -344,7 +336,7 @@ public:
              StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
         phase_context = context.get_cross_partition_context(); 
         if(id == 0){
-          // LOG(INFO) << "debug";
+          // // LOG(INFO) << "debug";
         }
       } else if (status == ExecutorStatus::S_PHASE) {
         // partitioner = s_partitioner.get();
@@ -352,14 +344,14 @@ public:
             StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
         phase_context = context.get_single_partition_context(); 
         if(id == 0){
-          // LOG(INFO) << "debug";
+          // // LOG(INFO) << "debug";
         }
       } else {
         CHECK(false);
       }   
 
       
-      // LOG(INFO) << sizeof(storage);
+      // // LOG(INFO) << sizeof(storage);
 
       uint64_t last_seed = 0;
 
@@ -373,10 +365,9 @@ public:
           cur_transaction = s_workload.next_transaction(s_context, partition_id, storage);
         }
         // 甄别一下？
-        bool is_cross_txn_dynamic = cur_transaction->check_cross_node_txn(true);
         bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
 
-        if(is_cross_txn_dynamic || is_cross_txn_static){ //cur_status == ExecutorStatus::C_PHASE){
+        if(is_cross_txn_static){ //cur_status == ExecutorStatus::C_PHASE){
           // if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
             // TODO: 暂时不考虑部分副本处理跨分区事务...
           c_transactions_queue.push_back(std::move(cur_transaction));
@@ -413,6 +404,7 @@ public:
           context.partition_num / context.worker_num;
       partition_id = id * partition_num_per_thread +
                      random.uniform_dist(0, partition_num_per_thread - 1);
+
     } else if (status == ExecutorStatus::S_PHASE) {
       partition_id = id * context.coordinator_num + coordinator_id;
     } else {
@@ -437,7 +429,7 @@ public:
     ContextType phase_context; //  = c_context;
 
     if(id == 0 && status == ExecutorStatus::S_PHASE){
-      LOG(INFO) << "hi, i'm thread 0";
+      // LOG(INFO) << "hi, i'm thread 0";
     }
     if (status == ExecutorStatus::C_PHASE) {
       partitioner = c_partitioner.get();
@@ -467,7 +459,7 @@ public:
     size_t cur_queue_size = cur_transactions_queue->size();
     
     if(id == 0){
-      // LOG(INFO) << "debug";
+      // // LOG(INFO) << "debug";
     }
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
     for (auto i = 0u; i < cur_queue_size; i++) {
@@ -479,7 +471,7 @@ public:
       transaction =
               std::move(cur_transactions_queue->front());
       do {
-        // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request" << i;
+        // // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request" << i;
         process_request();
         last_seed = random.get_seed();
 
@@ -489,12 +481,12 @@ public:
           std::size_t partition_id = get_partition_id(status);
           setupHandlers(*transaction, protocol);
         }
-        // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute" << i;
+        // // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute" << i;
 
         auto result = transaction->execute(id);
 
         if (result == TransactionResult::READY_TO_COMMIT) {
-          // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
+          // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
 
           bool commit =
               protocol.commit(*transaction, sync_messages, async_messages, record_messages, 
@@ -553,7 +545,7 @@ public:
     // static_cast<int>(messagePiece.get_message_type());
 
       // sync_queue.push(message);
-      // LOG(INFO) << "sync_queue: " << sync_queue.read_available(); 
+      // // LOG(INFO) << "sync_queue: " << sync_queue.read_available(); 
       for (auto it = message->begin(); it != message->end(); it++) {
         auto messagePiece = *it;
         auto message_type = messagePiece.get_message_type();
@@ -562,17 +554,17 @@ public:
           auto message_length = messagePiece.get_message_length();
           static int total_async = 0;
           
-          // LOG(INFO) << "recv : " << ++total_async;
+          // // LOG(INFO) << "recv : " << ++total_async;
           // async_message_num.fetch_sub(1);
           async_message_respond_num.fetch_add(1);
         } else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_RESPONSE)){
           static int router_done = 0;
           
-          // LOG(INFO) << "recv : " << ++router_done;
+          // // LOG(INFO) << "recv : " << ++router_done;
           router_transaction_done.fetch_add(1);
         } else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_REQUEST)){
            static int router_recv = 0;
-          // LOG(INFO) << "recv ROUTER_TRANSACTION_REQUEST : " << ++ router_recv;
+          // // LOG(INFO) << "recv ROUTER_TRANSACTION_REQUEST : " << ++ router_recv;
         }
       }
 

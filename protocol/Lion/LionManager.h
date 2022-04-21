@@ -121,20 +121,20 @@ public:
         auto c_start = std::chrono::steady_clock::now();
 
         // start c-phase
-        LOG(INFO) << "start C-Phase: C" << coordinator_id << " is the king";
+        VLOG(DEBUG_V) << "start C-Phase: C" << coordinator_id << " is the king";
 
         batch_size_percentile.add(batch_size);
-        LOG(INFO) << "wait_all_workers_start";
+        VLOG(DEBUG_V) << "wait_all_workers_start";
 
         wait_all_workers_start();
 
-        LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
         
         wait_all_workers_finish();
         set_worker_status(ExecutorStatus::STOP);
         broadcast_stop();
 
-        LOG(INFO) << "wait_ack";
+        VLOG(DEBUG_V) << "wait_ack";
 
         wait4_lion_ack(lion_king_coordinator_id);
 
@@ -151,30 +151,30 @@ public:
         n_completed_workers.store(0);
         n_started_workers.store(0);
         signal_worker(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::S_PHASE));
-        LOG(INFO) << "start S-Phase";
+        VLOG(DEBUG_V) << "start S-Phase";
 
         wait_all_workers_start();
                 
-        // LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
         wait_all_workers_finish();
         
-        // LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
         broadcast_stop();
         wait4_stop(n_coordinators - 1);
 
-        // LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
         n_completed_workers.store(0);
         set_worker_status(ExecutorStatus::STOP);
         wait_all_workers_finish();
         
-        // LOG(INFO) << "wait4_lion_ack";
+        VLOG(DEBUG_V) << "wait4_lion_ack";
 
         wait4_lion_ack(lion_king_coordinator_id);
 
-        // LOG(INFO) << "finished";
+        VLOG(DEBUG_V) << "finished";
         {
           auto now = std::chrono::steady_clock::now();
 
@@ -194,7 +194,7 @@ public:
 
       } else {
         // ExecutorStatus signal = st;
-        LOG(INFO) << "start C-Phase: C" << coordinator_id << " is normal";
+        VLOG(DEBUG_V) << "start C-Phase: C" << coordinator_id << " is normal";
 
         ExecutorStatus signal = status; // wait4_signal();
 
@@ -203,7 +203,7 @@ public:
           return true;
         }
 
-        LOG(INFO) << "start C-Phase";
+        VLOG(DEBUG_V) << "start C-Phase";
 
         // start c-phase
 
@@ -211,27 +211,27 @@ public:
         
         set_worker_status(merge_value_to_signal(lion_king_coordinator_id, ExecutorStatus::C_PHASE));
         
-        LOG(INFO) << "wait_all_workers_start";
+        VLOG(DEBUG_V) << "wait_all_workers_start";
 
         wait_all_workers_start();
         
-        LOG(INFO) << "wait4_stop";
+        VLOG(DEBUG_V) << "wait4_stop";
 
         wait4_stop(1);
         
-        LOG(INFO) << "getStop";
+        VLOG(DEBUG_V) << "getStop";
         
         set_worker_status(ExecutorStatus::STOP);
         
-        LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
         wait_all_workers_finish();
 
-        LOG(INFO) << "send_ack";
+        VLOG(DEBUG_V) << "send_ack";
 
         send_lion_ack(lion_king_coordinator_id);
 
-        LOG(INFO) << "start S-Phase";
+        VLOG(DEBUG_V) << "start S-Phase";
         
         // start s-phase
         
@@ -240,57 +240,57 @@ public:
         n_completed_workers.store(0);
         n_started_workers.store(0);
         set_worker_status(ExecutorStatus::S_PHASE);
-        // LOG(INFO) << "wait_all_workers_start";
+        VLOG(DEBUG_V) << "wait_all_workers_start";
         wait_all_workers_start();
-        // LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
         wait_all_workers_finish();
         broadcast_stop();
-        LOG(INFO) << "wait4_stop";
+        VLOG(DEBUG_V) << "wait4_stop";
         wait4_stop(n_coordinators - 1);
         // n_completed_workers.store(0);
         set_worker_status(ExecutorStatus::STOP);
-        // LOG(INFO) << "wait_all_workers_finish";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
         wait_all_workers_finish();
-        // LOG(INFO) << "send_ack";
+        VLOG(DEBUG_V) << "send_ack";
 
         send_lion_ack(lion_king_coordinator_id);
-        // LOG(INFO) << "finished";
+        VLOG(DEBUG_V) << "finished";
 
       }
     
     
-        // if(WorkloadType::which_workload == myTestSet::YCSB){
-        //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-        //       ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
-        //       LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
-        //     // }
-        //   }
-        // } else {
-        //     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-        //       ITable *dest_table = db.find_router_table(tpcc::stock::tableID, i);
-        //       LOG(INFO) << "C[" << i << "]: " << dest_table->table_record_num();
-        //     // }
-        //   }
-        // }
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_router_table(ycsb::ycsb::tableID, i);
+              VLOG(DEBUG_V) << "C[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        } else {
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_router_table(tpcc::stock::tableID, i);
+              VLOG(DEBUG_V) << "C[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
 
-        // if(WorkloadType::which_workload == myTestSet::YCSB){
-        //   for(size_t i = 0 ; i < context.partition_num; i ++ ){
-        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
-        //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-        //       LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
-        //     // }
-        //   }
-        // } else {
-        //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
-        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        } else {
+            for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
               
-        //       ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
-        //       LOG(INFO) << "P[" << i << "]: " << dest_table->table_record_num();
-        //     // }
-        //   }
-        // }
+              ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
+              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
     
     return false;
   }

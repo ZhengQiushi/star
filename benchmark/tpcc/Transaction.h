@@ -61,8 +61,8 @@ public:
           for (auto i = 0; i < query.O_OL_CNT; i++) {
             auto cur_key = simple_txn.keys[3 + i];
 
-            int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
-            int32_t s_id = (c_record_key & RECORD_COUNT_OL_ID_VALID);
+            int32_t w_id = (cur_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+            int32_t s_id = (cur_key & RECORD_COUNT_OL_ID_VALID);
 
             query.INFO[i].OL_I_ID = s_id;// (query.C_ID - 1) * query.O_OL_CNT + i + 1;// (query.W_ID - 1) * 3000 + query.C_ID;
             query.INFO[i].OL_SUPPLY_W_ID = w_id;
@@ -743,7 +743,9 @@ public:
       }
     } else {
       for(size_t i = 0 ; i < stock_keys.size(); i ++ ){
-        from_nodes_id.insert(stock_keys[i].S_W_ID - 1);
+        size_t stock_coordinator_id;
+        stock_coordinator_id = (stock_keys[i].S_W_ID - 1) % context.coordinator_num;
+        from_nodes_id.insert(stock_coordinator_id);
       }
     }
     return from_nodes_id;

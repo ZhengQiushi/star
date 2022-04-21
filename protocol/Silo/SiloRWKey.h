@@ -86,6 +86,19 @@ public:
   }
 
 
+  // dynamic secondary coordinator id
+  void set_dynamic_secondary_coordinator_id(uint32_t dynamic_secondary_coordinator_id) {
+    DCHECK(dynamic_secondary_coordinator_id < (1 << 5));
+    clear_dynamic_secondary_coordinator_id();
+    bitvec |= dynamic_secondary_coordinator_id << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET;
+  }
+
+  void clear_dynamic_secondary_coordinator_id() { bitvec &= ~(DYNAMIC_SECONDARY_COORDINATOR_ID_MASK << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET); }
+
+  uint32_t get_dynamic_secondary_coordinator_id() const {
+    return (bitvec >> DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET) & DYNAMIC_SECONDARY_COORDINATOR_ID_MASK;
+  }
+
   // partition id
 
   void set_partition_id(uint32_t partition_id) {
@@ -121,7 +134,8 @@ private:
   /*
    * A bitvec is a 32-bit word.
    *
-   * [ table id (5) ] | partition id (8) | dynamic replica coordinator id (5) | unused bit (11) |
+   * [ table id (5) ] | partition id (8) | 
+   *   dynamic replica coordinator id (5) | dynamic secondary replica coordinator id(5) | unused bit (6) |
    * write lock bit(1) | read request bit (1) | local index read (1)  ]
    *
    * write lock bit is set when a write lock is acquired.
@@ -145,6 +159,8 @@ public:
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_MASK = 0x1f;
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 14;
 
+  static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_MASK = 0x1f;
+  static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET = 9;
 
   static constexpr uint32_t WRITE_LOCK_BIT_MASK = 0x1;
   static constexpr uint32_t WRITE_LOCK_BIT_OFFSET = 2;

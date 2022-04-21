@@ -6,6 +6,13 @@
 #include <vector>
 namespace star {
 
+
+
+#define DEBUG_V3 3
+#define DEBUG_V4 4
+#define DEBUG_V 5
+
+
 enum class ExecutorStatus {
   START,
   CLEANUP,

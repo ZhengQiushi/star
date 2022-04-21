@@ -33,21 +33,6 @@ public:
     transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
   }
 
-  // ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
-  //   // the value is put into the most significant 24 bits
-  //   uint32_t offset = 8;
-  //   return static_cast<ExecutorStatus>((value << offset) |
-  //                                      static_cast<uint32_t>(signal));
-  // }
-
-  // std::tuple<uint32_t, ExecutorStatus> split_signal(ExecutorStatus signal) {
-  //   // the value is put into the most significant 24 bits
-  //   uint32_t offset = 8, mask = 0xff;
-  //   uint32_t value = static_cast<uint32_t>(signal);
-  //   // return value and ``real" signal
-  //   return std::make_tuple(value >> offset,
-  //                          static_cast<ExecutorStatus>(value & mask));
-  // }
 
 
   void update_batch_size(uint64_t running_time) {
@@ -136,24 +121,24 @@ public:
       int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
       auto c_start = std::chrono::steady_clock::now();
       // start c-phase
-      LOG(INFO) << "start C-Phase";
+      VLOG(DEBUG_V) << "start C-Phase";
 
       n_completed_workers.store(0);
       n_started_workers.store(0);
       batch_size_percentile.add(batch_size);
       signal_worker(merge_value_to_signal(batch_size, ExecutorStatus::C_PHASE));
       
-      LOG(INFO) << "wait_all_workers_start";
+      VLOG(DEBUG_V) << "wait_all_workers_start";
 
       wait_all_workers_start();
 
-      LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
       
       wait_all_workers_finish();
       set_worker_status(ExecutorStatus::STOP);
       broadcast_stop();
 
-      LOG(INFO) << "wait_ack";
+      VLOG(DEBUG_V) << "wait_ack";
 
       wait4_ack();
 
@@ -164,67 +149,38 @@ public:
                 .count());
       }
 
-      // // start data-transform 
-      // static int cur_data_transform_num = 0;
-      // if (context.enable_data_transfer == true && 
-      //     cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
-      //     (cur_data_transform_num / context.data_transform_interval) % 2 == 0) {
-      //   // 开始操作 
-      //   set_record_worker_status(ExecutorStatus::START);
-      //   LOG(INFO) << "wait_recorder_worker_finish";
-      //   // wait_recorder_worker_finish();
-      // }
-      // if (context.enable_data_transfer == true && 
-      //     cur_data_transform_num % context.data_transform_interval == context.data_transform_interval - 1 && 
-      //     (cur_data_transform_num / context.data_transform_interval) % 2 == 1) {
-      //   // 开始操作 
-      //   set_record_worker_transmit_status(ExecutorStatus::START);
-      //   LOG(INFO) << "set_record_worker_transmit_status";
-      //   wait_recorder_worker_finish();
-      //   LOG(INFO) << "set_record_worker_transmit_status_finish";
-
-      // }
-      
-      //// for debug 
-      // if(WorkloadType::which_workload == myTestSet::YCSB){
-      //   for(int i = 0 ; i < 12; i ++ ){
-      //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-      //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-      //   }
-      // }
-
       // cur_data_transform_num ++;
 
       auto s_start = std::chrono::steady_clock::now();
       // start s-phase
 
-      LOG(INFO) << "start S-Phase";
+      VLOG(DEBUG_V) << "start S-Phase";
 
       n_completed_workers.store(0);
       n_started_workers.store(0);
       signal_worker(ExecutorStatus::S_PHASE);
       wait_all_workers_start();
       
-      // LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
 
       wait_all_workers_finish();
       
-      // LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
 
       broadcast_stop();
       wait4_stop(n_coordinators - 1);
 
-      // LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
 
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
       
-      // LOG(INFO) << "wait4_ack";
+      VLOG(DEBUG_V) << "wait4_ack";
 
       wait4_ack();
 
-      // LOG(INFO) << "finished";
+      VLOG(DEBUG_V) << "finished";
       {
         auto now = std::chrono::steady_clock::now();
 
@@ -267,7 +223,7 @@ public:
         break;
       }
 
-      LOG(INFO) << "start C-Phase";
+      VLOG(DEBUG_V) << "start C-Phase";
 
       // start c-phase
 
@@ -276,34 +232,27 @@ public:
       n_started_workers.store(0);
       set_worker_status(ExecutorStatus::C_PHASE);
       
-      LOG(INFO) << "wait_all_workers_start";
+      VLOG(DEBUG_V) << "wait_all_workers_start";
 
       wait_all_workers_start();
       
-      LOG(INFO) << "wait4_stop";
+      VLOG(DEBUG_V) << "wait4_stop";
 
       wait4_stop(1);
       
       
       set_worker_status(ExecutorStatus::STOP);
       
-      LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
 
       wait_all_workers_finish();
 
-      LOG(INFO) << "send_ack";
+      VLOG(DEBUG_V) << "send_ack";
 
       send_ack();
-      // if(WorkloadType::which_workload == myTestSet::YCSB){
-      //   for(int i = 0 ; i < 12; i ++ ){
-      //     if(c_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-      //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-      //       LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-      //     }
-      //   }
-      // }
 
-      LOG(INFO) << "start S-Phase";
+
+      VLOG(DEBUG_V) << "start S-Phase";
       
       // start s-phase
 
@@ -312,21 +261,21 @@ public:
       n_completed_workers.store(0);
       n_started_workers.store(0);
       set_worker_status(ExecutorStatus::S_PHASE);
-      // LOG(INFO) << "wait_all_workers_start";
+      VLOG(DEBUG_V) << "wait_all_workers_start";
       wait_all_workers_start();
-      // LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
       wait_all_workers_finish();
       broadcast_stop();
-      LOG(INFO) << "wait4_stop";
+      VLOG(DEBUG_V) << "wait4_stop";
       wait4_stop(n_coordinators - 1);
       // n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
-      // LOG(INFO) << "wait_all_workers_finish";
+      VLOG(DEBUG_V) << "wait_all_workers_finish";
       wait_all_workers_finish();
-      // LOG(INFO) << "send_ack";
+      VLOG(DEBUG_V) << "send_ack";
 
       send_ack();
-      // LOG(INFO) << "finished";
+      VLOG(DEBUG_V) << "finished";
 
     }
   }

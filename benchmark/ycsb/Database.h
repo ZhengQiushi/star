@@ -68,6 +68,47 @@ public:
     auto keysPerPartition = context.keysPerPartition;
     auto partitionNum = context.partition_num;
     std::size_t totalKeys = keysPerPartition * partitionNum;
+
+
+    for (auto j = 0u; j < partitionNum; j++) {
+      auto partitionID = j;
+      
+      if (context.strategy == PartitionStrategy::RANGE) {
+        // use range partitioning
+        for (auto i = partitionID * keysPerPartition; i < (partitionID + 1) * keysPerPartition; i++) {
+          DCHECK(context.getPartitionID(i) == partitionID);
+          ycsb::key key(i);
+
+          int router_coordinator = (partitionID + 1) % context.coordinator_num;
+          size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
+
+          ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
+          table_router->insert(&key, &router_secondary_coordinator); // 
+        }
+      } else {
+        // not available so far
+        DCHECK(false);
+        // use round-robin hash partitioning
+        for (auto i = partitionID; i < totalKeys; i += partitionNum) {
+          DCHECK(context.getPartitionID(i) == partitionID);
+          ycsb::key key(i);
+
+          int router_coordinator = partitionID % context.coordinator_num;
+          ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
+          table_router->insert(&key, &router_coordinator);
+        }
+      }
+    }
+  }
+
+  void init_star_router_table(const Context& context){
+    /**
+     * @brief for Lion only.
+     * 
+     */
+    auto keysPerPartition = context.keysPerPartition;
+    auto partitionNum = context.partition_num;
+    std::size_t totalKeys = keysPerPartition * partitionNum;
     
 
     for (auto j = 0u; j < partitionNum; j++) {
@@ -153,24 +194,14 @@ public:
 
     }
 
-    // quick look-up for certain-key on which node
-    // pre-allocate space
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      tbl_ycsb_vec_router.push_back(
-          std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
-    }
-
     // there is 1 table in ycsb
     tbl_vecs.resize(1);
-    tbl_vecs_router.resize(1);
 
     auto tFunc = [](std::unique_ptr<ITable> &table) { return table.get(); };
 
     std::transform(tbl_ycsb_vec.begin(), tbl_ycsb_vec.end(),
                    std::back_inserter(tbl_vecs[0]), tFunc);
 
-    std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
-                   std::back_inserter(tbl_vecs_router[0]), tFunc);
 
     using std::placeholders::_1;
     initTables("ycsb",
@@ -180,31 +211,28 @@ public:
                partitionNum, threadsNum, partitioner.get());
     
     // initalize_router_table
-    init_router_table(context);
+    if(true){ // context.protocol == "Lion"
+      // quick look-up for certain-key on which node, pre-allocate space
+      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        tbl_ycsb_vec_router.push_back(
+            std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
+      }
+      tbl_vecs_router.resize(1);
+      std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
+                    std::back_inserter(tbl_vecs_router[0]), tFunc);
+      // init router information
+      if(context.protocol == "Lion"){
+        init_router_table(context);
+      } else if (context.protocol == "Star"){
+        init_star_router_table(context);
+      }
+    }
   }
 
   void apply_operation(const Operation &operation) {
     CHECK(false); // not supported
   }
 
-  // template<typename KeyType>
-  // std::size_t getPartitionID(const star::Context &context, std::size_t table_id, KeyType key) const{
-  //   /**
-  //    * @brief 返回这个key所在的partition
-  //    * @note key 如果不在local 副本，则返回context.partition_num
-  //    * 
-  //    */
-  //   size_t i = 0;
-  //   for( ; i < context.partition_num; i ++ ){
-  //     ITable *table = tbl_ycsb_vec[i].get();
-  //     bool is_exist = table->contains((void*)& key);
-      
-  //     if(is_exist)
-  //       break;
-  //   }
-  //   // DCHECK(i != context.partition_num);
-  //   return i;
-  // }
 
   template<typename KeyType>
   std::set<int32_t> getPartitionIDs(const star::Context &context, KeyType key) const{

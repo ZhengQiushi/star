@@ -355,6 +355,8 @@ private:
 
       // lock dynamic replica
       auto coordinatorID = writeKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
+      auto secondary_coordinatorID = writeKey.get_dynamic_secondary_coordinator_id();
+      DCHECK(coordinatorID != secondary_coordinatorID);
       // auto router_table = db.find_router_table(tableId, coordinatorID);
       // std::atomic<uint64_t> &tid_ = router_table->search_metadata(key);
 
@@ -384,7 +386,7 @@ private:
       for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
         
         // k does not have this partition
-        if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, k)) {
+        if (k != secondary_coordinatorID && k != coordinatorID) {
           continue;
         }
 
@@ -393,10 +395,10 @@ private:
           continue;
         }
 
-        replicate_count++;
-
         // local replicate
-        if (k == txn.coordinator_id) {
+        // txn execute here but the master replica was at some other place. 
+        if (k == txn.coordinator_id && coordinatorID != k) {
+          DCHECK(false);
           auto value = writeKey.get_value();
           std::atomic<uint64_t> &tid = table->search_metadata(key);
 
@@ -404,7 +406,6 @@ private:
           // DCHECK(last_tid < commit_tid);
           table->update(key, value);
           HelperType::unlock(tid, commit_tid);
-
         } else {
           // txn.pendingResponses++;
           auto coordinatorID = k;
@@ -415,8 +416,9 @@ private:
           send_replica = true;
         }
       }
-      
+
       if(send_replica == false){
+        DCHECK(false);
         txn.network_size += MessageFactoryType::ignore_message(
               *messages[coordinatorID], *table, writeKey.get_key(),
               writeKey.get_value(), commit_tid);

@@ -76,6 +76,7 @@ public:
 
     // sync responds that need to be received 
     async_message_num.store(0);
+    async_message_respond_num.store(0);
 
     router_transaction_done.store(0);
     router_transactions_send.store(0);
@@ -167,7 +168,7 @@ public:
           // commit transaction in s_phase;
           commit_transactions();
           LOG(INFO) << "Executor " << id << " exits.";
-          VLOG(DEBUG_V) << "TIMES : " << times; 
+          VLOG_IF(DEBUG_V, id==0) << "TIMES : " << times; 
           return;
         }
       } while (status != ExecutorStatus::C_PHASE);
@@ -175,7 +176,7 @@ public:
       // commit transaction in s_phase;
       commit_transactions();
 
-      VLOG(DEBUG_V) << "worker " << id << " prepare_transactions_to_run";
+      VLOG_IF(DEBUG_V, id==0) << "worker " << id << " prepare_transactions_to_run";
 
       WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get());
       WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get());
@@ -185,7 +186,7 @@ public:
       // 准备transaction
       prepare_transactions_to_run(c_workload, s_workload, storage);
 
-      VLOG(DEBUG_V) << "prepare_transactions_to_run "
+      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -193,23 +194,23 @@ public:
       now = std::chrono::steady_clock::now();
 
       // c_phase
-      VLOG(DEBUG_V) << "worker " << id << " c_phase";
+      VLOG_IF(DEBUG_V, id==0) << "worker " << id << " c_phase";
       if (coordinator_id == 0) {
-        VLOG(DEBUG_V) << "worker " << id << " ready to run_transaction";
+        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
         run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
         n_complete_workers.fetch_add(1);
-        VLOG(DEBUG_V) << "worker " << id << " finish run_transaction";
+        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish run_transaction";
       } else {
         
         n_started_workers.fetch_add(1);
 
-        VLOG(DEBUG_V) << "worker " << id << " ready to process_request";
+        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to process_request";
 
         router_transaction_to_coordinator(); // c_txn send to coordinator
         auto router_num = router_transactions_send.load();
 
-        VLOG(DEBUG_V) << "C" << context.coordinator_id << " -> " << "C0 : " << router_num; 
+        VLOG_IF(DEBUG_V, id==0) << "C" << context.coordinator_id << " -> " << "C0 : " << router_num; 
 
         router_fence(); // wait for coordinator to response
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
@@ -220,18 +221,18 @@ public:
         process_request();
         n_complete_workers.fetch_add(1);
         
-        VLOG(DEBUG_V) << "worker " << id << " finish to process_request";
+        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish to process_request";
       }
 
 
-      VLOG(DEBUG_V) << "C_phase - local "
+      VLOG_IF(DEBUG_V, id==0) << "C_phase - local "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
       // wait to s_phase
-      VLOG(DEBUG_V) << "worker " << id << " wait to s_phase";
+      VLOG_IF(DEBUG_V, id==0) << "worker " << id << " wait to s_phase";
       
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
@@ -255,7 +256,7 @@ public:
 
       // commit transaction in c_phase;
       commit_transactions();
-      VLOG(DEBUG_V) << "C_phase router done "
+      VLOG_IF(DEBUG_V, id==0) << "C_phase router done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -265,15 +266,15 @@ public:
       // s_phase
 
       n_started_workers.fetch_add(1);
-      VLOG(DEBUG_V) << "worker " << id << " ready to run_transaction";
+      VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to run_transaction";
 
       run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
       
-      VLOG(DEBUG_V) << "worker " << id << " ready to replication_fence";
+      VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
 
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
-      VLOG(DEBUG_V) << "S_phase done "
+      VLOG_IF(DEBUG_V, id==0) << "S_phase done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -288,7 +289,7 @@ public:
         process_request();
       }
 
-      VLOG(DEBUG_V) << "wait back "
+      VLOG_IF(DEBUG_V, id==0) << "wait back "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -302,13 +303,13 @@ public:
 
 
 
-      VLOG(DEBUG_V) << "whole batch "
+      VLOG_IF(DEBUG_V, id==0) << "whole batch "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
     }
-    VLOG(DEBUG_V) << "TIMES : " << times; 
+    VLOG_IF(DEBUG_V, id==0) << "TIMES : " << times; 
 
 
   }

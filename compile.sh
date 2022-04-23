@@ -5,4 +5,4 @@ cmake -DCMAKE_BUILD_TYPE=Debug
 # -DCMAKE_CXX_FLAGS=-pg
 make -j 8
 
-./sync.bash
+# ./sync.bash

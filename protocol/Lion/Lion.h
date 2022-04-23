@@ -88,60 +88,6 @@ public:
     sync_messages(txn, false);
   }
 
-  // bool router_abort(TransactionType &txn){
-  //   auto &routerSet = txn.routerSet;
-
-  //   for (int i = int(routerSet.size()) - 1; i >= 0; i--) {
-  //     auto &routerKey = routerSet[i];
-  //     if(!routerKey.get_write_lock_bit()){
-  //       // only unlock the locked router-items
-  //       continue;
-  //     } else {
-  //       auto tableId = routerKey.get_table_id();
-  //       auto partitionId = routerKey.get_partition_id();
-  //       auto table = db.find_table(tableId, partitionId);
-  //       auto key = routerKey.get_key();
-            
-  //       if(partitioner.is_dynamic()){
-  //         // unlock dynamic replica
-  //         auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
-  //         auto router_table = db.find_router_table(tableId, coordinatorID);
-  //         std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-  //         HelperType::unlock(tid);
-  //       }
-  //     }
-  //   }
-  //   return true;
-  // }
-
-  // bool lock_router_set(TransactionType &txn){
-  //   auto &routerSet = txn.routerSet;
-  //   for (auto i = 0u; i < routerSet.size(); i++) {
-  //     auto &routerKey = routerSet[i];
-  //     auto tableId = routerKey.get_table_id();
-  //     auto partitionId = routerKey.get_partition_id();
-  //     auto table = db.find_table(tableId, partitionId);
-  //     auto key = routerKey.get_key();
-          
-  //     if(partitioner.is_dynamic()){
-  //       // unlock dynamic replica
-  //       auto coordinatorID = routerKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
-        
-  //       auto router_table = db.find_router_table(tableId, coordinatorID);
-  //       std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-  //       bool success = true;
-  //       HelperType::lock(tid, success);
-  //       if(success == false){
-  //         return false;
-  //       } else {
-  //         routerKey.set_write_lock_bit();
-  //         routerKey.set_tid(tid);
-  //       }
-  //     }
-      
-  //   }
-  //   return true;
-  // }
 
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &messages,

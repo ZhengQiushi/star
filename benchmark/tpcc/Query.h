@@ -112,7 +112,7 @@ public:
           //   OL_SUPPLY_W_ID = random.uniform_dist(1, context.partition_num);
           // }
           
-          query.INFO[i].OL_SUPPLY_W_ID = (OL_SUPPLY_W_ID + context.partition_num)% context.partition_num + 1;
+          query.INFO[i].OL_SUPPLY_W_ID = (OL_SUPPLY_W_ID + context.partition_num) % context.partition_num + 1;
           //
 
         } else {

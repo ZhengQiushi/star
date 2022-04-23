@@ -59,7 +59,6 @@ public:
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
-  virtual bool check_cross_txn(bool& success) = 0;
   virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
 

@@ -32,6 +32,10 @@
 #include "protocol/Lion/LionExecutor.h"
 #include "protocol/Lion/LionManager.h"
 
+
+#include "protocol/LionNS/LionNSExecutor.h"
+
+
 #include "protocol/Calvin/Calvin.h"
 #include "protocol/Calvin/CalvinExecutor.h"
 #include "protocol/Calvin/CalvinManager.h"
@@ -73,7 +77,7 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion"};
+                                                 "Lion", "LionNS"};
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -164,6 +168,34 @@ public:
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<LionExecutor<WorkloadType>>(
+            coordinator_id, i, db, context, manager->batch_size,
+            manager->worker_status, manager->n_completed_workers,
+            manager->n_started_workers)); // , manager->recorder_status
+      }
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    } else if (context.protocol == "LionNS") {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+
+      auto manager = std::make_shared<LionManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag, db);
+
+      // add recorder for data-transformation
+      // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
+      //     manager->recorder_status, manager->transmit_status, 
+      //     manager->n_completed_workers, manager->n_started_workers);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<LionNSExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->batch_size,
             manager->worker_status, manager->n_completed_workers,
             manager->n_started_workers)); // , manager->recorder_status

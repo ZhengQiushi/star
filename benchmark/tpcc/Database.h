@@ -451,7 +451,7 @@ public:
                     std::back_inserter(tbl_vecs_router[8]), tFunc);
       std::transform(tbl_stock_vec_router.begin(), tbl_stock_vec_router.end(),
                     std::back_inserter(tbl_vecs_router[9]), tFunc);
-      if(context.protocol == "Lion"){
+      if(context.protocol == "Lion" || context.protocol == "LionNS" ){
         init_router_table(context);
       } else if (context.protocol == "Star"){
         init_star_router_table(context);

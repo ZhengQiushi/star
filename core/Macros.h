@@ -39,6 +39,10 @@ DEFINE_bool(tcp_no_delay, true, "TCP Nagle algorithm, true: disable nagle");
 DEFINE_bool(tcp_quick_ack, false, "TCP quick ack mode, true: enable quick ack");
 DEFINE_bool(cpu_affinity, true, "pinning each thread to a separate core");
 DEFINE_bool(enable_data_transfer, false, "enable data transfer or not");
+
+DEFINE_bool(lion_no_switch, false, "");
+
+
 DEFINE_int32(data_transform_interval, 5, "");
 
 DEFINE_int32(time_to_run, 25, "running time");
@@ -80,5 +84,6 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
   context.enable_data_transfer = FLAGS_enable_data_transfer;                   \
   context.time_to_run = FLAGS_time_to_run;                                     \
   context.data_transform_interval = FLAGS_data_transform_interval;             \
+  context.lion_no_switch = FLAGS_lion_no_switch;                               \
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
   context.set_star_partitioner();

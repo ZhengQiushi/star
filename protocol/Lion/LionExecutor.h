@@ -23,10 +23,6 @@
 
 namespace star {
 
-struct ExecutionStep {
-  size_t router_coordinator_id;
-  RouterTxnOps ops;
-};
 
 template <class Workload> class LionExecutor : public Worker {
 public:
@@ -116,7 +112,7 @@ public:
     }
   }
 
-  void replication_fence(ExecutorStatus status){
+  void replication_fence(){
     
 
     while(async_message_num.load() != async_message_respond_num.load()){
@@ -224,7 +220,7 @@ public:
           DCHECK(false);
         }
 
-        replication_fence(ExecutorStatus::C_PHASE);
+        replication_fence();
         n_complete_workers.fetch_add(1);
         VLOG_IF(DEBUG_V, id == 0) << "worker " << id << " finish run_transaction_with_router";
 
@@ -291,10 +287,15 @@ public:
        << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-      run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
-      
+      // 
+      if(context.lion_no_switch == true){
+        run_transaction(ExecutorStatus::C_PHASE, &s_transactions_queue, async_message_num);
+      } else {
+        // do switch
+        run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
+      }
 
-      replication_fence(ExecutorStatus::S_PHASE);
+      replication_fence();
       n_complete_workers.fetch_add(1);
 
       VLOG_IF(DEBUG_V, id == 0) << "s_phase "
@@ -309,9 +310,6 @@ public:
       while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) ==
              ExecutorStatus::S_PHASE) {
         process_request();
-        run_local_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num, 1);
-        run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 1);
-
       }
 
       // n_complete_workers has been cleared
@@ -382,29 +380,24 @@ public:
       for (auto i = 0u; i < query_num; i++) {
         std::unique_ptr<TransactionType> cur_transaction;
 
-        std::size_t partition_id = get_partition_id(status);
+        
         if (status == ExecutorStatus::C_PHASE) {
+          std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
           cur_transaction = c_workload.next_transaction(c_context, partition_id, storage);
         } else {
-          cur_transaction = s_workload.next_transaction(s_context, partition_id, storage);
+          if(context.lion_no_switch == true){
+            std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
+            cur_transaction = c_workload.next_transaction(s_context, partition_id, storage);
+          } else {
+            std::size_t partition_id = get_partition_id(ExecutorStatus::S_PHASE);
+            cur_transaction = s_workload.next_transaction(s_context, partition_id, storage);
+          }
         }
         // 甄别一下？
-        bool is_success = true;
         // first figure out which can be execute on S_Phase(static_replica)
         bool is_cross_txn_static = cur_transaction->check_cross_node_txn(false);
         
-        // bool is_cross_txn = cur_transaction->check_cross_txn_with_remastering(is_success, status == ExecutorStatus::C_PHASE);
-        // if(is_success){
-        //   if(is_cross_txn && status == ExecutorStatus::S_PHASE){
-        //    //  // LOG(INFO) << "what?";
-        //     // bool is_cross_txn = cur_transaction->check_cross_txn_with_remastering(is_success, 
-        //     //                                                                       );
-        //   }
-        // }
-        if(is_success){
-
-          if(is_cross_txn_static){ //cur_status == ExecutorStatus::C_PHASE){
-            // if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
+        if(is_cross_txn_static && status == ExecutorStatus::C_PHASE){ 
             // TODO: 暂时不考虑部分副本处理跨分区事务...
             std::set<int> from_nodes_id = std::move(cur_transaction->txn_nodes_involved(true));
             bool is_cross_node_global = from_nodes_id.size() > 1; // on the same-node or not
@@ -422,9 +415,8 @@ public:
               c_single_transactions_queue.push_back(std::move(cur_transaction));
             }
             // }
-          } else {
-            s_transactions_queue.push_back(std::move(cur_transaction));
-          }
+        } else {
+          s_transactions_queue.push_back(std::move(cur_transaction));
         }
 
       } // END FOR
@@ -1613,8 +1605,10 @@ public:
 
     if (status == ExecutorStatus::C_PHASE) {
       protocol = c_protocol;
+      partitioner = l_partitioner.get();
     } else if (status == ExecutorStatus::S_PHASE) {
       protocol = s_protocol;
+      partitioner = s_partitioner.get();
     } else {
       CHECK(false);
     }
@@ -1749,6 +1743,7 @@ public:
     */
 
     ProtocolType* protocol = c_protocol;// (db, phase_context, *cur_partitioner, id);
+    partitioner = l_partitioner.get();
 
     uint64_t last_seed = 0;
     
@@ -1882,7 +1877,7 @@ public:
     return message;
   }
 
-private:
+protected:
   std::size_t process_request() {
 
     std::size_t size = 0;
@@ -1925,20 +1920,31 @@ private:
       bool local_read = false;
       
       auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
+      auto dynamic_coordinator_id = this->partitioner->master_coordinator(table_id, partition_id, key);
 
+      bool remaster = false;
+
+      ITable *table;
       if (coordinatorID == coordinator_id // ||
           // (this->partitioner->is_partition_replicated_on(
           //      partition_id, this->coordinator_id) &&
           //  this->context.read_on_replica)
            ) {
         local_read = true;
+      } else {
+        // if(table_id == 2){
+        //   LOG(INFO) << "nani?";
+        //   txn.readSet[key_offset].get_dynamic_coordinator_id();
+        // }
+        VLOG(DEBUG_V8) << table_id << " ASK " << coordinatorID << " " << dynamic_coordinator_id << " " << *(int*)key;
+        // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
+        table = this->db.find_table(table_id, partition_id);
+        remaster = table->contains(key); // current coordniator
       }
 
       if (local_index_read || local_read) {
         return protocol.search(table_id, partition_id, key, value);
       } else {
-        // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
-        ITable *table = this->db.find_table(table_id, partition_id);
         
         for(size_t i = 0; i < context.coordinator_num; i ++ ){
           if(i == coordinator_id){
@@ -1946,7 +1952,7 @@ private:
           }
           if(i == coordinatorID){
             txn.network_size += MessageFactoryType::new_search_message(
-                *(this->messages[i]), *table, key, key_offset);
+                *(this->messages[i]), *table, key, key_offset, remaster);
           } else {
             txn.network_size += MessageFactoryType::new_search_router_only_message(
                 *(this->messages[i]), *table, key, key_offset);
@@ -2044,7 +2050,7 @@ private:
     message->set_worker_id(id);
   }
 
-private:
+protected:
   DatabaseType &db;
   const ContextType &context;
   uint32_t &batch_size;

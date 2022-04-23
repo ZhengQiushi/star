@@ -47,6 +47,7 @@ public:
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;
   bool enable_data_transfer = false;
+  bool lion_no_switch = false;
 
   bool cpu_affinity = true;
 

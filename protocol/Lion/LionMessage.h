@@ -49,7 +49,8 @@ class LionMessageFactory {
 using Transaction = SiloTransaction;
 public:
   static std::size_t new_search_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset) {
+                                        const void *key, uint32_t key_offset,
+                                        bool remaster) {
 
     /*
      * The structure of a search request: (primary key, read key offset)
@@ -58,7 +59,7 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::SEARCH_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -66,7 +67,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
+    encoder << key_offset << remaster;
     message.flush();
     return message_size;
   }
@@ -326,11 +327,18 @@ public:
   static void search_request_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+                                     std::deque<simpleTransaction>* router_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
-     * 
+     *
+     * | 0 | 1 | 2 |    x => static replica; o => dynamic replica
+     * | x | o |   | <- imagine current coordinator_id = 1
+     * |   | x | o |    request from N0
+     * | o |   | x |      remaster / transfer both ok
+     *                  request from N2
+     *                    remaster NO! transfer only
+     *                    
      */
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_REQUEST));
@@ -349,10 +357,11 @@ std::deque<simpleTransaction>* router_txn_queue
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
+    bool remaster; // add by truth 22-04-22
     bool success;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -360,13 +369,20 @@ std::deque<simpleTransaction>* router_txn_queue
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset; // index offset in the readSet from source request node
+    dec >> key_offset >> remaster; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
+    if(remaster == true){
+      // remaster, not transfer
+      value_size = 0;
+    }
+
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + value_size +
-                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success);
+    auto message_size = MessagePiece::get_header_size() + 
+                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                        value_size;
+    
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE), message_size,
         table_id, partition_id);
@@ -374,21 +390,27 @@ std::deque<simpleTransaction>* router_txn_queue
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;
 
+
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    // try to lock tuple. Ensure not locked by current node
+    uint64_t latest_tid = SiloHelper::lock(tid, success);
+    encoder << tid << key_offset << success << remaster;
+
     // reserve size for read
     responseMessage.data.append(value_size, 0);
-    void *dest =
-        &responseMessage.data[0] + responseMessage.data.size() - value_size;
-    // read to message buffer
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
-    SiloHelper::read(row, dest, value_size);
 
-    uint64_t latest_tid = SiloHelper::lock(tid, success);
-    
-    encoder << tid << key_offset << success;
+    if(remaster == false){
+      // transfer: read from db and load data into message buffer
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      SiloHelper::read(row, dest, value_size);
+    }
+
 
     if(success == true){
       // lock the router_table 
       if(partitioner->is_dynamic()){
+        // 该数据原来的位置
         auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
         auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
         
@@ -400,14 +422,7 @@ std::deque<simpleTransaction>* router_txn_queue
         DCHECK(coordinator_id_new != coordinator_id_old);
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-//        LOG(INFO) << table_id << *(int*) key << " switch " << coordinator_id_old << " --> " << coordinator_id_new;
-        // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        //   ITable* tab = db.find_router_table(table_id, i);
-        //   LOG(INFO) << i << ": " << tab->table_record_num();
-        // }
-
-        // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
-        // SiloHelper::lock(tid_r_new); // locked, not available so far
+        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new;
 
         size_t new_secondary_coordinator_id;
         // be related with static replica
@@ -430,6 +445,10 @@ std::deque<simpleTransaction>* router_txn_queue
           //
 
         } else {
+          // only transfer can reach
+          if(remaster == true){
+            DCHECK(false);
+          }
           // 非静态 迁到 新的非静态
           // 1. delete old
           table.delete_(key);
@@ -477,15 +496,23 @@ std::deque<simpleTransaction>* router_txn_queue
     uint64_t tid;
     uint32_t key_offset;
     bool success;
-
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  value_size + sizeof(tid) +
-                                                  sizeof(key_offset) + sizeof(success));
+    bool remaster;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
-    stringPiece.remove_prefix(value_size);
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset >> success;
+    dec >> tid >> key_offset >> success >> remaster;
+
+    if(remaster == true){
+      value_size = 0;
+    }
+
+    stringPiece = inputPiece.toStringPiece();
+    stringPiece.remove_prefix(value_size);
+
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+                                                  sizeof(tid) +
+                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                                                  value_size);
 
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
@@ -494,10 +521,19 @@ std::deque<simpleTransaction>* router_txn_queue
     if(success == true){
       SiloRWKey &readKey = txn->readSet[key_offset];
 
-      dec = Decoder(inputPiece.toStringPiece());
-      dec.read_n_bytes(readKey.get_value(), value_size);
-      readKey.set_tid(tid);
-
+      if(remaster == true){
+        // read from local
+        auto key = readKey.get_key();
+        auto value = table.search_value(key);
+        readKey.set_value(value);
+        readKey.set_tid(tid);
+      } else {
+        // transfer read from message piece
+        dec = Decoder(inputPiece.toStringPiece());
+        dec.read_n_bytes(readKey.get_value(), value_size);
+        readKey.set_tid(tid);
+      }
+      
       // insert remote tuple to local replica 
       if(partitioner->is_dynamic()){
         // key && value
@@ -515,7 +551,7 @@ std::deque<simpleTransaction>* router_txn_queue
         DCHECK(coordinator_id_new != coordinator_id_old);
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-//        LOG(INFO) << table_id << *(int*) key << " switch " << coordinator_id_old << " --> " << coordinator_id_new;
+        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new;
         // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
@@ -543,6 +579,10 @@ std::deque<simpleTransaction>* router_txn_queue
           if(coordinator_id_old == static_coordinator_id && 
              coordinator_id_new != old_secondary_coordinator_id){
             //!TODO 现在可能会重复插入
+            if(remaster == true){
+              // 不应该进入
+              DCHECK(false);
+            }
             table.insert(key, value); 
             // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
 
@@ -551,6 +591,10 @@ std::deque<simpleTransaction>* router_txn_queue
         } else {
           // 非静态 迁到 新的非静态
           // 1. insert new
+          if(remaster == true){
+            // 不应该进入
+            DCHECK(false);
+          }
           table.insert(key, value); 
           // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
 

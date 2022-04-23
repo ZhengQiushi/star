@@ -268,42 +268,6 @@ public:
      return ret;
    };
 
-   bool check_cross_txn(bool& success) override{
-    /**
-     * @brief 判断是不是跨分区事务
-     * @return true/false
-     */
-        size_t ycsbTableID = ycsb::ycsb::tableID;
-        auto query_keys = this->get_query();
-
-        int32_t first_key;
-        size_t first_key_partition_id;
-        bool is_cross_txn = false;
-        for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-          // judge if is cross txn
-          if(j == 0){
-            first_key = query_keys[j];
-            first_key_partition_id = context.getPartitionID(first_key);// db.getPartitionID(context, ycsbTableID, first_key);
-            if(first_key_partition_id == context.partition_num){
-              // cant find this key in current partition
-              success = false;
-              break;
-            }
-          } else {
-            auto cur_key = query_keys[j];
-            auto cur_key_partition_id = context.getPartitionID(cur_key);
-            if(cur_key_partition_id == context.partition_num) {
-              success = false;
-              break;
-            }
-            if(cur_key_partition_id != first_key_partition_id){
-              is_cross_txn = true;
-              break;
-            }
-          }
-        }
-    return is_cross_txn;
-  }
 
    std::set<int> txn_nodes_involved(bool is_dynamic) override {
       std::set<int> from_nodes_id;

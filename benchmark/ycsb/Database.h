@@ -221,7 +221,7 @@ public:
       std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
                     std::back_inserter(tbl_vecs_router[0]), tFunc);
       // init router information
-      if(context.protocol == "Lion"){
+      if(context.protocol == "Lion" || context.protocol == "LionNS" ){
         init_router_table(context);
       } else if (context.protocol == "Star"){
         init_star_router_table(context);

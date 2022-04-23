@@ -12,6 +12,8 @@ namespace star {
 #define DEBUG_V4 4
 #define DEBUG_V 5
 
+#define DEBUG_V8 8
+
 
 enum class ExecutorStatus {
   START,
@@ -68,6 +70,11 @@ struct simpleTransaction {
   std::vector<uint64_t> keys;
   std::vector<bool> update;
   RouterTxnOps op;
+};
+
+struct ExecutionStep {
+  size_t router_coordinator_id;
+  RouterTxnOps ops;
 };
 
 } // namespace star

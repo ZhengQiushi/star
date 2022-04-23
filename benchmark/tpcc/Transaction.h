@@ -650,62 +650,6 @@ public:
     return record_keys;
   }
 
-  bool check_cross_txn(bool& success) override{
-    /**
-     * @brief 判断是不是跨分区事务
-     * @return true/false
-     */
-    int32_t W_ID = this->partition_id + 1;
-    int32_t D_ID = query.D_ID;
-    int32_t C_ID = query.C_ID;
-    auto itemTableID = item::tableID;
-    auto stockTableID = stock::tableID;
-
-    // auto warehouse_key = warehouse::key(W_ID);
-    // auto district_key = district::key(W_ID, D_ID);
-    // auto customer_key = customer::key(W_ID, D_ID, C_ID);
-    std::vector<item::key> item_keys;
-    std::vector<stock::key> stock_keys;
-
-    bool is_cross_txn = false; // ret
-
-    get_item_stock_keys_query(item_keys, stock_keys);
-    std::unordered_set<size_t> partition_ids; // if only get one id, then it is single-partition txn
-    // size_t ware_partition_id = db.getPartitionID(context, warehouse::tableID, warehouse_key);
-    // size_t dist_partition_id = db.getPartitionID(context, district::tableID, district_key);
-    // size_t cust_partition_id = db.getPartitionID(context, customer::tableID, customer_key);
-
-    // partition_ids.insert(ware_partition_id);
-    // partition_ids.insert(dist_partition_id);
-    // partition_ids.insert(ware_partition_id);
-    
-    // if(ware_partition_id == context.partition_num || 
-    //    dist_partition_id == context.partition_num || 
-    //    cust_partition_id == context.partition_num){
-    //     success = false;
-    //     return is_cross_txn;
-    // }
-
-    for(size_t i = 0 ; i < stock_keys.size(); i ++ ){
-      size_t stock_partition_id = stock_keys[i].S_W_ID - 1;// db.getPartitionID(context, stock::tableID, stock_keys[i]);
-      //
-      if(item_keys[i] == 0){
-        success = false;
-        return is_cross_txn;
-      }
-      if(stock_partition_id == context.partition_num){
-        success = false;
-        return is_cross_txn;
-       }
-      partition_ids.insert(stock_partition_id);
-      if(partition_ids.size() > 1){
-        is_cross_txn = true;
-        break;
-      }
-    }
-    return is_cross_txn;
-  }
-
 
   std::set<int> txn_nodes_involved(bool is_dynamic) override {
     std::set<int> from_nodes_id;
@@ -983,10 +927,7 @@ public:
     }
     return ret;
   }
-  bool check_cross_txn(bool& success) override{
-    /**TODO**/
-    return false;
-  }
+
   std::set<int> txn_nodes_involved(bool is_dynamic) override {
     std::set<int> ret;
     return ret;

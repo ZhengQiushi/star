@@ -20,7 +20,7 @@ template <std::size_t N> struct YCSBQuery {
 template <std::size_t N> class makeYCSBQuery {
 public:
   const double my_threshold = 0.001; // 20 0000 
-                                      // 0.00005 = 10 ...
+                                      //  0.001 = 200  
   using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
                           Random &random, DatabaseType &db) const {
@@ -54,8 +54,11 @@ public:
           //       random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1) / 2 - 1);
     } else {
       // 单分区
+        // first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
+        //       random.uniform_dist((1 - my_threshold) * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
-              random.uniform_dist((1 - my_threshold) * (static_cast<int>(context.keysPerPartition) - 1), static_cast<int>(context.keysPerPartition) - 1);
+                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+
     }
 
     // forward or backward
@@ -116,10 +119,6 @@ public:
     } // end for
     return query;
   }
-  // std::size_t getGlobalKeyID(std::size_t key, std::size_t partitionID, DatabaseType& db){
-  //   ITable *table = db.tbl_ycsb_vec[partitionID].get();
-  //   return table->get_global_key(key);
-  // }
 
   YCSBQuery<N> operator()(const int32_t Y_KEY[N], bool UPDATE[N]) const {
     YCSBQuery<N> query;

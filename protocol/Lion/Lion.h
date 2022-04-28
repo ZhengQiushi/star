@@ -148,8 +148,10 @@ private:
 
         if (!success) {
           txn.abort_lock = true;
+          VLOG(DEBUG_V14) << "failed to LOCK " << *(int*)key;
           break;
         }
+        VLOG(DEBUG_V14) << "LOCK " << *(int*)key;
 
         writeKey.set_write_lock_bit();
         writeKey.set_tid(latestTid);
@@ -165,6 +167,7 @@ private:
 
       } else {
         // remote reads
+        VLOG(DEBUG_V14) << "failed to LOCK " << *(int*)key;
         txn.abort_lock = true;
         break;
         DCHECK(false);
@@ -222,6 +225,11 @@ private:
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       if (coordinatorID == context.coordinator_id) {
         // local read
+        bool is_success = table->contains(key);
+        if(is_success == false){
+          txn.abort_read_validation = true;
+          break; 
+        }
         uint64_t latest_tid = table->search_metadata(key).load();
         if (HelperType::remove_lock_bit(latest_tid) != tid) {
           txn.abort_read_validation = true;

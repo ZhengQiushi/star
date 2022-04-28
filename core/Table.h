@@ -77,7 +77,7 @@ public:
   MetaDataType &search_metadata(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
     bool ok = map_.contains(k);
-    DCHECK(ok == true);
+    DCHECK(ok == true) << " " << *(int*) key;
     return std::get<0>(map_[k]);
   }
 

@@ -111,83 +111,24 @@ public:
 
       this->n_started_workers.fetch_add(1);
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " c_phase " << lion_king_coordinator_id;
-      if (is_lion_king) {
-        VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " ready to run_transaction_with_router";
-        VLOG_IF(DEBUG_V, this->id == 0) << "planning_ratio: " << this->planning_ratio;
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          if(this->planning_ratio == 0){
-            this->my_batch_size = this->batch_size; // 10000;
-          } else {
-            this->my_batch_size = this->batch_size; // int(1000 / planning_ratio);
-          }
-          // if(planning_ratio > 0){
-          //   transaction_planning();
-          //   run_transaction_with_router(ExecutorStatus::C_PHASE, async_message_num);
-          // } else {
-             this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true);
-          // }
-        } else if(WorkloadType::which_workload == myTestSet::TPCC){
-           this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true);
-        } else {
-          DCHECK(false);
-        }
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true);
 
-        this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
-        this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
+      VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - now)
+                      .count()
+                << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
-        VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - now)
-                .count()
-        << " milliseconds.";
-        now = std::chrono::steady_clock::now();
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
 
-        VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - now)
-                        .count()
-                  << " milliseconds.";
-        now = std::chrono::steady_clock::now();
-
-        VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " finish run_transaction_with_router";
-
-      } else {
-        VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " ready to process_request";
-        
-        this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
-        this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
-
-        VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
-        << std::chrono::duration_cast<std::chrono::milliseconds>(
-                std::chrono::steady_clock::now() - now)
-                .count()
-        << " milliseconds.";
-        now = std::chrono::steady_clock::now();
-
-
-        while (this->signal_unmask(static_cast<ExecutorStatus>(this->worker_status.load())) ==
-               ExecutorStatus::C_PHASE) {
-          this->process_request();
-          this->unpack_route_transaction(c_workload, storage);
-          if(!this->r_transactions_queue.empty()){
-             this->run_transaction(ExecutorStatus::C_PHASE, &this->r_transactions_queue, this->async_message_num);
-          }
-           this->run_local_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num, 1);
-        }
-        VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " finish to process_request";
-        // process replication request after all workers stop.
-
-        VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
-        now = std::chrono::steady_clock::now();
-
-        this->process_request();
-      }
-
+      VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(
+              std::chrono::steady_clock::now() - now)
+              .count()
+      << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
       // commit transaction in c_phase;
       this->commit_transactions();

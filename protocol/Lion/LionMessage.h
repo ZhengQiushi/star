@@ -1170,19 +1170,21 @@ std::deque<simpleTransaction>* router_txn_queue
 
       // create the new tuple in global router of source request node
       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
-      DCHECK(coordinator_id_new != coordinator_id_old);
-      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+      if(coordinator_id_new != coordinator_id_old){
+        auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+        // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
 
-      router_table_new->insert(key, &coordinator_id_new);
-      // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
-      // SiloHelper::lock(tid_r_new); // locked, not available so far
+        router_table_new->insert(key, &coordinator_id_new);
+        // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+        // SiloHelper::lock(tid_r_new); // locked, not available so far
 
-      // delete old value in router and real-replica
-      router_table_old->delete_(key);
-      
-      // SiloHelper::unlock(tid_r_new); 
+        // delete old value in router and real-replica
+        router_table_old->delete_(key);
+        
+        // SiloHelper::unlock(tid_r_new); 
+      }
+
     } else {
 
       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;

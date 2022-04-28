@@ -385,7 +385,7 @@ public:
           std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
           cur_transaction = c_workload.next_transaction(c_context, partition_id, storage);
         } else {
-          if(context.lion_no_switch == true){
+          if(context.lion_no_switch == true || context.protocol == "LionNS"){
             std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
             cur_transaction = c_workload.next_transaction(s_context, partition_id, storage);
           } else {
@@ -512,7 +512,7 @@ public:
                         context.partition_num / context.worker_num * id + // partition_num_per_coordinator
                         context.coordinator_num * random.uniform_dist(0, partition_num_per_thread - 1) + 
                         context.coordinator_id + 
-                        context.coordinator_num - 1 
+                        context.partition_num - 1 
                      ) 
                      % 
                      context.partition_num;

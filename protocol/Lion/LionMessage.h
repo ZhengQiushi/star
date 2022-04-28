@@ -465,11 +465,13 @@ public:
       } else {
         // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
       }
+      // wait for the commit / abort to unlock
+      SiloHelper::unlock(tid);
     } else {
+      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key << " " << tid;
+
 
     }
-
-    SiloHelper::unlock_if_locked(tid);
 
     responseMessage.flush();
   }
@@ -605,7 +607,7 @@ std::deque<simpleTransaction>* router_txn_queue
         // 修改路由表
         router_table_new->insert(key, &new_secondary_coordinator_id);
         router_table_old->delete_(key);
-            
+
         // update txn->writekey dynamic coordinator_id
         readKey.set_dynamic_coordinator_id(coordinator_id_new);
         SiloRWKey *writeKey = txn->get_write_key(readKey.get_key());

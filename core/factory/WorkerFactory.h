@@ -34,6 +34,7 @@
 
 
 #include "protocol/LionNS/LionNSExecutor.h"
+#include "protocol/LionNS/LionNSManager.h"
 
 
 #include "protocol/Calvin/Calvin.h"
@@ -185,7 +186,7 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<LionManager<WorkloadType>>(
+      auto manager = std::make_shared<LionNSManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation

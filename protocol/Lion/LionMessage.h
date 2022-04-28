@@ -394,17 +394,7 @@ public:
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     // try to lock tuple. Ensure not locked by current node
     uint64_t latest_tid = SiloHelper::lock(tid, success);
-    encoder << tid << key_offset << success << remaster;
 
-    // reserve size for read
-    responseMessage.data.append(value_size, 0);
-
-    if(remaster == false){
-      // transfer: read from db and load data into message buffer
-      void *dest =
-          &responseMessage.data[0] + responseMessage.data.size() - value_size;
-      SiloHelper::read(row, dest, value_size);
-    }
 
 
     if(success == true){
@@ -419,48 +409,56 @@ public:
 
         // create the new tuple in global router of source request node
         auto coordinator_id_new = responseMessage.get_dest_node_id(); 
-        DCHECK(coordinator_id_new != coordinator_id_old);
-        auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+        if(coordinator_id_new != coordinator_id_old){
+          DCHECK(coordinator_id_new != coordinator_id_old);
 
-        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new;
+          auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-        size_t new_secondary_coordinator_id;
-        // be related with static replica
-        // 涉及 静态副本 
-        if(coordinator_id_new == static_coordinator_id || 
-           coordinator_id_old == static_coordinator_id ){ 
-          // local is or new destination has a replica 
-          if(coordinator_id_new == static_coordinator_id) {
-            // move to static replica 迁移到 静态副本, 
-            // 动态从副本 为 原来的位置
-            new_secondary_coordinator_id = coordinator_id_old;
+          VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid;
+
+          size_t new_secondary_coordinator_id;
+          // be related with static replica
+          // 涉及 静态副本 
+          if(coordinator_id_new == static_coordinator_id || 
+            coordinator_id_old == static_coordinator_id ){ 
+            // local is or new destination has a replica 
+            if(coordinator_id_new == static_coordinator_id) {
+              // move to static replica 迁移到 静态副本, 
+              // 动态从副本 为 原来的位置
+              new_secondary_coordinator_id = coordinator_id_old;
+            } else {
+              // 从静态副本迁出
+              // 动态从副本 为 静态副本的位置
+              new_secondary_coordinator_id = static_coordinator_id;
+            }
+
+            // 从静态副本迁出，且迁出地不是动态从副本的地方！
+            //!TODO 需要删除原从副本 
+            //
+
           } else {
-            // 从静态副本迁出
-            // 动态从副本 为 静态副本的位置
+            // only transfer can reach
+            if(remaster == true){
+              DCHECK(false);
+            }
+            // 非静态 迁到 新的非静态
+            // 1. delete old
+            table.delete_(key);
+            // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+            // 2. 
             new_secondary_coordinator_id = static_coordinator_id;
+
           }
-
-          // 从静态副本迁出，且迁出地不是动态从副本的地方！
-          //!TODO 需要删除原从副本 
-          //
-
+          // 修改路由表
+          router_table_new->insert(key, &new_secondary_coordinator_id); // 
+          // delete old value in router and real-replica
+          router_table_old->delete_(key);
+        } else if(coordinator_id_new == coordinator_id_old) {
+          success = false;
+          VLOG(DEBUG_V12) << "same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
         } else {
-          // only transfer can reach
-          if(remaster == true){
-            DCHECK(false);
-          }
-          // 非静态 迁到 新的非静态
-          // 1. delete old
-          table.delete_(key);
-          // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
-          // 2. 
-          new_secondary_coordinator_id = static_coordinator_id;
-
+          DCHECK(false);
         }
-        // 修改路由表
-        router_table_new->insert(key, &new_secondary_coordinator_id); // 
-        // delete old value in router and real-replica
-        router_table_old->delete_(key);
 
       } else {
         // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
@@ -469,10 +467,19 @@ public:
       SiloHelper::unlock(tid);
     } else {
       VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key << " " << tid;
-
-
     }
 
+    encoder << tid << key_offset << success << remaster;
+
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+
+    if(remaster == false){
+      // transfer: read from db and load data into message buffer
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      SiloHelper::read(row, dest, value_size);
+    }
     responseMessage.flush();
   }
 
@@ -518,14 +525,24 @@ std::deque<simpleTransaction>* router_txn_queue
 
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
-
     
-    if(success == true){
-      SiloRWKey &readKey = txn->readSet[key_offset];
+    SiloRWKey &readKey = txn->readSet[key_offset];
+    auto key = readKey.get_key();
+
+    bool is_exist = table.contains(key);
+    bool can_be_locked = true;
+
+    uint64_t tidd = 0;
+
+    if(is_exist){
+      tidd = table.search_metadata(key).load();
+      can_be_locked = !SiloHelper::is_locked(tidd);
+    }
+
+    if(success == true && can_be_locked){
 
       if(remaster == true){
         // read from local
-        auto key = readKey.get_key();
         auto value = table.search_value(key);
         readKey.set_value(value);
         readKey.set_tid(tid);
@@ -553,7 +570,7 @@ std::deque<simpleTransaction>* router_txn_queue
         DCHECK(coordinator_id_new != coordinator_id_old);
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new;
+        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tidd;
         // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
@@ -618,6 +635,7 @@ std::deque<simpleTransaction>* router_txn_queue
       }
 
     } else {
+      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tidd;
       txn->abort_lock = true;
     }
 
@@ -654,7 +672,7 @@ std::deque<simpleTransaction>* router_txn_queue
 
     bool success;
     uint64_t latest_tid = SiloHelper::lock(tid, success);
-
+    VLOG(DEBUG_V14) << "LOCK " << *(int*)key;
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
     dec >> key_offset;

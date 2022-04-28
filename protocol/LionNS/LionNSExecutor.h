@@ -133,6 +133,16 @@ public:
           DCHECK(false);
         }
 
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
+
+        VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - now)
+                .count()
+        << " milliseconds.";
+        now = std::chrono::steady_clock::now();
+
         VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - now)
@@ -145,6 +155,17 @@ public:
       } else {
         VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " ready to process_request";
         
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
+
+        VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - now)
+                .count()
+        << " milliseconds.";
+        now = std::chrono::steady_clock::now();
+
+
         while (this->signal_unmask(static_cast<ExecutorStatus>(this->worker_status.load())) ==
                ExecutorStatus::C_PHASE) {
           this->process_request();
@@ -167,15 +188,6 @@ public:
         this->process_request();
       }
 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
-
-      VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
-      << std::chrono::duration_cast<std::chrono::milliseconds>(
-              std::chrono::steady_clock::now() - now)
-              .count()
-      << " milliseconds.";
-      now = std::chrono::steady_clock::now();
 
       // commit transaction in c_phase;
       this->commit_transactions();

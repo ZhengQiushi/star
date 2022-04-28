@@ -76,8 +76,10 @@ public:
         
         std::atomic<uint64_t> &tid = table->search_metadata(key);
         HelperType::unlock(tid);
+        VLOG(DEBUG_V14) << "  unLOCK " << *(int*)key;
+
       } else {
-        
+        DCHECK(false);
         txn.network_size += MessageFactoryType::new_abort_message(
             *messages[coordinatorID], *table, writeKey.get_key());
       }
@@ -163,7 +165,9 @@ private:
 
       } else {
         // remote reads
-        // DCHECK(false);
+        txn.abort_lock = true;
+        break;
+        DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_lock_message(
             *messages[coordinatorID], *table, writeKey.get_key(), i);
@@ -229,6 +233,7 @@ private:
         }
       } else {
         // remote 
+        DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_read_validation_message(
             *messages[coordinatorID], *table, key, i, tid);
@@ -316,7 +321,7 @@ private:
         auto value = writeKey.get_value();
         table->update(key, value);
       } else {
-        // DCHECK(false);
+        DCHECK(false);
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_write_message(
             *messages[coordinatorID], *table, writeKey.get_key(),
@@ -348,10 +353,10 @@ private:
           auto value = writeKey.get_value();
           std::atomic<uint64_t> &tid = table->search_metadata(key);
 
-          uint64_t last_tid = HelperType::lock(tid);
+          // uint64_t last_tid = HelperType::lock(tid);
           // DCHECK(last_tid < commit_tid);
           table->update(key, value);
-          HelperType::unlock(tid, commit_tid);
+          // HelperType::unlock(tid, commit_tid);
         } else {
           // txn.pendingResponses++;
           auto coordinatorID = k;
@@ -396,6 +401,8 @@ private:
         std::atomic<uint64_t> &tid = table->search_metadata(key);
         table->update(key, value);
         HelperType::unlock(tid, commit_tid);
+        VLOG(DEBUG_V14) << "  unLOCK " << *(int*)key << " " << tid.load() << " " << commit_tid;
+
       } else {
         txn.network_size += MessageFactoryType::new_release_lock_message(
             *messages[coordinatorID], *table, writeKey.get_key(), commit_tid);

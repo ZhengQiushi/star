@@ -1668,10 +1668,10 @@ public:
           
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           if(result != TransactionResult::READY_TO_COMMIT){
-            if(result == TransactionResult::ABORT){
-                  retry_transaction = true;
-                  continue;
-            }
+            retry_transaction = false;
+            protocol->abort(*transaction, messages);
+            n_abort_no_retry.fetch_add(1);
+            continue;
           } else {
             result = transaction->prepare_update_execute(id);
           }

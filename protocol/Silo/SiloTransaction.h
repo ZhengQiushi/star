@@ -169,6 +169,7 @@ public:
      * 
      * @param i 
      */
+    bool success = true;
     // cannot use unsigned type in reverse iteration
     for (int i = int(readSet.size()) - 1; i >= 0; i--) {
       // early return
@@ -191,7 +192,14 @@ public:
         remote_request_handler();
       }
     }
-    return false;
+    if(is_abort()){
+      success = false;
+    }
+    if(success == true){
+      return false;
+    } else {
+      return true;
+    }
   }
 
 

@@ -70,8 +70,8 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
 
-    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
     // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
     // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
@@ -97,8 +97,8 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
 
-    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
     // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
     // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
@@ -124,16 +124,17 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
     
-    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
 
     // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
+    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
 
     readKey.set_key(&key);
     readKey.set_value(&value);
 
     readKey.set_read_request_bit();
+    readKey.set_write_lock_bit();
 
     add_to_read_set(readKey);
 
@@ -150,11 +151,13 @@ public:
     writeKey.set_table_id(table_id);
     writeKey.set_partition_id(partition_id);
 
-    auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    writeKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
+    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
+    // writeKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
     
-    auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
+    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
+    // writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
+    
+    writeKey.set_write_lock_bit();
 
     writeKey.set_key(&key);
     // the object pointed by value will not be updated
@@ -181,7 +184,10 @@ public:
       auto tid =
           readRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
                              i, readKey.get_key(), readKey.get_value(),
-                             readKey.get_local_index_read_bit());
+                             readKey.get_local_index_read_bit(), success);
+      if(success == false){
+        break;
+      }
       readSet[i].clear_read_request_bit();
       readSet[i].set_tid(tid);
     }
@@ -320,7 +326,7 @@ public:
   // local_index_read
   std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
                          const void *, void *, 
-                         bool)>
+                         bool, bool&)>
       readRequestHandler;
   
   std::function<uint64_t(std::size_t, std::size_t, uint32_t, 

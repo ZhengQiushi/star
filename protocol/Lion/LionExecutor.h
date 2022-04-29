@@ -258,9 +258,9 @@ public:
       while (signal_unmask(static_cast<ExecutorStatus>(worker_status.load())) !=
              ExecutorStatus::S_PHASE) {
         process_request(); 
-        unpack_route_transaction(c_workload, storage);
-        run_local_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num, 1);
-        run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 1);
+        // unpack_route_transaction(c_workload, storage);
+        // run_local_transaction(ExecutorStatus::C_PHASE, &c_single_transactions_queue, async_message_num, 1);
+        // run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 1);
       }
 
       VLOG_IF(DEBUG_V, id == 0) << "wait for switch "
@@ -1699,17 +1699,25 @@ public:
               retry_transaction = false;
               q.push(std::move(transaction));
             } else {
-              if (transaction->abort_lock) {
-                n_abort_lock.fetch_add(1);
-              } else {
-                DCHECK(transaction->abort_read_validation);
+              if(transaction->abort_lock && transaction->abort_read_validation){
+                // 
                 n_abort_read_validation.fetch_add(1);
+                retry_transaction = false;
+              } else {
+                if (transaction->abort_lock) {
+                  n_abort_lock.fetch_add(1);
+                } else {
+                  DCHECK(transaction->abort_read_validation);
+                  n_abort_read_validation.fetch_add(1);
+                }
+                random.set_seed(last_seed);
+                retry_transaction = true;
               }
-              random.set_seed(last_seed);
-              retry_transaction = true;
+              protocol->abort(*transaction, messages);
             }
           } else {
             n_abort_no_retry.fetch_add(1);
+            protocol->abort(*transaction, messages);
           }
         } while (retry_transaction);
       }
@@ -1916,30 +1924,58 @@ protected:
     txn.readRequestHandler =
         [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
                      uint32_t key_offset, const void *key, void *value,
-                     bool local_index_read) -> uint64_t {
+                     bool local_index_read, bool &success) -> uint64_t {
       bool local_read = false;
-      
-      auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
-      auto dynamic_coordinator_id = this->partitioner->master_coordinator(table_id, partition_id, key);
+
+      auto &readKey = txn.readSet[key_offset];
+      auto coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      auto coordinator_secondaryID = this->partitioner->secondary_coordinator(table_id, partition_id, key);
+
+      if(coordinatorID == coordinator_secondaryID){
+        success = false;
+        return 0;
+      }
+
+      readKey.set_dynamic_coordinator_id(coordinatorID);
+      readKey.set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
+
+      SiloRWKey *writeKey = txn.get_write_key(readKey.get_key());
+      if(writeKey != nullptr){
+        writeKey->set_dynamic_coordinator_id(coordinatorID);
+        writeKey->set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
+      }
 
       bool remaster = false;
 
-      ITable *table;
+      ITable *table = this->db.find_table(table_id, partition_id);
       if (coordinatorID == coordinator_id // ||
           // (this->partitioner->is_partition_replicated_on(
           //      partition_id, this->coordinator_id) &&
           //  this->context.read_on_replica)
            ) {
+        std::atomic<uint64_t> &tid = table->search_metadata(key);
+
+        // 赶快本地lock
+        if(readKey.get_write_lock_bit()){
+          TwoPLHelper::write_lock(tid, success);
+          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id();
+        } else {
+          TwoPLHelper::read_lock(tid, success);
+          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id();
+        }
+        if(success){
+          readKey.set_read_respond_bit();
+        }
         local_read = true;
       } else {
         // if(table_id == 2){
         //   LOG(INFO) << "nani?";
         //   txn.readSet[key_offset].get_dynamic_coordinator_id();
         // }
-        VLOG(DEBUG_V8) << table_id << " ASK " << coordinatorID << " " << dynamic_coordinator_id << " " << *(int*)key;
         // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
-        table = this->db.find_table(table_id, partition_id);
         remaster = table->contains(key); // current coordniator
+        
+        VLOG(DEBUG_V8) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
       }
 
       if (local_index_read || local_read) {
@@ -1964,57 +2000,57 @@ protected:
       }
     };
 
-    txn.localReadRequestHandler =
-        [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
-                     uint32_t key_offset, const void *key, void *value,
-                     bool local_index_read) -> uint64_t {
-      bool local_read = false;
+    // txn.localReadRequestHandler =
+    //     [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
+    //                  uint32_t key_offset, const void *key, void *value,
+    //                  bool local_index_read) -> uint64_t {
+    //   bool local_read = false;
 
 
-      auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
+    //   auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
 
-      if (coordinatorID == coordinator_id
-           ) {
-        local_read = true;
-      }
+    //   if (coordinatorID == coordinator_id
+    //        ) {
+    //     local_read = true;
+    //   }
 
-      if (local_index_read || local_read) {
-        return protocol.search(table_id, partition_id, key, value);
-      } else {
-        return INT_MAX;
-      }
-    };
+    //   if (local_index_read || local_read) {
+    //     return protocol.search(table_id, partition_id, key, value);
+    //   } else {
+    //     return INT_MAX;
+    //   }
+    // };
 
-    txn.readOnlyRequestHandler =
-        [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
-                     uint32_t key_offset, const void *key, void *value,
-                     bool local_index_read) -> uint64_t {
-      bool local_read = false;
+    // txn.readOnlyRequestHandler =
+    //     [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
+    //                  uint32_t key_offset, const void *key, void *value,
+    //                  bool local_index_read) -> uint64_t {
+    //   bool local_read = false;
       
-      auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
+    //   auto coordinatorID = txn.readSet[key_offset].get_dynamic_coordinator_id();
 
-      if (coordinatorID == coordinator_id // ||
-          // (this->partitioner->is_partition_replicated_on(
-          //      partition_id, this->coordinator_id) &&
-          //  this->context.read_on_replica)
-           ) {
-        local_read = true;
-      }
+    //   if (coordinatorID == coordinator_id // ||
+    //       // (this->partitioner->is_partition_replicated_on(
+    //       //      partition_id, this->coordinator_id) &&
+    //       //  this->context.read_on_replica)
+    //        ) {
+    //     local_read = true;
+    //   }
 
-      if (local_index_read || local_read) {
-        return protocol.search(table_id, partition_id, key, value);
-      } else {
-        ITable *table = this->db.find_table(table_id, partition_id);
-        // auto coordinatorID =
-        //     txn.partitioner.master_coordinator(table_id, partition_id, key);
+    //   if (local_index_read || local_read) {
+    //     return protocol.search(table_id, partition_id, key, value);
+    //   } else {
+    //     ITable *table = this->db.find_table(table_id, partition_id);
+    //     // auto coordinatorID =
+    //     //     txn.partitioner.master_coordinator(table_id, partition_id, key);
         
-        txn.network_size += MessageFactoryType::new_search_read_only_message(
-                *(this->messages[coordinatorID]), *table, key, key_offset);
-        txn.pendingResponses++;
-        txn.distributed_transaction = true;
-        return 0;
-      }
-    };
+    //     txn.network_size += MessageFactoryType::new_search_read_only_message(
+    //             *(this->messages[coordinatorID]), *table, key, key_offset);
+    //     txn.pendingResponses++;
+    //     txn.distributed_transaction = true;
+    //     return 0;
+    //   }
+    // };
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
     txn.message_flusher = [this]() { this->flush_messages(messages); };

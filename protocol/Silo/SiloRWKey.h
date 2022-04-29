@@ -29,6 +29,22 @@ public:
     return (bitvec >> LOCAL_INDEX_READ_BIT_OFFSET) & LOCAL_INDEX_READ_BIT_MASK;
   }
 
+  // read respond bit
+
+  void set_read_respond_bit() {
+    clear_read_respond_bit();
+    bitvec |= READ_RESPOND_BIT_MASK << READ_RESPOND_BIT_OFFSET;
+  }
+
+  void clear_read_respond_bit() {
+    bitvec &= ~(READ_RESPOND_BIT_MASK << READ_RESPOND_BIT_OFFSET);
+  }
+
+  uint32_t get_read_respond_bit() const {
+    return (bitvec >> READ_RESPOND_BIT_OFFSET) & READ_RESPOND_BIT_MASK;
+  }
+
+
   // read request bit
 
   void set_read_request_bit() {
@@ -135,8 +151,9 @@ private:
    * A bitvec is a 32-bit word.
    *
    * [ table id (5) ] | partition id (8) | 
-   *   dynamic replica coordinator id (5) | dynamic secondary replica coordinator id(5) | unused bit (6) |
-   * write lock bit(1) | read request bit (1) | local index read (1)  ]
+   *   dynamic replica coordinator id (5) | dynamic secondary replica coordinator id(5) | unused bit (5) |
+   *   read respond bit(1)
+   *   write lock bit(1) | read request bit (1) | local index read (1)  ]
    *
    * write lock bit is set when a write lock is acquired.
    * read request bit is set when the read response is received.
@@ -161,6 +178,9 @@ public:
 
   static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_MASK = 0x1f;
   static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET = 9;
+
+  static constexpr uint32_t READ_RESPOND_BIT_MASK = 0x1;
+  static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 3;
 
   static constexpr uint32_t WRITE_LOCK_BIT_MASK = 0x1;
   static constexpr uint32_t WRITE_LOCK_BIT_OFFSET = 2;

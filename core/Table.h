@@ -23,8 +23,10 @@ public:
   virtual void *search_value(const void *key) = 0;
 
   virtual MetaDataType &search_metadata(const void *key) = 0;
+  virtual MetaDataType &update_metadata(const void *key, const void *meta_value) = 0;
 
   virtual void insert(const void *key, const void *value) = 0;
+  virtual void insert(const void *key, const void *value, const void *meta_value) = 0;
 
   virtual void update(const void *key, const void *value) = 0;
 
@@ -81,6 +83,17 @@ public:
     return std::get<0>(map_[k]);
   }
 
+  MetaDataType &update_metadata(const void *key, const void *meta_value) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    const auto &m = *static_cast<const MetaDataType *>(meta_value);
+
+    bool ok = map_.contains(k);
+    DCHECK(ok == true) << " " << *(int*) key;
+    auto &meta = std::get<0>(map_[k]);
+    meta.store(m);
+
+    return meta;
+  }
   void insert(const void *key, const void *value) override {
     const auto &k = *static_cast<const KeyType *>(key);
     const auto &v = *static_cast<const ValueType *>(value);
@@ -88,6 +101,18 @@ public:
     DCHECK(ok == false);
     auto &row = map_[k];
     std::get<0>(row).store(0);
+    std::get<1>(row) = v;
+  }
+
+  void insert(const void *key, const void *value, const void *meta_value) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    const auto &v = *static_cast<const ValueType *>(value);
+    const auto &m = *static_cast<const MetaDataType *>(meta_value);
+
+    bool ok = map_.contains(k);
+    DCHECK(ok == false);
+    auto &row = map_[k];
+    std::get<0>(row).store(m);
     std::get<1>(row) = v;
   }
 

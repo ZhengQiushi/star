@@ -354,7 +354,7 @@ public:
       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
     }
 
-    encoder << latest_tid << key_offset << success << remaster;
+    encoder << tid << key_offset << success << remaster;
     // reserve size for read
     responseMessage.data.append(value_size, 0);
 

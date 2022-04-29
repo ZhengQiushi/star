@@ -29,6 +29,9 @@ public:
    * [write lock bit (1) |  read lock bit (9) -- 512 - 1 locks | seq id  (54) ]
    *
    */
+  static bool is_locked(uint64_t value) {
+    return is_write_locked(value) || is_read_locked(value);
+  }
 
   static bool is_read_locked(uint64_t value) {
     return value & (READ_LOCK_BIT_MASK << READ_LOCK_BIT_OFFSET);
@@ -57,6 +60,16 @@ public:
     } while (!a.compare_exchange_weak(old_value, new_value));
     success = true;
     return remove_lock_bit(old_value);
+  }
+
+  static uint64_t read_lock(uint64_t a){
+    DCHECK(!is_write_locked(a) && read_lock_num(a) < read_lock_max());
+    return a + (1ull << READ_LOCK_BIT_OFFSET);
+  }
+
+  static uint64_t write_lock(uint64_t a){
+    DCHECK(!is_read_locked(a) && !is_write_locked(a));
+    return a + (WRITE_LOCK_BIT_MASK << WRITE_LOCK_BIT_OFFSET);
   }
 
   static uint64_t write_lock(std::atomic<uint64_t> &a, bool &success) {

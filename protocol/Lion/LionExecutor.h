@@ -236,7 +236,7 @@ public:
           if(!r_transactions_queue.empty()){
             run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue, async_message_num);
           }
-          run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 1);
+          // run_local_transaction(ExecutorStatus::C_PHASE, &r_single_transactions_queue, async_message_num, 1);
         }
         VLOG_IF(DEBUG_V, id == 0) << "worker " << id << " finish to process_request";
         // process replication request after all workers stop.
@@ -288,12 +288,12 @@ public:
       now = std::chrono::steady_clock::now();
 
       // 
-      if(context.lion_no_switch == true){
-        run_transaction(ExecutorStatus::C_PHASE, &s_transactions_queue, async_message_num);
-      } else {
+      // if(context.lion_no_switch == true){
+      //   run_transaction(ExecutorStatus::C_PHASE, &s_transactions_queue, async_message_num);
+      // } else {
         // do switch
-        run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
-      }
+      run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
+      // }
 
       replication_fence();
       n_complete_workers.fetch_add(1);

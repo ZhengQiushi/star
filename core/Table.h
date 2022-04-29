@@ -64,7 +64,7 @@ public:
   std::tuple<MetaDataType *, void *> search(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
     bool ok = map_.contains(k);
-    DCHECK(ok == true);
+    DCHECK(ok == true) << *(int*)key;
     auto &v = map_[k];
     return std::make_tuple(&std::get<0>(v), &std::get<1>(v));
   }

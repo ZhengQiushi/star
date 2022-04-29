@@ -123,6 +123,8 @@ public:
       this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
       this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
 
+      this->replication_fence();
+
       VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
       << std::chrono::duration_cast<std::chrono::milliseconds>(
               std::chrono::steady_clock::now() - now)

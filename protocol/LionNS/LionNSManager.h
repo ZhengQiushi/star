@@ -138,6 +138,10 @@ public:
 
         wait4_lion_ack(lion_king_coordinator_id);
 
+        broadcast_stop();
+        VLOG(DEBUG_V) << "wait4_stop";
+        wait4_stop(n_coordinators - 1);
+
         VLOG(DEBUG_V) << "finished";
         {
           auto now = std::chrono::steady_clock::now();
@@ -192,6 +196,10 @@ public:
         send_lion_ack(lion_king_coordinator_id);
 
         VLOG(DEBUG_V) << "finished";
+        
+        broadcast_stop();
+        VLOG(DEBUG_V) << "wait4_stop";
+        wait4_stop(n_coordinators - 1);
 
       }
     

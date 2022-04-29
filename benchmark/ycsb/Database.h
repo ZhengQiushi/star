@@ -56,7 +56,7 @@ public:
     //   }
     // }
 
-    DCHECK(ret != coordinator_num);
+    DCHECK(ret != coordinator_num) << " " << table_id << " " << *(int*)key;
     return ret;
   }
 

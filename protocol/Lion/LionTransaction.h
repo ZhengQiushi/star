@@ -16,18 +16,18 @@
 
 namespace star {
 
-class SiloTransaction {
+class LionTransaction {
 public:
   using MetaDataType = std::atomic<uint64_t>;
 
-  SiloTransaction(std::size_t coordinator_id, std::size_t partition_id,
+  LionTransaction(std::size_t coordinator_id, std::size_t partition_id,
                   Partitioner &partitioner)
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
   }
 
-  virtual ~SiloTransaction() = default;
+  virtual ~LionTransaction() = default;
 
   void reset() {
     pendingResponses = 0;
@@ -42,7 +42,7 @@ public:
     readSet.clear();
     writeSet.clear();
 
-    // routerSet.clear(); // add by truth 22-03-25
+    routerSet.clear(); // add by truth 22-03-25
   }
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
   virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
@@ -134,7 +134,7 @@ public:
     readKey.set_value(&value);
 
     readKey.set_read_request_bit();
-    // readKey.set_write_lock_bit();
+    readKey.set_write_lock_bit();
 
     add_to_read_set(readKey);
 
@@ -157,7 +157,7 @@ public:
     // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
     // writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
     
-    // writeKey.set_write_lock_bit();
+    writeKey.set_write_lock_bit();
 
     writeKey.set_key(&key);
     // the object pointed by value will not be updated
@@ -184,7 +184,7 @@ public:
       auto tid =
           readRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
                              i, readKey.get_key(), readKey.get_value(),
-                             readKey.get_local_index_read_bit());
+                             readKey.get_local_index_read_bit(), success);
       if(success == false){
         break;
       }
@@ -326,7 +326,7 @@ public:
   // local_index_read
   std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
                          const void *, void *, 
-                         bool)>
+                         bool, bool&)>
       readRequestHandler;
   
   std::function<uint64_t(std::size_t, std::size_t, uint32_t, 

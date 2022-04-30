@@ -1595,7 +1595,8 @@ public:
   void run_transaction(ExecutorStatus status, 
                        std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue,
                        std::atomic<uint32_t>& async_message_num,
-                       bool naive_router = false) {
+                       bool naive_router = false,
+                       bool reset_time = false) {
     /**
      * @brief 
      * @note modified by truth 22-01-24
@@ -1632,6 +1633,9 @@ public:
 
       transaction =
               std::move(cur_transactions_queue->front());
+      if(reset_time == true){
+        transaction->startTime = std::chrono::steady_clock::now();
+      }
 
       if(false){ // naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
         // pass
@@ -1697,7 +1701,17 @@ public:
             if (commit) {
               n_commit.fetch_add(1);
               retry_transaction = false;
-              q.push(std::move(transaction));
+              
+              if(reset_time == true){
+                auto latency =
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - transaction->startTime)
+                    .count();
+                percentile.add(latency);
+              } else {
+                q.push(std::move(transaction));
+              }
+              
             } else {
               if(transaction->abort_lock && transaction->abort_read_validation){
                 // 
@@ -1931,7 +1945,9 @@ protected:
       auto coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
       auto coordinator_secondaryID = this->partitioner->secondary_coordinator(table_id, partition_id, key);
 
-      if(coordinatorID == coordinator_secondaryID){
+      if(coordinatorID == context.coordinator_num || 
+         coordinator_secondaryID == context.coordinator_num || 
+         coordinatorID == coordinator_secondaryID){
         success = false;
         return 0;
       }
@@ -1948,13 +1964,16 @@ protected:
       bool remaster = false;
 
       ITable *table = this->db.find_table(table_id, partition_id);
-      if (coordinatorID == coordinator_id // ||
-          // (this->partitioner->is_partition_replicated_on(
-          //      partition_id, this->coordinator_id) &&
-          //  this->context.read_on_replica)
-           ) {
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
-
+      if (coordinatorID == coordinator_id) {
+        bool contains = table->contains(key);
+        if(contains == false){
+          success = false;
+          return 0;
+        }
+        std::atomic<uint64_t> &tid = table->search_metadata(key, success);
+        if(success == false){
+          return 0;
+        }
         // 赶快本地lock
         if(readKey.get_write_lock_bit()){
           TwoPLHelper::write_lock(tid, success);

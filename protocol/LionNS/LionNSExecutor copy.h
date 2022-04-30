@@ -56,37 +56,32 @@ public:
   void start() override {
 
     LOG(INFO) << "Executor " << this->id << " starts.";
-    ExecutorStatus status;
 
     // C-Phase to S-Phase, to C-phase ...
     int times = 0;
     auto now = std::chrono::steady_clock::now();
-    while ((status = static_cast<ExecutorStatus>(this->worker_status.load())) !=
-           ExecutorStatus::START) {
-      std::this_thread::yield();
-    }
 
-    this->n_started_workers.fetch_add(1);
-    do {
+    for (;;) {
       auto begin = std::chrono::steady_clock::now();
+      ExecutorStatus status;
       size_t lion_king_coordinator_id;
       bool is_lion_king = false;
       times ++ ;
       
-//       do {
-//         std::tie(lion_king_coordinator_id, status) = this->split_signal(static_cast<ExecutorStatus>(this->worker_status.load()));
-//         this->process_request();
-//         if (status == ExecutorStatus::EXIT) {
-//           // commit transaction in s_phase;
-//           this->commit_transactions();
-//           LOG(WARNING) << "Executor " << this->id << " exits.";
-//           VLOG_IF(DEBUG_V, this->id == 0) << "TIMES : " << times; 
-//           return;
-//         }
-//       } while (status != ExecutorStatus::C_PHASE);
+      do {
+        std::tie(lion_king_coordinator_id, status) = this->split_signal(static_cast<ExecutorStatus>(this->worker_status.load()));
+        this->process_request();
+        if (status == ExecutorStatus::EXIT) {
+          // commit transaction in s_phase;
+          this->commit_transactions();
+          LOG(WARNING) << "Executor " << this->id << " exits.";
+          VLOG_IF(DEBUG_V, this->id == 0) << "TIMES : " << times; 
+          return;
+        }
+      } while (status != ExecutorStatus::C_PHASE);
 
       // commit transaction in s_phase;
-      // this->commit_transactions();
+      this->commit_transactions();
 
       VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " prepare_transactions_to_run";
 
@@ -114,8 +109,9 @@ public:
 
       // c_phase
 
+      this->n_started_workers.fetch_add(1);
 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true, true);
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true);
 
       VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -124,8 +120,8 @@ public:
                 << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num, true, true);
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num, true, true);
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num);
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num);
 
       this->replication_fence();
 
@@ -137,12 +133,13 @@ public:
       now = std::chrono::steady_clock::now();
 
       // commit transaction in c_phase;
-//       this->commit_transactions();
-      
+      this->commit_transactions();
+
       // 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->s_transactions_queue, this->async_message_num, true, true);
+      this->run_transaction(ExecutorStatus::C_PHASE, &this->s_transactions_queue, this->async_message_num);
 
       this->replication_fence();
+      this->n_complete_workers.fetch_add(1);
 
       VLOG_IF(DEBUG_V, this->id == 0) << "s_phase "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -153,14 +150,14 @@ public:
 
       // once all workers are stop, we need to process the replication
       // requests
-//       while (static_cast<ExecutorStatus>(this->worker_status.load()) ==
-//              ExecutorStatus::C_PHASE) {
-//         ExecutorStatus cur =  static_cast<ExecutorStatus>(this->worker_status.load());          
-//         this->process_request();
-//       }
+      while (static_cast<ExecutorStatus>(this->worker_status.load()) ==
+             ExecutorStatus::C_PHASE) {
+        ExecutorStatus cur =  static_cast<ExecutorStatus>(this->worker_status.load());          
+        this->process_request();
+      }
 
       // n_complete_workers has been cleared
-//       this->process_request();
+      this->process_request();
 
       VLOG_IF(DEBUG_V, this->id == 0) << "wait for switch back "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -174,22 +171,9 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-    } while (static_cast<ExecutorStatus>(this->worker_status.load()) != ExecutorStatus::STOP);
-
-    this->n_complete_workers.fetch_add(1);
-
-    // once all workers are stop, we need to process the replication
-    // requests
-
-    while (static_cast<ExecutorStatus>(this->worker_status.load()) !=
-           ExecutorStatus::CLEANUP) {
-      this->process_request();
     }
 
-    this->process_request();
-    this->n_complete_workers.fetch_add(1);
-
-    VLOG_IF(DEBUG_V, this->id == 0) << "TIMES : " << times; 
+      VLOG_IF(DEBUG_V, this->id == 0) << "TIMES : " << times; 
 
   }
 

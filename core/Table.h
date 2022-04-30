@@ -23,6 +23,7 @@ public:
   virtual void *search_value(const void *key) = 0;
 
   virtual MetaDataType &search_metadata(const void *key) = 0;
+  virtual MetaDataType &search_metadata(const void *key, bool& success) = 0;
   virtual MetaDataType &update_metadata(const void *key, const void *meta_value) = 0;
 
   virtual void insert(const void *key, const void *value) = 0;
@@ -81,6 +82,16 @@ public:
     bool ok = map_.contains(k);
     DCHECK(ok == true) << " " << *(int*) key;
     return std::get<0>(map_[k]);
+  }
+
+  MetaDataType &search_metadata(const void *key, bool& success) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    success = map_.contains(k);
+    if(success){
+      return std::get<0>(map_[k]);
+    } else {
+      return null_val;
+    }
   }
 
   MetaDataType &update_metadata(const void *key, const void *meta_value) override {
@@ -176,5 +187,6 @@ private:
   HashMap<N, KeyType, std::tuple<MetaDataType, ValueType>> map_;
   std::size_t tableID_;
   std::size_t partitionID_;
+  MetaDataType null_val;
 };
 } // namespace star

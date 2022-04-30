@@ -20,6 +20,7 @@
 #include "protocol/Silo/SiloRWKey.h"
 #include "protocol/Silo/SiloTransaction.h"
 
+#include "protocol/Lion/LionTransaction.h"
 #include "protocol/Lion/LionManager.h"
 #include "protocol/Lion/LionMessage.h"
 #include <glog/logging.h>
@@ -32,7 +33,7 @@ public:
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = typename DatabaseType::ContextType;
   using MessageType = LionMessage;
-  using TransactionType = SiloTransaction; // TwoPLTransaction;// 
+  using TransactionType = LionTransaction; // TwoPLTransaction;// 
 
   using MessageFactoryType = LionMessageFactory;
   using MessageHandlerType = LionMessageHandler<DatabaseType>;

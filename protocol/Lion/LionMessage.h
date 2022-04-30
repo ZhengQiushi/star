@@ -14,7 +14,7 @@
 #include "core/Partitioner.h"
 
 #include "protocol/TwoPL/TwoPLHelper.h"
-#include "protocol/Silo/SiloTransaction.h"
+#include "protocol/Lion/LionTransaction.h"
 
 
 // #include "protocol/TwoPL/TwoPLHelper.h"
@@ -38,7 +38,7 @@ enum class LionMessage {
 };
 
 class LionMessageFactory {
-using Transaction = SiloTransaction;
+using Transaction = LionTransaction;
 public:
   static std::size_t new_search_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
@@ -195,7 +195,7 @@ public:
 };
 
 template <class Database> class LionMessageHandler {
-  using Transaction = SiloTransaction;
+  using Transaction = LionTransaction;
   using Context = typename Database::ContextType;
 
 public:
@@ -268,7 +268,7 @@ public:
     
     success = table.contains(key);
     if(!success){
-      VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key << " " << tid_int;
+      VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -281,12 +281,14 @@ public:
 
 
     if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key << " " << tid_int;
+      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
     } 
+
+    bool is_delete = false;
 
     // lock the router_table 
     if(partitioner->is_dynamic()){
@@ -301,29 +303,20 @@ public:
           auto coordinator_id_new = responseMessage.get_dest_node_id(); 
           if(coordinator_id_new != coordinator_id_old){
             DCHECK(coordinator_id_new != coordinator_id_old);
-
             auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
             VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id;
-
             // 
-            encoder << latest_tid << key_offset << success << remaster;
-            // reserve size for read
-            responseMessage.data.append(value_size, 0);
-
+            char* value_transfer = new char[value_size + 1];
             if(success == true && remaster == false){
               auto row = table.search(key);
-              // transfer: read from db and load data into message buffer
-              void *dest =
-                  &responseMessage.data[0] + responseMessage.data.size() - value_size;
-              TwoPLHelper::read(row, dest, value_size);
+              TwoPLHelper::read(row, value_transfer, value_size);
             }
-            responseMessage.flush();
-            // 
+
+            
 
             size_t new_secondary_coordinator_id;
-            // be related with static replica
-            // 涉及 静态副本 
+            // be related with static replica 涉及 静态副本 
             if(coordinator_id_new == static_coordinator_id || 
               coordinator_id_old == static_coordinator_id ){ 
               // local is or new destination has a replica 
@@ -344,16 +337,34 @@ public:
             } else {
               // only transfer can reach
               if(remaster == true){
-                DCHECK(false);
+                success = false;
+                VLOG(DEBUG_V12) << "  Not Transfer " << *(int*)key; // << " " << tid_int;
+              } else {
+                // 非静态 迁到 新的非静态 1. delete old
+                VLOG(DEBUG_V12) << "  DELETE " << *(int*)key << " " << coordinator_id_old << " --> " << coordinator_id_new;
+                table.delete_(key);
+                is_delete = true;
+                // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+                // 2. 
+                new_secondary_coordinator_id = static_coordinator_id;
               }
-              // 非静态 迁到 新的非静态
-              // 1. delete old
-              table.delete_(key);
-              // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
-              // 2. 
-              new_secondary_coordinator_id = static_coordinator_id;
 
             }
+
+            encoder << latest_tid << key_offset << success << remaster;
+            // reserve size for read
+            responseMessage.data.append(value_size, 0);
+
+            if(success == true && remaster == false){
+              // transfer: read from db and load data into message buffer
+              void *dest =
+                  &responseMessage.data[0] + responseMessage.data.size() - value_size;
+              memcpy(dest, value_transfer, value_size);
+            }
+            responseMessage.flush();
+
+            delete[] value_transfer;
+
             // 修改路由表
             router_table_new->insert(key, &new_secondary_coordinator_id); // 
             // delete old value in router and real-replica
@@ -361,7 +372,6 @@ public:
           } else if(coordinator_id_new == coordinator_id_old) {
             success = false;
             VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
-            
             encoder << latest_tid << key_offset << success << remaster;
             responseMessage.data.append(value_size, 0);
             responseMessage.flush();
@@ -372,7 +382,7 @@ public:
 
     } else {
       // success = false;
-      VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key << " " << tid_int;
+      VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key; //  << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       if(success == true && remaster == false){
@@ -389,7 +399,9 @@ public:
 
 
     // wait for the commit / abort to unlock
-    TwoPLHelper::write_lock_release(tid);
+    if(is_delete == false){
+      TwoPLHelper::write_lock_release(tid);
+    }
   }
 
   static void search_response_handler(MessagePiece inputPiece,
@@ -530,7 +542,9 @@ std::deque<simpleTransaction>* router_txn_queue
               // 不应该进入
               DCHECK(false);
             }
-            table.insert(key, value, (void*)& tidd); 
+            if(!table.contains(key)){
+              table.insert(key, value, (void*)& tidd); 
+            }
             // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
 
           }
@@ -542,7 +556,9 @@ std::deque<simpleTransaction>* router_txn_queue
             // 不应该进入
             DCHECK(false);
           }
-          table.insert(key, value, (void*)& tidd); 
+          if(!table.contains(key)){
+            table.insert(key, value, (void*)& tidd);
+          }
           // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
 
           // 2. 
@@ -550,8 +566,10 @@ std::deque<simpleTransaction>* router_txn_queue
         }
 
         // 修改路由表
-        router_table_new->insert(key, &new_secondary_coordinator_id);
-        router_table_old->delete_(key);
+        if(!router_table_new->contains(key)){
+          router_table_new->insert(key, &new_secondary_coordinator_id);
+          router_table_old->delete_(key);
+        }
 
         // update txn->writekey dynamic coordinator_id
         readKey.set_dynamic_coordinator_id(coordinator_id_new);
@@ -618,18 +636,19 @@ std::deque<simpleTransaction>* router_txn_queue
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
 
-    // bool success;
-    // TwoPLHelper::write_lock(tid, success);
+    bool success;
+    TwoPLHelper::write_lock(tid, success);
     // while(success != true){
     //   std::this_thread::yield();
     //   // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
     //   TwoPLHelper::write_lock(tid, success);
     // }
-
-    // //! TODO logic needs to be checked
-    // // DCHECK(last_tid < commit_tid);
-    // table.deserialize_value(key, valueStringPiece);
-    // TwoPLHelper::write_lock_release(tid, commit_tid);
+    if(success){
+      //! TODO logic needs to be checked
+      // DCHECK(last_tid < commit_tid);
+      table.deserialize_value(key, valueStringPiece);
+      TwoPLHelper::write_lock_release(tid, commit_tid);
+    }
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();

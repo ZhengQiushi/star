@@ -111,8 +111,8 @@ public:
   static void write_lock_release(std::atomic<uint64_t> &a) {
     uint64_t old_value, new_value;
     old_value = a.load();
-    DCHECK(!is_read_locked(old_value));
-    DCHECK(is_write_locked(old_value));
+    DCHECK(!is_read_locked(old_value)) << old_value;
+    DCHECK(is_write_locked(old_value)) << old_value;
     new_value = old_value - (1ull << WRITE_LOCK_BIT_OFFSET);
     bool ok = a.compare_exchange_strong(old_value, new_value);
     DCHECK(ok);

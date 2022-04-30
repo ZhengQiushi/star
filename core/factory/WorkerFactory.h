@@ -31,6 +31,7 @@
 #include "protocol/Lion/Lion.h"
 #include "protocol/Lion/LionExecutor.h"
 #include "protocol/Lion/LionManager.h"
+#include "protocol/Lion/LionTransaction.h"
 
 
 #include "protocol/LionNS/LionNSExecutor.h"
@@ -154,7 +155,7 @@ public:
             0)
           << "In Lion, each partition is managed by only one thread.";
 
-      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using TransactionType = star::LionTransaction ;// TwoPLTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
@@ -182,7 +183,7 @@ public:
             0)
           << "In Lion, each partition is managed by only one thread.";
 
-      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using TransactionType = star::LionTransaction ;// TwoPLTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 

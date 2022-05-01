@@ -1941,7 +1941,10 @@ protected:
 
       auto &readKey = txn.readSet[key_offset];
       auto coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      auto coordinator_secondaryID = this->partitioner->secondary_coordinator(table_id, partition_id, key);
+      size_t coordinator_secondaryID = context.coordinator_num + 1;
+      if(readKey.get_write_lock_bit()){
+        coordinator_secondaryID = this->partitioner->secondary_coordinator(table_id, partition_id, key);
+      }
 
       if(coordinatorID == context.coordinator_num || 
          coordinator_secondaryID == context.coordinator_num || 
@@ -1953,21 +1956,16 @@ protected:
       readKey.set_dynamic_coordinator_id(coordinatorID);
       readKey.set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
 
-      SiloRWKey *writeKey = txn.get_write_key(readKey.get_key());
-      if(writeKey != nullptr){
-        writeKey->set_dynamic_coordinator_id(coordinatorID);
-        writeKey->set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
-      }
+      // SiloRWKey *writeKey = txn.get_write_key(readKey.get_key());
+      // if(writeKey != nullptr){
+      //   writeKey->set_dynamic_coordinator_id(coordinatorID);
+      //   writeKey->set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
+      // }
 
       bool remaster = false;
 
       ITable *table = this->db.find_table(table_id, partition_id);
       if (coordinatorID == coordinator_id) {
-        bool contains = table->contains(key);
-        if(contains == false){
-          success = false;
-          return 0;
-        }
         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
         if(success == false){
           return 0;

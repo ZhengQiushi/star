@@ -51,7 +51,7 @@ public:
 
   bool cpu_affinity = true;
 
-  bool sleep_on_retry = true;
+  bool sleep_on_retry = false;
 
   bool read_on_replica = false;
   bool local_validation = false;

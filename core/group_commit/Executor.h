@@ -59,6 +59,25 @@ public:
     message_sizes.resize(messageHandlers.size(), 0);
   }
 
+  void prepare_transactions_to_run(WorkloadType& workload, StorageType& storage){
+    /** 
+     * @brief 准备需要的txns
+     * @note add by truth 22-01-24
+     */
+    std::size_t query_num = context.batch_size;
+    uint64_t last_seed = 0;
+
+    for (auto i = 0u; i < query_num; i++) {
+      std::size_t partition_id = get_partition_id();
+      std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id, storage);
+      transactions_queue.push_back(std::move(cur_transaction));
+    } // END FOR
+
+    VLOG_IF(DEBUG_V6, id == 0) << "transactions_queue: " << transactions_queue.size();
+    return;
+  }
+
+
   void start() override {
 
     LOG(INFO) << "Executor " << id << " starts.";
@@ -94,81 +113,90 @@ public:
 
       n_started_workers.fetch_add(1);
 
-      bool retry_transaction = false;
+      prepare_transactions_to_run(workload, storage);
 
-      do {
+      auto query_num = transactions_queue.size();
+      for (auto i = 0u; i < query_num; i++) {
+        if(transactions_queue.empty()){
+          break;
+        }
+        bool retry_transaction = false;
 
-        count++;
+        transaction =
+                std::move(transactions_queue.front());
+        transaction->startTime = std::chrono::steady_clock::now();;
 
-        process_request();
+        do {
+          process_request();
 
-        if (!partitioner->is_backup()) {
-          // backup node stands by for replication
-          last_seed = random.get_seed();
+          if (!partitioner->is_backup()) {
+            // backup node stands by for replication
+            last_seed = random.get_seed();
 
-          if (retry_transaction) {
-            transaction->reset();
-          } else {
-
-            auto partition_id = get_partition_id();
-
-            transaction =
-                workload.next_transaction(context, partition_id, storage);
-            setupHandlers(*transaction);
-          }
-
-          auto result = transaction->execute(id);
-          if (result == TransactionResult::READY_TO_COMMIT) {
-            bool commit =
-                protocol.commit(*transaction, sync_messages, async_messages);
-            n_network_size.fetch_add(transaction->network_size);
-            if (commit) {
-              n_commit.fetch_add(1);
-              if (transaction->si_in_serializable) {
-                n_si_in_serializable.fetch_add(1);
-              }
-              if (transaction->local_validated) {
-                n_local.fetch_add(1);
-              }
-
-              auto latency =
-                  std::chrono::duration_cast<std::chrono::microseconds>(
-                      std::chrono::steady_clock::now() - transaction->startTime)
-                      .count();
-              write_latency.add(latency);
-              if (transaction->distributed_transaction) {
-                dist_latency.add(latency);
-              } else {
-                local_latency.add(latency);
-              }
-              retry_transaction = false;
-              q.push(std::move(transaction));
+            if (retry_transaction) {
+              transaction->reset();
             } else {
-              if (transaction->abort_lock) {
-                n_abort_lock.fetch_add(1);
-              } else {
-                DCHECK(transaction->abort_read_validation);
-                n_abort_read_validation.fetch_add(1);
-              }
-              if (context.sleep_on_retry) {
-                std::this_thread::sleep_for(std::chrono::microseconds(
-                    random.uniform_dist(0, context.sleep_time)));
-              }
-              random.set_seed(last_seed);
-              retry_transaction = true;
+
+              auto partition_id = get_partition_id();
+
+              setupHandlers(*transaction);
             }
-          } else {
-            protocol.abort(*transaction, sync_messages, async_messages);
-            n_abort_no_retry.fetch_add(1);
+
+            auto result = transaction->execute(id);
+            if (result == TransactionResult::READY_TO_COMMIT) {
+              bool commit =
+                  protocol.commit(*transaction, sync_messages, async_messages);
+              n_network_size.fetch_add(transaction->network_size);
+              if (commit) {
+                n_commit.fetch_add(1);
+                if (transaction->si_in_serializable) {
+                  n_si_in_serializable.fetch_add(1);
+                }
+                if (transaction->local_validated) {
+                  n_local.fetch_add(1);
+                }
+
+                auto latency =
+                    std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - transaction->startTime)
+                        .count();
+                write_latency.add(latency);
+                if (transaction->distributed_transaction) {
+                  dist_latency.add(latency);
+                } else {
+                  local_latency.add(latency);
+                }
+                retry_transaction = false;
+                q.push(std::move(transaction));
+              } else {
+                if (transaction->abort_lock) {
+                  n_abort_lock.fetch_add(1);
+                } else {
+                  DCHECK(transaction->abort_read_validation);
+                  n_abort_read_validation.fetch_add(1);
+                }
+                if (context.sleep_on_retry) {
+                  std::this_thread::sleep_for(std::chrono::microseconds(
+                      random.uniform_dist(0, context.sleep_time)));
+                }
+                random.set_seed(last_seed);
+                retry_transaction = true;
+              }
+            } else {
+              protocol.abort(*transaction, sync_messages, async_messages);
+              n_abort_no_retry.fetch_add(1);
+            }
           }
 
-          if (count % context.batch_flush == 0) {
-            flush_async_messages();
-          }
+          status = static_cast<ExecutorStatus>(worker_status.load());
+        } while (retry_transaction);
+
+        if (i % context.batch_flush == 0) {
+              flush_async_messages();
         }
 
-        status = static_cast<ExecutorStatus>(worker_status.load());
-      } while (status != ExecutorStatus::STOP);
+        transactions_queue.pop_front();
+      }
 
       flush_async_messages();
 
@@ -316,6 +344,8 @@ protected:
   }
 
 protected:
+  std::deque<std::unique_ptr<TransactionType>> transactions_queue;
+  
   DatabaseType &db;
   const ContextType &context;
   std::atomic<uint32_t> &worker_status;

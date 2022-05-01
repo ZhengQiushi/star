@@ -405,6 +405,7 @@ public:
     }
 
     new_router_txn.op = static_cast<RouterTxnOps>(op);
+    new_router_txn.size = inputPiece.get_message_length();
     router_txn_queue->push_back(new_router_txn);
 
   }

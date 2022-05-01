@@ -66,129 +66,119 @@ public:
       std::this_thread::yield();
     }
 
-    this->n_started_workers.fetch_add(1);
-    do {
-      auto begin = std::chrono::steady_clock::now();
-      size_t lion_king_coordinator_id;
-      bool is_lion_king = false;
-      times ++ ;
-      
-//       do {
-//         std::tie(lion_king_coordinator_id, status) = this->split_signal(static_cast<ExecutorStatus>(this->worker_status.load()));
-//         this->process_request();
-//         if (status == ExecutorStatus::EXIT) {
-//           // commit transaction in s_phase;
-//           this->commit_transactions();
-//           LOG(WARNING) << "Executor " << this->id << " exits.";
-//           VLOG_IF(DEBUG_V, this->id == 0) << "TIMES : " << times; 
-//           return;
-//         }
-//       } while (status != ExecutorStatus::C_PHASE);
+    for (;;) {
+        ExecutorStatus status;
+        do {
+                status = static_cast<ExecutorStatus>(this->worker_status.load());
 
-      // commit transaction in s_phase;
-      // this->commit_transactions();
+                if (status == ExecutorStatus::EXIT) {
+                LOG(INFO) << "Executor " << this->id << " exits.";
+                return;
+                }
+        } while (status != ExecutorStatus::START);
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " prepare_transactions_to_run";
-
-      WorkloadType c_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->l_partitioner.get());
-      WorkloadType s_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->s_partitioner.get());
-      StorageType storage;
-
-      is_lion_king = (this->coordinator_id == lion_king_coordinator_id);
-      // 准备transaction
-      now = std::chrono::steady_clock::now();
-
-      this->prepare_transactions_to_run(c_workload, s_workload, storage, is_lion_king);
-
-      VLOG_IF(DEBUG_V, this->id == 0) << "prepare_transactions_to_run "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
-      now = std::chrono::steady_clock::now();
-
-      VLOG_IF(DEBUG_V, this->id == 0) << this->id << " prepare_transactions_to_run \n" << 
-              "c cross \\ single = " << this->c_transactions_queue.size() << " \\" << this->c_single_transactions_queue.size() << " \n" << 
-              "r cross \\ single = " << this->r_transactions_queue.size() << " \\" << this->r_single_transactions_queue.size() << " \n" << 
-              "s single = " << this->s_transactions_queue.size();
-
-      // c_phase
+        // commit transaction in s_phase;
+        this->commit_transactions();
 
 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true, true);
+        this->n_started_workers.fetch_add(1);
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
+        auto begin = std::chrono::steady_clock::now();
+        size_t lion_king_coordinator_id;
+        bool is_lion_king = false;
+        times ++ ;
+        
+
+        VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " prepare_transactions_to_run";
+
+        WorkloadType c_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->l_partitioner.get());
+        WorkloadType s_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->s_partitioner.get());
+        StorageType storage;
+
+        is_lion_king = (this->coordinator_id == lion_king_coordinator_id);
+        // 准备transaction
+        now = std::chrono::steady_clock::now();
+
+        this->prepare_transactions_to_run(c_workload, s_workload, storage, is_lion_king);
+
+        VLOG_IF(DEBUG_V, this->id == 0) << "prepare_transactions_to_run "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - now)
-                      .count()
+                        std::chrono::steady_clock::now() - now)
+                        .count()
                 << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+        now = std::chrono::steady_clock::now();
 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num, true, true);
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num, true, true);
+        VLOG_IF(DEBUG_V, this->id == 0) << this->id << " prepare_transactions_to_run \n" << 
+                "c cross \\ single = " << this->c_transactions_queue.size() << " \\" << this->c_single_transactions_queue.size() << " \n" << 
+                "r cross \\ single = " << this->r_transactions_queue.size() << " \\" << this->r_single_transactions_queue.size() << " \n" << 
+                "s single = " << this->s_transactions_queue.size();
 
-      this->replication_fence();
+        // c_phase
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
-      << std::chrono::duration_cast<std::chrono::milliseconds>(
-              std::chrono::steady_clock::now() - now)
-              .count()
-      << " milliseconds.";
-      now = std::chrono::steady_clock::now();
 
-      // commit transaction in c_phase;
-//       this->commit_transactions();
-      
-      // 
-      this->run_transaction(ExecutorStatus::C_PHASE, &this->s_transactions_queue, this->async_message_num, true, true);
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->c_transactions_queue, this->async_message_num, true, true);
 
-      this->replication_fence();
+        VLOG_IF(DEBUG_V, this->id == 0) << "c_phase "
+                        << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - now)
+                        .count()
+                        << " milliseconds.";
+        now = std::chrono::steady_clock::now();
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "s_phase "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->r_single_transactions_queue, this->async_message_num, true, true);
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->c_single_transactions_queue, this->async_message_num, true, true);
 
-      // once all workers are stop, we need to process the replication
-      // requests
-//       while (static_cast<ExecutorStatus>(this->worker_status.load()) ==
-//              ExecutorStatus::C_PHASE) {
-//         ExecutorStatus cur =  static_cast<ExecutorStatus>(this->worker_status.load());          
-//         this->process_request();
-//       }
+        this->replication_fence();
 
-      // n_complete_workers has been cleared
-//       this->process_request();
+        VLOG_IF(DEBUG_V, this->id == 0) << "c_single_transactions_queue "
+        << std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - now)
+                .count()
+        << " milliseconds.";
+        now = std::chrono::steady_clock::now();
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "wait for switch back "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+        // commit transaction in c_phase;
+        this->commit_transactions();
+        
+        // 
+        this->run_transaction(ExecutorStatus::C_PHASE, &this->s_transactions_queue, this->async_message_num, true, true);
 
-      VLOG_IF(DEBUG_V, this->id == 0) << "whole batch "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-    } while (static_cast<ExecutorStatus>(this->worker_status.load()) != ExecutorStatus::STOP);
+        this->replication_fence();
 
-    this->n_complete_workers.fetch_add(1);
+        VLOG_IF(DEBUG_V, this->id == 0) << "s_phase "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - now)
+                        .count()
+                << " milliseconds.";
+        now = std::chrono::steady_clock::now();
 
-    // once all workers are stop, we need to process the replication
-    // requests
 
-    while (static_cast<ExecutorStatus>(this->worker_status.load()) !=
-           ExecutorStatus::CLEANUP) {
-      this->process_request();
+        VLOG_IF(DEBUG_V, this->id == 0) << "wait for switch back "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - now)
+                        .count()
+                << " milliseconds.";
+        now = std::chrono::steady_clock::now();
+
+        VLOG_IF(DEBUG_V, this->id == 0) << "whole batch "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - begin)
+                        .count()
+                << " milliseconds.";
+
+        this->n_complete_workers.fetch_add(1);
+
+        // once all workers are stop, we need to process the replication
+        // requests
+
+        while (static_cast<ExecutorStatus>(this->worker_status.load()) !=
+                ExecutorStatus::CLEANUP) {
+        this->process_request();
+        }
+
+        this->process_request();
+        this->n_complete_workers.fetch_add(1);
     }
-
-    this->process_request();
-    this->n_complete_workers.fetch_add(1);
-
     VLOG_IF(DEBUG_V, this->id == 0) << "TIMES : " << times; 
 
   }

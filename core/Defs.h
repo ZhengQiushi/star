@@ -73,6 +73,7 @@ struct simpleTransaction {
   std::vector<uint64_t> keys;
   std::vector<bool> update;
   RouterTxnOps op;
+  uint64_t size;
 };
 
 struct ExecutionStep {

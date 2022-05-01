@@ -1633,9 +1633,7 @@ public:
 
       transaction =
               std::move(cur_transactions_queue->front());
-      if(reset_time == true){
-        transaction->startTime = std::chrono::steady_clock::now();
-      }
+      transaction->startTime = std::chrono::steady_clock::now();
 
       if(false){ // naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
         // pass
@@ -1702,15 +1700,15 @@ public:
               n_commit.fetch_add(1);
               retry_transaction = false;
               
-              if(reset_time == true){
-                auto latency =
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - transaction->startTime)
-                    .count();
-                percentile.add(latency);
-              } else {
-                q.push(std::move(transaction));
-              }
+              // if(reset_time == true){
+              //   auto latency =
+              //   std::chrono::duration_cast<std::chrono::microseconds>(
+              //       std::chrono::steady_clock::now() - transaction->startTime)
+              //       .count();
+              //   percentile.add(latency);
+              // } else {
+              q.push(std::move(transaction));
+              // }
               
             } else {
               if(transaction->abort_lock && transaction->abort_read_validation){

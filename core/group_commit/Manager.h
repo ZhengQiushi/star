@@ -28,9 +28,9 @@ public:
       n_completed_workers.store(0);
       signal_worker(ExecutorStatus::START);
       wait_all_workers_start();
-      std::this_thread::sleep_for(
-          std::chrono::milliseconds(context.group_time));
-      set_worker_status(ExecutorStatus::STOP);
+      // std::this_thread::sleep_for(
+      //     std::chrono::milliseconds(context.group_time));
+      // set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
       broadcast_stop();
       wait4_stop(n_coordinators - 1);

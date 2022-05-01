@@ -123,6 +123,8 @@ public:
     while(!router_transactions_queue.empty()){
       simpleTransaction simple_txn = router_transactions_queue.front();
       router_transactions_queue.pop_front();
+      
+      n_network_size.fetch_add(simple_txn.size);
 
       auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
       r_transactions_queue.push_back(std::move(p));
@@ -140,7 +142,8 @@ public:
       txn->network_size += MessageFactoryType::new_router_transaction_message(
           *(this->async_messages[0]), ycsb::ycsb::tableID, txn, 
           context.coordinator_id);
-
+      n_network_size.fetch_add(txn->network_size);
+      
       router_transactions_send.fetch_add(1);
       c_transactions_queue.pop_front();
       flush_async_messages();
@@ -272,9 +275,16 @@ public:
       
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
 
+      VLOG_IF(DEBUG_V, id==0) << "S_phase done "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+      
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
-      VLOG_IF(DEBUG_V, id==0) << "S_phase done "
+      VLOG_IF(DEBUG_V, id==0) << "S_phase fence "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
@@ -378,7 +388,9 @@ public:
         }
       } // END FOR
     }
-
+    if(id == 0){
+      VLOG(DEBUG_V6) << "c_transactions_queue: " << c_transactions_queue.size() << " s_transactions_queue: " << s_transactions_queue.size();
+    }
     return;
   }
 
@@ -471,6 +483,8 @@ public:
 
       transaction =
               std::move(cur_transactions_queue->front());
+      transaction->startTime = std::chrono::steady_clock::now();;
+
       do {
         // // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request" << i;
         process_request();

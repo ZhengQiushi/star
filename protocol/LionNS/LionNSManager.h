@@ -13,9 +13,9 @@ namespace star {
 
 
 template <class Workload>
-class LionNSManager : public star::Manager {
+class LionNSManager : public star::group_commit::Manager {
 public:
-  using base_type = star::Manager;
+  using base_type = star::group_commit::Manager;
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
 

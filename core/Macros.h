@@ -14,7 +14,7 @@ DEFINE_int32(threads, 1, "the number of threads");
 DEFINE_int32(io, 1, "the number of i/o threads");
 DEFINE_int32(partition_num, 1, "the number of partitions");
 DEFINE_string(partitioner, "hash", "database partitioner (hash, hash2, pb)");
-DEFINE_bool(sleep_on_retry, true, "sleep when retry aborted transactions");
+DEFINE_bool(sleep_on_retry, false, "sleep when retry aborted transactions");
 DEFINE_int32(batch_size, 100, "star or calvin batch size");
 DEFINE_int32(group_time, 10, "group commit frequency");
 DEFINE_int32(batch_flush, 50, "batch flush");

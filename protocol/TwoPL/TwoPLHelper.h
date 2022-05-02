@@ -102,7 +102,7 @@ public:
     uint64_t old_value, new_value;
     do {
       old_value = a.load();
-      DCHECK(is_read_locked(old_value));
+      DCHECK(is_read_locked(old_value)) << a.load();
       DCHECK(!is_write_locked(old_value));
       new_value = old_value - (1ull << READ_LOCK_BIT_OFFSET);
     } while (!a.compare_exchange_weak(old_value, new_value));

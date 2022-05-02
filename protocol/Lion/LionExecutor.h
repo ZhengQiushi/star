@@ -1980,6 +1980,8 @@ protected:
         }
         if(success){
           readKey.set_read_respond_bit();
+        } else {
+          return 0;
         }
         local_read = true;
       } else {
@@ -1994,7 +1996,8 @@ protected:
       }
 
       if (local_index_read || local_read) {
-        return protocol.search(table_id, partition_id, key, value);
+        auto ret = protocol.search(table_id, partition_id, key, value, success);
+        return ret;
       } else {
         
         for(size_t i = 0; i < context.coordinator_num; i ++ ){

@@ -286,7 +286,9 @@ public:
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
-    } 
+    } else {
+      VLOG(DEBUG_V12) << " Lock" << *(int*)key << " " << tid << " " << latest_tid;
+    }
 
     bool is_delete = false;
 

@@ -43,15 +43,20 @@ public:
       : db(db), context(context), partitioner(partitioner), id(id) {}
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
-                  const void *key, void *value) const {
+                  const void *key, void *value, bool& success) const {
     /**
      * @brief read value from the key in table[table_id] from partition[partition_id]
      * 
      */
     ITable *table = db.find_table(table_id, partition_id);
     auto value_bytes = table->value_size();
-    auto row = table->search(key);
-    return TwoPLHelper::read(row, value, value_bytes);
+    success = table->contains(key);
+    if(success == true){
+      auto row = table->search(key);
+      return TwoPLHelper::read(row, value, value_bytes);
+    } else {
+      return 0;
+    }
   }
 
   void abort(TransactionType &txn,

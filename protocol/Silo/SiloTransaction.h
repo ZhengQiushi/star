@@ -42,6 +42,11 @@ public:
     readSet.clear();
     writeSet.clear();
 
+
+    prepare = 0;
+    fetch = 0; 
+    commit = 0;
+
     // routerSet.clear(); // add by truth 22-03-25
   }
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
@@ -347,6 +352,8 @@ public:
   Partitioner &partitioner;
   Operation operation;
   std::vector<SiloRWKey> readSet, writeSet, routerSet;
+
+  int prepare, fetch, commit;
 };
 
 } // namespace star

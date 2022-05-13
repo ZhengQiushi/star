@@ -7,26 +7,26 @@
 #include "common/Operation.h"
 #include "core/Defs.h"
 #include "core/Partitioner.h"
-#include "protocol/Calvin/CalvinHelper.h"
-#include "protocol/Calvin/CalvinRWKey.h"
+#include "protocol/Hermes/HermesHelper.h"
+#include "protocol/Hermes/HermesRWKey.h"
 #include <chrono>
 #include <glog/logging.h>
 #include <thread>
 
 namespace star {
-class CalvinTransaction {
+class HermesTransaction {
 
 public:
   using MetaDataType = std::atomic<uint64_t>;
 
-  CalvinTransaction(std::size_t coordinator_id, std::size_t partition_id,
+  HermesTransaction(std::size_t coordinator_id, std::size_t partition_id,
                     Partitioner &partitioner)
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
   }
 
-  virtual ~CalvinTransaction() = default;
+  virtual ~HermesTransaction() = default;
 
   void reset() {
     abort_lock = false;
@@ -68,7 +68,7 @@ public:
       return;
     }
 
-    CalvinRWKey readKey;
+    HermesRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
@@ -89,7 +89,7 @@ public:
       return;
     }
 
-    CalvinRWKey readKey;
+    HermesRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
@@ -109,7 +109,7 @@ public:
       return;
     }
 
-    CalvinRWKey readKey;
+    HermesRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
@@ -130,7 +130,7 @@ public:
       return;
     }
 
-    CalvinRWKey writeKey;
+    HermesRWKey writeKey;
 
     writeKey.set_table_id(table_id);
     writeKey.set_partition_id(partition_id);
@@ -142,12 +142,12 @@ public:
     add_to_write_set(writeKey);
   }
 
-  std::size_t add_to_read_set(const CalvinRWKey &key) {
+  std::size_t add_to_read_set(const HermesRWKey &key) {
     readSet.push_back(key);
     return readSet.size() - 1;
   }
 
-  std::size_t add_to_write_set(const CalvinRWKey &key) {
+  std::size_t add_to_write_set(const HermesRWKey &key) {
     writeSet.push_back(key);
     return writeSet.size() - 1;
   }
@@ -201,7 +201,7 @@ public:
     process_requests = [this, n_lock_manager, n_worker,
                         replica_group_size](std::size_t worker_id) {
 
-      auto lock_manager_id = CalvinHelper::worker_id_to_lock_manager_id(
+      auto lock_manager_id = HermesHelper::worker_id_to_lock_manager_id(
           worker_id, n_lock_manager, n_worker);
 
       // cannot use unsigned type in reverse iteration
@@ -211,7 +211,7 @@ public:
           continue;
         }
 
-        if (CalvinHelper::partition_id_to_lock_manager_id(
+        if (HermesHelper::partition_id_to_lock_manager_id(
                 readSet[i].get_partition_id(), n_lock_manager,
                 replica_group_size) 
             != 
@@ -225,7 +225,6 @@ public:
         }
 
         auto &readKey = readSet[i];
-        // local & remote read
         read_handler(worker_id, readKey.get_table_id(),
                      readKey.get_partition_id(), id, i, readKey.get_key(),
                      readKey.get_value());
@@ -312,6 +311,6 @@ public:
   Partitioner &partitioner;
   std::vector<bool> active_coordinators;
   Operation operation; // never used
-  std::vector<CalvinRWKey> readSet, writeSet;
+  std::vector<HermesRWKey> readSet, writeSet;
 };
 } // namespace star

@@ -235,7 +235,11 @@ public:
       message_flusher(worker_id);
 
       if (active_coordinators[coordinator_id]) {
-
+        auto tmp = get_query();
+        if(remote_read.load() > 0){
+          // LOG(INFO) << "remote_read.load(): " << *(int*)& tmp[0] << " " << *(int*)& tmp[1];
+        }
+        LOG(INFO) << "remote_request_handler : " << local_read.load() << " " << remote_read.load();
         // spin on local & remote read
         while (local_read.load() > 0 || remote_read.load() > 0) {
           // process remote reads for other workers

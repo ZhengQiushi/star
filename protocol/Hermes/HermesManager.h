@@ -48,20 +48,55 @@ public:
 
     while (!stopFlag.load()) {
 
+
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        } else {
+            for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              
+              ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
+              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
       // the coordinator on each machine generates
       // a batch of transactions using the same random seed.
 
-      // LOG(INFO) << "Seed: " << random.get_seed();
+      // VLOG(DEBUG_V4) << "Seed: " << random.get_seed();
       n_started_workers.store(0);
       n_completed_workers.store(0);
       signal_worker(ExecutorStatus::Analysis);
+      VLOG(DEBUG_V4) << "Analysis START";
+
       // Allow each worker to analyse the read/write set
       // each worker analyse i, i + n, i + 2n transaction
       wait_all_workers_start();
+      VLOG(DEBUG_V4) << "wait Analysis done...";
+
       wait_all_workers_finish();
+
 
       // wait for all machines until they finish the analysis phase.
       wait4_ack();
+
+      VLOG(DEBUG_V4) << "Analysis FIN. SEND ACK";
+      for(int i = 0 ; i < (int)transactions.size(); i ++ ){
+        auto &txn = transactions[i];
+        auto keys = txn.get()->get_query();
+        std::string tmp;
+        for(int j = 0 ; j < (int)keys.size(); j ++ ){
+          char t[20];
+          sprintf(t, "%d ", *(int*)& keys[j]);
+          tmp += t;
+        }
+        VLOG(DEBUG_V4) << i << ": " << tmp;
+      }
 
       // Allow each worker to run transactions
       // DB is partitioned by the number of lock managers.
@@ -72,7 +107,13 @@ public:
       n_completed_workers.store(0);
       clear_lock_manager_status();
       signal_worker(ExecutorStatus::Execute);
+      
+      VLOG(DEBUG_V4) << "Execute START";
+
+
       wait_all_workers_start();
+      VLOG(DEBUG_V4) << "wait Execute done...";
+
       wait_all_workers_finish();
       // wait for all machines until they finish the execution phase.
       wait4_ack();
@@ -87,7 +128,24 @@ public:
     std::size_t n_coordinators = context.coordinator_num;
 
     for (;;) {
-      // LOG(INFO) << "Seed: " << random.get_seed();
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        } else {
+            for(size_t i = 0 ; i < context.partition_num; i ++ ){
+            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+              
+              ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
+              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+            // }
+          }
+        }
+
+      // VLOG(DEBUG_V4) << "Seed: " << random.get_seed();
       ExecutorStatus status = wait4_signal();
       if (status == ExecutorStatus::EXIT) {
         set_worker_status(ExecutorStatus::EXIT);
@@ -103,11 +161,26 @@ public:
       n_started_workers.store(0);
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::Analysis);
+      VLOG(DEBUG_V4) << "Analysis START";
+
       wait_all_workers_start();
+      VLOG(DEBUG_V4) << "wait Analysis done";
+
       wait_all_workers_finish();
 
       send_ack();
-
+      VLOG(DEBUG_V4) << "Analysis FIN. SEND ACK";
+      for(int i = 0 ; i < (int)transactions.size(); i ++ ){
+        auto &txn = transactions[i];
+        auto keys = txn.get()->get_query();
+        std::string tmp;
+        for(int j = 0 ; j < (int)keys.size(); j ++ ){
+          char t[20];
+          sprintf(t, "%d ", *(int*)& keys[j]);
+          tmp += t;
+        }
+        VLOG(DEBUG_V4) << i << ": " << tmp;
+      }
       status = wait4_signal();
       DCHECK(status == ExecutorStatus::Execute);
       // Allow each worker to run transactions
@@ -119,9 +192,14 @@ public:
       n_completed_workers.store(0);
       clear_lock_manager_status();
       set_worker_status(ExecutorStatus::Execute);
+      VLOG(DEBUG_V4) << "Execute START";
+
       wait_all_workers_start();
+      VLOG(DEBUG_V4) << "wait Execute done";
+
       wait_all_workers_finish();
       send_ack();
+      VLOG(DEBUG_V4) << "Execute FIN. SEND ACK";
     }
   }
 

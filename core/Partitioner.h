@@ -723,6 +723,7 @@ public:
 
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
     return secondary_coordinator(partition_id); // false;
   }
   

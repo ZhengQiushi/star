@@ -75,9 +75,7 @@ public:
 
     messageHandlers = MessageHandlerType::get_message_handlers();
     CHECK(n_workers > 0 && n_workers % n_lock_manager == 0);
-    LOG(INFO) << "n_lock_manager : " << n_lock_manager << 
-                 " replica_group_id : " << partitioner.replica_group_id << 
-                 " replica_group_size : " << partitioner.replica_group_size;
+
   }
 
   ~HermesExecutor() = default;
@@ -113,11 +111,10 @@ public:
       if (id < n_lock_manager) {
         // schedule transactions
         schedule_transactions();
-//         LOG(INFO) << id << " schedule_transactions";
+
       } else {
         // work as executor
-        static int round = 0;
-//        LOG(INFO) << id << " ----- NEW WORKER ROUND " << round ++ << " ----";
+
         run_transactions();
       }
 
@@ -185,13 +182,13 @@ public:
   void generate_transactions() {
     if (!context.calvin_same_batch || !init_transaction) {
       init_transaction = true;
-      // 每个worker只负责初始化自己的部分?
+
       for (auto i = id; i < transactions.size(); i += context.worker_num) {
         // generate transaction
         auto partition_id = random.uniform_dist(0, context.partition_num - 1);
         transactions[i] =
             workload.next_transaction(context, partition_id, storages[i]);
-        transactions[i]->set_id(i);
+        transactions[i]->set_id(i); // id is index in the txn-batch
         prepare_transaction(*transactions[i]);
       }
     } else {
@@ -211,7 +208,7 @@ public:
      */
     setup_prepare_handlers(txn);
     // run execute to prepare read/write set
-    auto result = txn.execute(id); // 要改, 只是统计了远程读和本地读的个数
+    auto result = txn.execute(id);
     if (result == TransactionResult::ABORT_NORETRY) {
       txn.abort_no_retry = true;
     }
@@ -300,9 +297,15 @@ public:
           auto worker = get_available_worker(request_id++);
           all_executors[worker]->transaction_queue.push(transactions[i].get());
         }
-
+        // only count once
+        if (i % n_lock_manager == id) {
+          n_commit.fetch_add(1);
+        }
       } else {
-
+        // only count once
+        if (i % n_lock_manager == id) {
+          n_abort_no_retry.fetch_add(1);
+        }
       }
     }
     set_lock_manager_bit(id);
@@ -323,16 +326,23 @@ public:
       DCHECK(ok);
 
       auto result = transaction->execute(id);
+
+      LOG(INFO) << id << " exeute " << transaction->id;
+
       n_network_size.fetch_add(transaction->network_size.load());
       if (result == TransactionResult::READY_TO_COMMIT) {
         protocol.commit(*transaction, lock_manager_id, n_lock_manager,
                         partitioner.replica_group_size);
-        n_commit.fetch_add(1);
+        LOG(INFO) << id << " commit " << transaction->id;
+
       } else if (result == TransactionResult::ABORT) {
         // non-active transactions, release lock
         protocol.abort(*transaction, lock_manager_id, n_lock_manager,
                        partitioner.replica_group_size);
-        n_abort_no_retry.fetch_add(1);
+        LOG(INFO) << id << " abort " << transaction->id;
+
+        // auto tmp = transaction->get_query();
+        // // LOG(INFO) << "ABORT " << *(int*)& tmp[0] << " " << *(int*)& tmp[1] << " " << transaction->active_coordinators[0] << " " << transaction->active_coordinators[1];
       } else {
         CHECK(false) << "abort no retry transaction should not be scheduled.";
       }
@@ -350,7 +360,7 @@ public:
                                     uint32_t key_offset, const void *key,
                                     void *value) {
       /**
-       * @brief 
+       * @brief id?
        * 
        */
       auto *worker = this->all_executors[worker_id];
@@ -365,7 +375,7 @@ public:
             continue;
           auto sz = MessageFactoryType::new_read_message(
               *worker->messages[i], *table, id, key_offset, value);
-//           LOG(INFO) << "ASK from "<< worker->coordinator_id << " to " << i << " " << *(int*) key;
+
           txn.network_size.fetch_add(sz);
           txn.distributed_transaction = true;
         }

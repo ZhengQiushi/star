@@ -176,7 +176,6 @@ public:
               << " milliseconds.";
   }
 
-
   void initialize(const Context &context) {
 
     std::size_t coordinator_id = context.coordinator_id;
@@ -191,7 +190,6 @@ public:
       tbl_ycsb_vec.push_back(
           std::make_unique<Table<9973, ycsb::key, ycsb::value>>(ycsbTableID,
                                                                 partitionID));
-
     }
 
     // there is 1 table in ycsb
@@ -201,7 +199,6 @@ public:
 
     std::transform(tbl_ycsb_vec.begin(), tbl_ycsb_vec.end(),
                    std::back_inserter(tbl_vecs[0]), tFunc);
-
 
     using std::placeholders::_1;
     initTables("ycsb",
@@ -253,7 +250,6 @@ private:
 
     Random random;
     ITable *table = tbl_ycsb_vec[partitionID].get();
-    
 
     std::size_t keysPerPartition =
         context.keysPerPartition; // 5M keys per partition
@@ -269,10 +265,7 @@ private:
 
         DCHECK(context.getPartitionID(i) == partitionID);
 
-        int router_coordinator = partitionID % context.coordinator_num;
-
         ycsb::key key(i);
-
         ycsb::value value;
         value.Y_F01.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         value.Y_F02.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
@@ -286,7 +279,6 @@ private:
         value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
 
         table->insert(&key, &value);
-            
       }
 
     } else {
@@ -298,7 +290,6 @@ private:
         DCHECK(context.getPartitionID(i) == partitionID);
 
         ycsb::key key(i);
-
         ycsb::value value;
         value.Y_F01.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         value.Y_F02.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));

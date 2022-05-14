@@ -337,8 +337,7 @@ public:
 
 
   void initialize(const Context &context) {
-    //
-    
+
     std::size_t coordinator_id = context.coordinator_id;
     std::size_t partitionNum = context.partition_num;
     std::size_t threadsNum = context.worker_num;
@@ -395,10 +394,8 @@ public:
     tbl_item_vec.push_back(
         std::make_unique<Table<997, item::key, item::value>>(itemTableID, 0));
 
-
     // there are 10 tables in tpcc
     tbl_vecs.resize(10);
-
 
     auto tFunc = [](std::unique_ptr<ITable> &table) { return table.get(); };
 

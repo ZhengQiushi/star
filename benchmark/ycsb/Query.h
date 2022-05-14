@@ -93,6 +93,7 @@ public:
           int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition);
 
           key = (key_partition_num + 1) * static_cast<int32_t>(context.keysPerPartition) + key_num * N + i;
+          key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
         } else {
           // 单分区
           auto random_int32 = random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));

@@ -8,7 +8,7 @@
 #include <memory>
 #include <numeric>
 #include <string>
-
+#include "core/Defs.h"
 
 #include "Table.h"
 namespace star {
@@ -765,6 +765,10 @@ public:
         break;
       }
     }
+    VLOG(DEBUG_V4) << " coordinator_start_id: " << coordinator_start_id <<
+                     " replica_group_id: " << replica_group_id << 
+                     " replica_group_size: " << replica_group_size;
+
     CHECK(std::accumulate(replica_group_sizes.begin(),
                           replica_group_sizes.end(), 0u) == coordinator_num);
   }

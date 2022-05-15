@@ -24,7 +24,7 @@ class HermesMessageFactory {
 public:
   static std::size_t new_read_message(Message &message, ITable &table,
                                       uint32_t tid, uint32_t key_offset,
-                                      const void *value) {
+                                      const void* key, const void *value) {
 
     /*
      * The structure of a read request: (tid, key offset, value)
@@ -45,7 +45,9 @@ public:
     encoder.write_n_bytes(value, value_size);
     message.flush();
   
-    LOG(INFO) << "     new_read_message: " <<   tid << " Send ";
+    LOG(INFO) << "     new_read_message: " << tid << 
+                 " Send " << *(int*) key << " " << 
+                 message.get_source_node_id() << "->" << message.get_dest_node_id();
 
     return message_size;
   }
@@ -87,7 +89,9 @@ public:
     HermesRWKey &readKey = txns[tid]->readSet[key_offset];
     dec.read_n_bytes(readKey.get_value(), value_size);
     txns[tid]->remote_read.fetch_add(-1);
-    LOG(INFO) << "    read_request_handler : " <<  tid << " " << txns[tid]->remote_read.load();
+    LOG(INFO) << "    read_request_handler : " <<  tid << " " << txns[tid]->remote_read.load() << 
+                 " " << *(int*) readKey.get_key() << 
+                 " " << responseMessage.get_dest_node_id() << "->" << responseMessage.get_source_node_id();
   }
 
   static std::vector<

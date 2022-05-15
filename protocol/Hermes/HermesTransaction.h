@@ -211,6 +211,7 @@ public:
           continue;
         }
 
+        // double check the lock manager
         if (HermesHelper::partition_id_to_lock_manager_id(
                 readSet[i].get_partition_id(), n_lock_manager,
                 replica_group_size) 
@@ -239,7 +240,7 @@ public:
         if(remote_read.load() > 0){
           // LOG(INFO) << "remote_read.load(): " << *(int*)& tmp[0] << " " << *(int*)& tmp[1];
         }
-        LOG(INFO) << "remote_request_handler : " << local_read.load() << " " << remote_read.load();
+        LOG(INFO) << "remote_request_handler : " << id << " " << local_read.load() << " " << remote_read.load();
         // spin on local & remote read
         while (local_read.load() > 0 || remote_read.load() > 0) {
           // process remote reads for other workers

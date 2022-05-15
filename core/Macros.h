@@ -20,8 +20,14 @@ DEFINE_int32(group_time, 10, "group commit frequency");
 DEFINE_int32(batch_flush, 50, "batch flush");
 DEFINE_int32(sleep_time, 1000, "retry sleep time");
 DEFINE_string(protocol, "Scar", "transaction protocol");
-DEFINE_string(replica_group, "1,3", "calvin replica group");
+DEFINE_string(replica_group, "1,3", "calvin replica group"); 
+// 哪几个coordinator组成一个replica group
+// sum() = coordinator_num
+// e.g. 2,1  => C0,C1 属于一个replica group, C2单独属于一个
+//              每个group自己内部有一个主副本，意味着此时总共有两个主副本...很怪
+
 DEFINE_string(lock_manager, "1,1", "calvin lock manager");
+// 每个replica group的lock manager的数量
 DEFINE_bool(read_on_replica, false, "read from replicas");
 DEFINE_bool(local_validation, false, "local validation");
 DEFINE_bool(rts_sync, false, "rts sync");

@@ -702,13 +702,13 @@ public:
     return partition_id % replica_group_size + coordinator_start_id;
   }
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
-    DCHECK(false);
-    return (partition_id) % coordinator_num;
+    return (partition_id + 1) % coordinator_num;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     // replica group in calvin is independent
-    return false;
+    return master_coordinator(partition_id) == coordinator_id || 
+           secondary_coordinator(partition_id) == coordinator_id;
   }
   
   bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
@@ -790,13 +790,13 @@ public:
     return partition_id % replica_group_size + coordinator_start_id;
   }
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
-    DCHECK(false);
-    return (partition_id) % coordinator_num;
+    return (partition_id + 1) % coordinator_num;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     // replica group in calvin is independent
-    return false;
+    return master_coordinator(partition_id) == coordinator_id || 
+           secondary_coordinator(partition_id) == coordinator_id;
   }
   
   bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 

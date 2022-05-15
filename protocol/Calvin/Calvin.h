@@ -23,8 +23,8 @@ public:
   using MessageFactoryType = CalvinMessageFactory;
   using MessageHandlerType = CalvinMessageHandler;
 
-  Calvin(DatabaseType &db, CalvinPartitioner &partitioner)
-      : db(db), partitioner(partitioner) {}
+  Calvin(DatabaseType &db, const ContextType &context, CalvinPartitioner &partitioner)
+      : db(db), context(context), partitioner(partitioner) {}
 
   void abort(TransactionType &txn, std::size_t lock_manager_id,
              std::size_t n_lock_manager, std::size_t replica_group_size) {
@@ -58,7 +58,7 @@ public:
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (!partitioner.has_master_partition(partitionId)) {
+      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
         continue;
       }
 
@@ -86,7 +86,7 @@ public:
       auto partitionId = readKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (!partitioner.has_master_partition(partitionId)) {
+      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
         continue;
       }
 
@@ -120,7 +120,7 @@ public:
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (!partitioner.has_master_partition(partitionId)) {
+      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
         continue;
       }
 
@@ -139,6 +139,7 @@ public:
 
 private:
   DatabaseType &db;
+  const ContextType& context;
   CalvinPartitioner &partitioner;
 };
 } // namespace star

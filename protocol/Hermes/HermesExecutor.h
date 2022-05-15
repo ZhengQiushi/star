@@ -64,7 +64,7 @@ public:
             id, n_lock_manager, n_workers)),
         init_transaction(false),
         random(id), // make sure each worker has a different seed.
-        protocol(db, partitioner),
+        protocol(db, context, partitioner),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -242,7 +242,9 @@ public:
       }
       auto partitionID = readkey.get_partition_id();
       if (readkey.get_write_lock_bit()) {
+        // 有写且写到主副本...从副本也需要吧
         active_coordinators[partitioner.master_coordinator(partitionID)] = true;
+        active_coordinators[partitioner.secondary_coordinator(partitionID)] = true;
       }
     }
   }
@@ -256,15 +258,20 @@ public:
 
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
+      if(transactions[i]->get_query()[0] / 200000 == 0){
+        LOG(INFO) << "DEBUG";
+      }
       if (!transactions[i]->abort_no_retry) {
         bool grant_lock = false;
         auto &readSet = transactions[i]->readSet;
+        bool is_with_lock_manager = false;
+
         for (auto k = 0u; k < readSet.size(); k++) {
           auto &readKey = readSet[k];
           auto tableId = readKey.get_table_id();
           auto partitionId = readKey.get_partition_id();
 
-          if (!partitioner.has_master_partition(partitionId)) {
+          if (!partitioner.is_partition_replicated_on(partitionId, coordinator_id)) {
             continue;
           }
 
@@ -281,6 +288,8 @@ public:
               != 
                   lock_manager_id) {
             continue;
+          } else {
+            is_with_lock_manager = true;
           }
 
           grant_lock = true;
@@ -296,6 +305,13 @@ public:
         if (grant_lock) {
           auto worker = get_available_worker(request_id++);
           all_executors[worker]->transaction_queue.push(transactions[i].get());
+        } else {
+          //
+          if(is_with_lock_manager == true){
+            VLOG(DEBUG_V12) << transactions[i]->id << " not at C" << context.coordinator_id;
+          } else {
+            VLOG(DEBUG_V12) << transactions[i]->id << " not for lock manager " << id << " at C" << context.coordinator_id;
+          }
         }
         // only count once
         if (i % n_lock_manager == id) {
@@ -374,7 +390,7 @@ public:
           if (i == worker->coordinator_id || !active_coordinators[i])
             continue;
           auto sz = MessageFactoryType::new_read_message(
-              *worker->messages[i], *table, id, key_offset, value);
+              *worker->messages[i], *table, id, key_offset, key, value);
 
           txn.network_size.fetch_add(sz);
           txn.distributed_transaction = true;

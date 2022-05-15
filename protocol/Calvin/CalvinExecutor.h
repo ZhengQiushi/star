@@ -64,7 +64,7 @@ public:
             id, n_lock_manager, n_workers)),
         init_transaction(false),
         random(id), // make sure each worker has a different seed.
-        protocol(db, partitioner),
+        protocol(db, context, partitioner),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -239,6 +239,7 @@ public:
       auto partitionID = readkey.get_partition_id();
       if (readkey.get_write_lock_bit()) {
         active_coordinators[partitioner.master_coordinator(partitionID)] = true;
+        active_coordinators[partitioner.secondary_coordinator(partitionID)] = true;
       }
     }
   }
@@ -260,7 +261,7 @@ public:
           auto tableId = readKey.get_table_id();
           auto partitionId = readKey.get_partition_id();
 
-          if (!partitioner.has_master_partition(partitionId)) {
+          if (!partitioner.is_partition_replicated_on(partitionId, coordinator_id)) {
             continue;
           }
 

@@ -145,8 +145,17 @@ public:
     
     for (auto p_id = 0u; p_id < partitionNum; p_id++) {
       auto partitionID = p_id;
+      
       int router_coordinator = (partitionID + 1) % context.coordinator_num;
       size_t secondary_router_coordinator = partitionID % context.coordinator_num;
+
+      if(context.protocol == "Hermes") {
+        router_coordinator = (partitionID) % context.coordinator_num;
+        secondary_router_coordinator = (partitionID + 1) % context.coordinator_num;
+      } else {
+        router_coordinator = (partitionID + 1) % context.coordinator_num;
+        secondary_router_coordinator = partitionID % context.coordinator_num;
+      }
 
       // void warehouseInit(std::size_t partitionID) {
       warehouse::key key;
@@ -448,7 +457,7 @@ public:
                     std::back_inserter(tbl_vecs_router[8]), tFunc);
       std::transform(tbl_stock_vec_router.begin(), tbl_stock_vec_router.end(),
                     std::back_inserter(tbl_vecs_router[9]), tFunc);
-      if(context.protocol == "Lion" || context.protocol == "LionNS" ){
+      if(context.protocol == "Lion" || context.protocol == "LionNS" || context.protocol == "Hermes"){
         init_router_table(context);
       } else if (context.protocol == "Star"){
         init_star_router_table(context);

@@ -45,7 +45,7 @@ public:
     encoder.write_n_bytes(value, value_size);
     message.flush();
   
-    LOG(INFO) << "     new_read_message: " << tid << 
+    VLOG(DEBUG_V12) << "     new_read_message: " << tid << 
                  " Send " << *(int*) key << " " << 
                  message.get_source_node_id() << "->" << message.get_dest_node_id();
 
@@ -89,7 +89,7 @@ public:
     HermesRWKey &readKey = txns[tid]->readSet[key_offset];
     dec.read_n_bytes(readKey.get_value(), value_size);
     txns[tid]->remote_read.fetch_add(-1);
-    LOG(INFO) << "    read_request_handler : " <<  tid << " " << txns[tid]->remote_read.load() << 
+    VLOG(DEBUG_V12) << "    read_request_handler : " <<  tid << " " << txns[tid]->remote_read.load() << 
                  " " << *(int*) readKey.get_key() << 
                  " " << responseMessage.get_dest_node_id() << "->" << responseMessage.get_source_node_id();
   }

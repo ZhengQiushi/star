@@ -14,7 +14,7 @@ namespace star {
 
 template <class Database> class Hermes {
 public:
-  using DatabaseType = Database;
+  using DatabaseType = Database;  
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = typename DatabaseType::ContextType;
   using MessageType = HermesMessage;
@@ -23,7 +23,7 @@ public:
   using MessageFactoryType = HermesMessageFactory;
   using MessageHandlerType = HermesMessageHandler;
 
-  Hermes(DatabaseType &db, const ContextType& context,HermesPartitioner &partitioner)
+  Hermes(DatabaseType &db, const ContextType& context, Partitioner &partitioner)
       : db(db), context(context), partitioner(partitioner) {}
 
   void abort(TransactionType &txn, std::size_t lock_manager_id,
@@ -57,8 +57,9 @@ public:
       auto tableId = writeKey.get_table_id();
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
+      auto key = writeKey.get_key();
 
-      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
+      if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, context.coordinator_id)) {
         continue;
       }
 
@@ -68,7 +69,6 @@ public:
         continue;
       }
 
-      auto key = writeKey.get_key();
       auto value = writeKey.get_value();
       table->update(key, value);
     }
@@ -85,8 +85,10 @@ public:
       auto tableId = readKey.get_table_id();
       auto partitionId = readKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
+      auto key = readKey.get_key();
 
-      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
+      if (readKey.get_master_coordinator_id() != context.coordinator_id && 
+          readKey.get_secondary_coordinator_id() != context.coordinator_id) {
         continue;
       }
 
@@ -100,7 +102,6 @@ public:
         continue;
       }
 
-      auto key = readKey.get_key();
       auto value = readKey.get_value();
       std::atomic<uint64_t> &tid = table->search_metadata(key);
       HermesHelper::read_lock_release(tid);
@@ -119,8 +120,9 @@ public:
       auto tableId = writeKey.get_table_id();
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
+      auto key = writeKey.get_key();
 
-      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
+      if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, context.coordinator_id)) {
         continue;
       }
 
@@ -130,7 +132,6 @@ public:
         continue;
       }
 
-      auto key = writeKey.get_key();
       auto value = writeKey.get_value();
       std::atomic<uint64_t> &tid = table->search_metadata(key);
       HermesHelper::write_lock_release(tid);
@@ -140,6 +141,6 @@ public:
 private:
   DatabaseType &db;
   const ContextType &context;
-  HermesPartitioner &partitioner;
+  Partitioner &partitioner;
 };
 } // namespace star

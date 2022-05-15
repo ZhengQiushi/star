@@ -746,31 +746,18 @@ private:
   std::size_t coordinator_start_id;
 };
 
+template <class Workload> 
 class HermesPartitioner : public Partitioner {
+  using WorkloadType = Workload;
+  using DatabaseType = typename WorkloadType::DatabaseType;
 
 public:
   HermesPartitioner(std::size_t coordinator_id, std::size_t coordinator_num,
-                    std::vector<std::size_t> replica_group_sizes)
-      : Partitioner(coordinator_id, coordinator_num) {
-
-    std::size_t size = 0;
-    for (auto i = 0u; i < replica_group_sizes.size(); i++) {
-      CHECK(replica_group_sizes[i] > 0);
-      size += replica_group_sizes[i];
-
-      if (coordinator_id < size) {
-        coordinator_start_id = size - replica_group_sizes[i];
-        replica_group_id = i;
-        replica_group_size = replica_group_sizes[i];
-        break;
-      }
-    }
-    VLOG(DEBUG_V4) << " coordinator_start_id: " << coordinator_start_id <<
-                     " replica_group_id: " << replica_group_id << 
-                     " replica_group_size: " << replica_group_size;
-
-    CHECK(std::accumulate(replica_group_sizes.begin(),
-                          replica_group_sizes.end(), 0u) == coordinator_num);
+                    std::vector<std::size_t> replica_group_sizes, DatabaseType& db)
+      : Partitioner(coordinator_id, coordinator_num), db(db) {
+    coordinator_start_id = 0;
+    replica_group_id = 0;
+    replica_group_size = coordinator_num;
   }
 
   ~HermesPartitioner() override = default;
@@ -783,10 +770,12 @@ public:
   }
 
   bool has_master_partition(std::size_t partition_id) const override {
+    DCHECK(false);
     return master_coordinator(partition_id) == coordinator_id;
   }
 
   std::size_t master_coordinator(std::size_t partition_id) const override {
+    DCHECK(false);
     return partition_id % replica_group_size + coordinator_start_id;
   }
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
@@ -795,30 +784,48 @@ public:
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     // replica group in calvin is independent
+    DCHECK(false);
+
     return master_coordinator(partition_id) == coordinator_id || 
            secondary_coordinator(partition_id) == coordinator_id;
   }
   
   bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
-    DCHECK(false);
-    return false;
+    return master_coordinator(table_id, partition_id, key) == coordinator_id;
   }
 
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
-    DCHECK(false);
-    return false;
+    return db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
 
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
-    return secondary_coordinator(partition_id); // false;
+    auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
+    auto static_coordinator_id = secondary_coordinator(partition_id);
+
+    if(master_coordinator_id != static_coordinator_id){
+      return static_coordinator_id;
+    } else {
+      auto router_table = db.find_router_table(table_id, master_coordinator_id);
+      size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
+      return secondary_coordinator_id;
+    }
   }
   
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
-    DCHECK(false);
-    return false;
+    DCHECK(coordinator_id < coordinator_num);
+    // static replica
+    auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
+    if(master_coordinator_id == coordinator_id){
+      return true;
+    } else {
+      auto router_table = db.find_router_table(table_id, master_coordinator_id);
+      size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
+      return secondary_coordinator_id == coordinator_id;
+    }
   }
+
   bool is_backup() const override { return false; }
 
   bool is_dynamic() const override { return false; };
@@ -831,6 +838,7 @@ public:
 private:
   // the first coordinator in this replica group
   std::size_t coordinator_start_id;
+  DatabaseType& db;
 };
 
 class PartitionerFactory {

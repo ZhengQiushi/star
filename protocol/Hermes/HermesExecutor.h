@@ -54,7 +54,7 @@ public:
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
         partitioner(coordinator_id, context.coordinator_num,
-                    HermesHelper::string_to_vint(context.replica_group)),
+                    HermesHelper::string_to_vint(context.replica_group), db),
         workload(coordinator_id, db, random, partitioner),
         n_lock_manager(HermesHelper::n_lock_manager(
             partitioner.replica_group_id, id,
@@ -97,6 +97,7 @@ public:
 
       n_started_workers.fetch_add(1);
       generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
+      router_planning();
       n_complete_workers.fetch_add(1);
 
       // wait to Execute
@@ -178,6 +179,17 @@ public:
     message->set_dest_node_id(dest_node_id);
     message->set_worker_id(id);
   }
+  void router_planning(){
+    for (auto i = id; i < transactions.size(); i += context.worker_num) {
+      // generate transaction
+      auto& txn = transactions[i];
+      auto all_coords = txn->txn_nodes_involved(false);
+      DCHECK(all_coords.size() > 0);
+      // simply choose one
+      //!TODO planning  
+      txn->router_coordinator_id = *all_coords.begin();
+    }
+  }
 
   void generate_transactions() {
     if (!context.calvin_same_batch || !init_transaction) {
@@ -236,15 +248,27 @@ public:
         std::vector<bool>(partitioner.total_coordinators(), false);
 
     for (auto i = 0u; i < readSet.size(); i++) {
-      auto &readkey = readSet[i];
-      if (readkey.get_local_index_read_bit()) {
+      auto &readKey = readSet[i];
+
+      // auto tableId = readKey.get_table_id();
+      // auto partitionId = readKey.get_partition_id();
+      // auto key = readKey.get_key();
+
+      // auto master_coordinator = partitioner.master_coordinator(tableId, partitionId, key);
+      // auto secondary_coordinator = partitioner.secondary_coordinator(tableId, partitionId, key);
+      // readKey.set_master_coordinator_id(master_coordinator);
+      // readKey.set_secondary_coordinator_id(secondary_coordinator);
+
+      if (readKey.get_local_index_read_bit()) {
         continue;
       }
-      auto partitionID = readkey.get_partition_id();
-      if (readkey.get_write_lock_bit()) {
+      //
+
+      if (readKey.get_write_lock_bit()) {
         // 有写且写到主副本...从副本也需要吧
-        active_coordinators[partitioner.master_coordinator(partitionID)] = true;
-        active_coordinators[partitioner.secondary_coordinator(partitionID)] = true;
+        
+        active_coordinators[readKey.get_master_coordinator_id()] = true;
+        active_coordinators[readKey.get_secondary_coordinator_id()] = true;
       }
     }
   }
@@ -258,9 +282,9 @@ public:
 
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
-      if(transactions[i]->get_query()[0] / 200000 == 0){
-        LOG(INFO) << "DEBUG";
-      }
+      // if(transactions[i]->get_query()[0] / 200000 == 0){
+      //   LOG(INFO) << "DEBUG";
+      // }
       if (!transactions[i]->abort_no_retry) {
         bool grant_lock = false;
         auto &readSet = transactions[i]->readSet;
@@ -270,13 +294,19 @@ public:
           auto &readKey = readSet[k];
           auto tableId = readKey.get_table_id();
           auto partitionId = readKey.get_partition_id();
+          auto key = readKey.get_key();
 
-          if (!partitioner.is_partition_replicated_on(partitionId, coordinator_id)) {
-            continue;
+          // 本地只要有副本就锁住
+          if(readKey.get_master_coordinator_id() != coordinator_id && 
+             readKey.get_secondary_coordinator_id() != coordinator_id){
+               continue;
           }
+          
+          // if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, coordinator_id)) {
+          //   continue;
+          // }
 
           auto table = db.find_table(tableId, partitionId);
-          auto key = readKey.get_key();
 
           if (readKey.get_local_index_read_bit()) {
             continue;
@@ -343,19 +373,19 @@ public:
 
       auto result = transaction->execute(id);
 
-      LOG(INFO) << id << " exeute " << transaction->id;
+      VLOG(DEBUG_V12) << id << " exeute " << transaction->id;
 
       n_network_size.fetch_add(transaction->network_size.load());
       if (result == TransactionResult::READY_TO_COMMIT) {
         protocol.commit(*transaction, lock_manager_id, n_lock_manager,
                         partitioner.replica_group_size);
-        LOG(INFO) << id << " commit " << transaction->id;
+        VLOG(DEBUG_V12) << id << " commit " << transaction->id;
 
       } else if (result == TransactionResult::ABORT) {
         // non-active transactions, release lock
         protocol.abort(*transaction, lock_manager_id, n_lock_manager,
                        partitioner.replica_group_size);
-        LOG(INFO) << id << " abort " << transaction->id;
+        VLOG(DEBUG_V12) << id << " abort " << transaction->id;
 
         // auto tmp = transaction->get_query();
         // // LOG(INFO) << "ABORT " << *(int*)& tmp[0] << " " << *(int*)& tmp[1] << " " << transaction->active_coordinators[0] << " " << transaction->active_coordinators[1];
@@ -376,11 +406,13 @@ public:
                                     uint32_t key_offset, const void *key,
                                     void *value) {
       /**
-       * @brief id?
-       * 
+       * @brief if master coordinator, read local and spread to all active replica
+       * @param id = index of current txn
        */
       auto *worker = this->all_executors[worker_id];
-      if (worker->partitioner.has_master_partition(partition_id)) {
+      auto& readKey = txn.readSet[key_offset];
+
+      if (readKey.get_master_coordinator_id() == coordinator_id) {
         ITable *table = worker->db.find_table(table_id, partition_id);
         HermesHelper::read(table->search(key), value, table->value_size());
 
@@ -489,7 +521,7 @@ private:
   std::vector<StorageType> &storages;
   std::atomic<uint32_t> &lock_manager_status, &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
-  HermesPartitioner partitioner;
+  HermesPartitioner<Workload> partitioner;
   WorkloadType workload;
   std::size_t n_lock_manager, n_workers;
   std::size_t lock_manager_id;

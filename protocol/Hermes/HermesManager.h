@@ -35,7 +35,7 @@ public:
                 const ContextType &context, std::atomic<bool> &stopFlag)
       : base_type(coordinator_id, id, context, stopFlag), db(db),
         partitioner(coordinator_id, context.coordinator_num,
-                    HermesHelper::string_to_vint(context.replica_group)) {
+                    HermesHelper::string_to_vint(context.replica_group), db) {
 
     storages.resize(context.batch_size);
     transactions.resize(context.batch_size);// 由manager统一生成txn
@@ -214,7 +214,7 @@ public:
 public:
   RandomType random;
   DatabaseType &db;
-  HermesPartitioner partitioner;
+  HermesPartitioner<Workload> partitioner;
   std::atomic<uint32_t> lock_manager_status;
   std::vector<std::shared_ptr<HermesExecutor<WorkloadType>>> workers;
   std::vector<StorageType> storages;

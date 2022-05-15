@@ -174,8 +174,18 @@ public:
                                    readKey.get_partition_id(),
                                    readKey.get_key(), readKey.get_value());
         } else {
+          auto &readKey = readSet[i];
 
-          if (partitioner.has_master_partition(readSet[i].get_partition_id())) {
+          auto tableId = readKey.get_table_id();
+          auto partitionId = readKey.get_partition_id();
+          auto key = readKey.get_key();
+
+          auto master_coordinator = partitioner.master_coordinator(tableId, partitionId, key);
+          auto secondary_coordinator = partitioner.secondary_coordinator(tableId, partitionId, key);
+          readKey.set_master_coordinator_id(master_coordinator);
+          readKey.set_secondary_coordinator_id(secondary_coordinator);
+
+          if (master_coordinator == coordinator_id) {
             local_read.fetch_add(1);
           } else {
             remote_read.fetch_add(1);
@@ -226,6 +236,7 @@ public:
         }
 
         auto &readKey = readSet[i];
+        // if master coordinator, read local and spread to all active replica
         read_handler(worker_id, readKey.get_table_id(),
                      readKey.get_partition_id(), id, i, readKey.get_key(),
                      readKey.get_value());
@@ -240,7 +251,7 @@ public:
         if(remote_read.load() > 0){
           // LOG(INFO) << "remote_read.load(): " << *(int*)& tmp[0] << " " << *(int*)& tmp[1];
         }
-        LOG(INFO) << "remote_request_handler : " << id << " " << local_read.load() << " " << remote_read.load();
+        VLOG(DEBUG_V12) << "remote_request_handler : " << id << " " << local_read.load() << " " << remote_read.load();
         // spin on local & remote read
         while (local_read.load() > 0 || remote_read.load() > 0) {
           // process remote reads for other workers
@@ -296,6 +307,8 @@ public:
   bool abort_lock, abort_no_retry, abort_read_validation;
   bool distributed_transaction;
   bool execution_phase;
+
+  int router_coordinator_id;
 
   std::function<bool(std::size_t)> process_requests;
 

@@ -116,6 +116,32 @@ public:
     return (bitvec >> PARTITION_ID_OFFSET) & PARTITION_ID_MASK;
   }
 
+  // master coordinator id
+  void set_master_coordinator_id(uint32_t coordinator_id) {
+    DCHECK(coordinator_id < (1 << 5));
+    clear_master_coordinator_id();
+    bitvec |= coordinator_id << MASTER_COORDINATOR_ID_OFFSET;
+  }
+
+  void clear_master_coordinator_id() { bitvec &= ~(MASTER_COORDINATOR_ID_MASK << MASTER_COORDINATOR_ID_OFFSET); }
+
+  uint32_t get_master_coordinator_id() const {
+    return (bitvec >> MASTER_COORDINATOR_ID_OFFSET) & MASTER_COORDINATOR_ID_MASK;
+  }
+
+  // secondary coordinator id
+  void set_secondary_coordinator_id(uint32_t coordinator_id) {
+    DCHECK(coordinator_id < (1 << 5));
+    clear_secondary_coordinator_id();
+    bitvec |= coordinator_id << SECONDARY_COORDINATOR_ID_OFFSET;
+  }
+
+  void clear_secondary_coordinator_id() { bitvec &= ~(SECONDARY_COORDINATOR_ID_MASK << SECONDARY_COORDINATOR_ID_OFFSET); }
+
+  uint32_t get_secondary_coordinator_id() const {
+    return (bitvec >> SECONDARY_COORDINATOR_ID_OFFSET) & SECONDARY_COORDINATOR_ID_MASK;
+  }
+
   // key
   void set_key(const void *key) { this->key = key; }
 
@@ -130,7 +156,8 @@ private:
   /*
    * A bitvec is a 32-bit word.
    *
-   * [ table id (5) ] | partition id (8) | unused bit (14) |
+   * [ table id (5) ] | partition id (8) | 
+   *   master coordinator id (5) | secondary coordinator id (5) | unused bit (4) |
    * prepare processed bit (1) | execute processed bit(1) |
    * write lock bit(1) | read lock bit (1) | local index read (1)  ]
    *
@@ -152,6 +179,12 @@ public:
 
   static constexpr uint32_t PARTITION_ID_MASK = 0xff;
   static constexpr uint32_t PARTITION_ID_OFFSET = 19;
+
+  static constexpr uint32_t MASTER_COORDINATOR_ID_MASK = 0x1f;
+  static constexpr uint32_t MASTER_COORDINATOR_ID_OFFSET = 14;
+
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_MASK = 0x1f;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_OFFSET = 9;
 
   static constexpr uint32_t EXECUTION_PROCESSED_BIT_MASK = 0x1;
   static constexpr uint32_t EXECUTION_PROCESSED_BIT_OFFSET = 4;

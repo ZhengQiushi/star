@@ -40,6 +40,10 @@ public:
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
+    /**
+     * @brief from router table to find the coordinator
+     * 
+     */
     std::size_t ret = coordinator_num;
     for(size_t i = 0 ; i < coordinator_num; i ++ ){
       ITable* tab = find_router_table(table_id, i);
@@ -79,11 +83,19 @@ public:
           DCHECK(context.getPartitionID(i) == partitionID);
           ycsb::key key(i);
 
-          int router_coordinator = (partitionID + 1) % context.coordinator_num;
-          size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
+          if(context.protocol == "Hermes"){
+            int router_coordinator = (partitionID) % context.coordinator_num;
+            size_t router_secondary_coordinator = (partitionID + 1) % context.coordinator_num;
 
-          ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
-          table_router->insert(&key, &router_secondary_coordinator); // 
+            ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
+            table_router->insert(&key, &router_secondary_coordinator); // 
+          } else {
+            int router_coordinator = (partitionID + 1) % context.coordinator_num;
+            size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
+
+            ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
+            table_router->insert(&key, &router_secondary_coordinator); // 
+          }
         }
       } else {
         // not available so far
@@ -218,7 +230,7 @@ public:
       std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
                     std::back_inserter(tbl_vecs_router[0]), tFunc);
       // init router information
-      if(context.protocol == "Lion" || context.protocol == "LionNS" ){
+      if(context.protocol == "Lion" || context.protocol == "LionNS" || context.protocol == "Hermes"){
         init_router_table(context);
       } else if (context.protocol == "Star"){
         init_star_router_table(context);

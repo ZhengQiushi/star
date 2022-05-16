@@ -20,8 +20,8 @@ public:
   using MessageType = HermesMessage;
   using TransactionType = HermesTransaction;
 
-  using MessageFactoryType = HermesMessageFactory;
-  using MessageHandlerType = HermesMessageHandler;
+  using MessageFactoryType = HermesMessageFactory<DatabaseType>;
+  using MessageHandlerType = HermesMessageHandler<DatabaseType>;
 
   Hermes(DatabaseType &db, const ContextType& context, Partitioner &partitioner)
       : db(db), context(context), partitioner(partitioner) {}

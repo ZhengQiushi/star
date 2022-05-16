@@ -37,8 +37,8 @@ public:
   using ProtocolType = Hermes<DatabaseType>;
 
   using MessageType = HermesMessage;
-  using MessageFactoryType = HermesMessageFactory;
-  using MessageHandlerType = HermesMessageHandler;
+  using MessageFactoryType = HermesMessageFactory<DatabaseType>;
+  using MessageHandlerType = HermesMessageHandler<DatabaseType>;
 
   HermesExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                  const ContextType &context,
@@ -228,9 +228,6 @@ public:
     if (context.calvin_same_batch) {
       txn.save_read_count();
     }
-
-    analyze_active_coordinator(txn);
-
     // setup handlers for execution
     setup_execute_handlers(txn);
     txn.execution_phase = true;
@@ -273,6 +270,72 @@ public:
     }
   }
 
+
+
+  void transfer_transactions(TransactionType &txn){
+
+    std::size_t target_coordi_id = (std::size_t)txn.router_coordinator_id;
+    auto& readSet = txn.readSet;
+
+    for (auto k = 0u; k < readSet.size(); k++) {
+      auto& readKey = readSet[k];
+       // readKey.get_master_coordinator_id();
+      auto table_id = readKey.get_table_id();
+      auto partition_id = readKey.get_partition_id();
+      auto key = readKey.get_key();
+      auto master_coordi_id = partitioner.master_coordinator(table_id, partition_id, key);
+      auto secondary_coordi_id = partitioner.secondary_coordinator(table_id, partition_id, key);
+
+      readKey.set_master_coordinator_id(master_coordi_id);
+      readKey.set_secondary_coordinator_id(secondary_coordi_id);
+      VLOG(DEBUG_V12) << *(int*) key << " " << master_coordi_id << " " << secondary_coordi_id; 
+      ITable *table = db.find_table(table_id, partition_id);
+
+      if(coordinator_id == target_coordi_id){
+        // local, then receive all info away
+        if(master_coordi_id == target_coordi_id){
+          // key already at local, pass...
+        } else {
+          // mastership of the key is not at local, wait for transfer/remaster from other nodes
+          txn.pendingResponses ++ ;
+        }
+      } else {
+        // remote, then send all info you need 
+        if(coordinator_id == master_coordi_id){
+          // has mastership of relational key, send key to the target
+          auto *worker = this->all_executors[id]; // current-lock-manager
+          bool success = true;
+
+          int32_t sz;
+          // do {
+            sz = MessageFactoryType::transfer_transaction(*worker->messages[target_coordi_id], 
+                                          db, context, &partitioner,
+                                          *table, k, txn, success);
+          //   txn.remote_request_handler(id);
+          txn.pendingResponses ++ ;
+          // } while(success == false);
+          txn.network_size.fetch_add(sz);
+        } else {
+          // !TODO router 
+        }
+      }
+    }
+
+    txn.message_flusher(id);
+
+    // if(coordinator_id == target_coordi_id){
+        // spin on local & remote read
+        VLOG(DEBUG_V8) << "WAIT remote" << txn.id << " " << txn.pendingResponses << " " << txn.local_read.load() << " " << txn.remote_read.load();
+        while (txn.pendingResponses > 0) {
+          // process remote reads for other workers
+          txn.remote_request_handler(id);
+        }
+        VLOG(DEBUG_V8) << "WAIT remote" << txn.id << " " << txn.pendingResponses << " " << txn.local_read.load() << " " << txn.remote_read.load();
+
+    // }
+
+  }
+  
   void schedule_transactions() {
 
     // grant locks, once all locks are acquired, assign the transaction to
@@ -285,6 +348,10 @@ public:
       // if(transactions[i]->get_query()[0] / 200000 == 0){
       //   LOG(INFO) << "DEBUG";
       // }
+
+      // do transactions remote
+      transfer_transactions(*transactions[i]);
+
       if (!transactions[i]->abort_no_retry) {
         bool grant_lock = false;
         auto &readSet = transactions[i]->readSet;
@@ -296,12 +363,21 @@ public:
           auto partitionId = readKey.get_partition_id();
           auto key = readKey.get_key();
 
+          auto master_coordinator_id = readKey.get_master_coordinator_id();
+          auto secondary_coordinator_id = readKey.get_secondary_coordinator_id();
+
           // 本地只要有副本就锁住
-          if(readKey.get_master_coordinator_id() != coordinator_id && 
-             readKey.get_secondary_coordinator_id() != coordinator_id){
+          if(master_coordinator_id != coordinator_id && 
+             secondary_coordinator_id != coordinator_id){
                continue;
           }
           
+          
+          if (master_coordinator_id == coordinator_id) {
+            transactions[i]->local_read.fetch_add(1);
+          } else {
+            transactions[i]->remote_read.fetch_add(1);
+          }
           // if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, coordinator_id)) {
           //   continue;
           // }
@@ -325,6 +401,7 @@ public:
           grant_lock = true;
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           if (readKey.get_write_lock_bit()) {
+            VLOG(DEBUG_V12) << "      " << *(int*)key << " LOCK";
             HermesHelper::write_lock(tid);
           } else if (readKey.get_read_lock_bit()) {
             HermesHelper::read_lock(tid);
@@ -370,6 +447,7 @@ public:
       TransactionType *transaction = transaction_queue.front();
       bool ok = transaction_queue.pop();
       DCHECK(ok);
+      analyze_active_coordinator(*transaction);
 
       auto result = transaction->execute(id);
 
@@ -411,6 +489,9 @@ public:
        */
       auto *worker = this->all_executors[worker_id];
       auto& readKey = txn.readSet[key_offset];
+      VLOG(DEBUG_V12) << " read_handler : " << id << " " << *(int*)readKey.get_key() << " " << 
+                         "master_coordi : " << readKey.get_master_coordinator_id() << " " << 
+                          txn.local_read.load() << " " << txn.remote_read.load();
 
       if (readKey.get_master_coordinator_id() == coordinator_id) {
         ITable *table = worker->db.find_table(table_id, partition_id);
@@ -468,9 +549,18 @@ public:
     // n, n + 1, .., n + m -1 are workers
 
     // the first lock managers assign transactions to n, .. , n + m/n - 1
-
+    // e.g. 2 locker
+    //      4 worker
+    //   n_workers = n_thread - n_lock_manager 
+    //   id = [0,1] (lock_manager)
+    //   start_worker_id = 2 + 4 / 2 * id = 
+    //   len = 2 
+    //   request_id % len = [0,1] + start_worker_id => [2,3,4,5]
     auto start_worker_id = n_lock_manager + n_workers / n_lock_manager * id;
-    auto len = n_workers / n_lock_manager;
+    auto len = n_workers / n_lock_manager; 
+
+    // LOG(INFO) << n_lock_manager << " " << n_workers << " " << request_id % len + start_worker_id;
+
     return request_id % len + start_worker_id;
   }
 
@@ -504,7 +594,9 @@ public:
         ITable *table = db.find_table(messagePiece.get_table_id(),
                                       messagePiece.get_partition_id());
         messageHandlers[type](messagePiece,
-                              *messages[message->get_source_node_id()], *table,
+                              *messages[message->get_source_node_id()], 
+                              db, context, &partitioner,
+                              *table,
                               transactions);
       }
 
@@ -531,7 +623,9 @@ private:
   std::unique_ptr<Delay> delay;
   std::vector<std::unique_ptr<Message>> messages;
   std::vector<
-      std::function<void(MessagePiece, Message &, ITable &,
+      std::function<void(MessagePiece, Message &, 
+                         DatabaseType &, const ContextType &, Partitioner *,
+                         ITable &,
                          std::vector<std::unique_ptr<TransactionType>> &)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue;

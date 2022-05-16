@@ -15,6 +15,7 @@
 #include <thread>
 #include <vector>
 
+#include "protocol/Hermes/HermesMessage.h"
 namespace star {
 class IncomingDispatcher {
 
@@ -68,7 +69,7 @@ public:
           CHECK(group_id == 0);
           continue;
         }
-
+        
         if (is_record_txn_message_for_recorder(message.get())){
           // 最后一个是manager
           workers[numWorkers - 1]->push_message(message.release());
@@ -78,6 +79,9 @@ public:
         auto workerId = message->get_worker_id();
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
+        if(is_transaction_message(message.get())){
+          LOG(INFO) << workerId << " GET " << "TRANSFER_TRANSACTIONS";
+        }
         workers[workerId]->push_message(message.release());
         DCHECK(message == nullptr);
       }
@@ -89,6 +93,11 @@ public:
   bool is_coordinator_message(Message *message) {
     return (*(message->begin())).get_message_type() ==
            static_cast<uint32_t>(ControlMessage::STATISTICS);
+  }
+
+  bool is_transaction_message(Message *message) {
+    return (*(message->begin())).get_message_type() ==
+           static_cast<uint32_t>(HermesMessage::TRANSFER_TRANSACTIONS);
   }
 
   bool is_record_txn_message_for_recorder(Message *message) {
@@ -166,8 +175,15 @@ public:
                                         message->get_message_length());
 
     network_size += message->get_message_length();
-  }
 
+    if(is_transaction_message(message)){
+      LOG(INFO) << "send TRANSFER_TRANSACTIONS";
+    }
+  }
+  bool is_transaction_message(Message *message) {
+    return (*(message->begin())).get_message_type() ==
+           static_cast<uint32_t>(HermesMessage::TRANSFER_TRANSACTIONS);
+  }
   // void dispatchMessage(const std::shared_ptr<Worker> &worker) {
   void dispatchMessage(const std::vector<std::shared_ptr<Worker>> &workers, size_t cur_id, size_t recorder_id) {
     /**

@@ -29,6 +29,8 @@ public:
   virtual ~HermesTransaction() = default;
 
   void reset() {
+    pendingResponses = 0;
+
     abort_lock = false;
     abort_no_retry = false;
     abort_read_validation = false;
@@ -185,11 +187,11 @@ public:
           readKey.set_master_coordinator_id(master_coordinator);
           readKey.set_secondary_coordinator_id(secondary_coordinator);
 
-          if (master_coordinator == coordinator_id) {
-            local_read.fetch_add(1);
-          } else {
-            remote_read.fetch_add(1);
-          }
+          // if (master_coordinator == coordinator_id) {
+          //   local_read.fetch_add(1);
+          // } else {
+          //   remote_read.fetch_add(1);
+          // }
         }
 
         readSet[i].set_prepare_processed_bit();
@@ -308,6 +310,8 @@ public:
   bool distributed_transaction;
   bool execution_phase;
 
+  std::size_t pendingResponses;
+ 
   int router_coordinator_id;
 
   std::function<bool(std::size_t)> process_requests;

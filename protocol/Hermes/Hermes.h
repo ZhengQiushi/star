@@ -123,18 +123,25 @@ public:
       auto key = writeKey.get_key();
 
       if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, context.coordinator_id)) {
+        VLOG(DEBUG_V14) << "NOT AT " << *(int*)key << " " << 
+        partitioner.master_coordinator(tableId, partitionId, key) << " " << 
+        partitioner.secondary_coordinator(tableId, partitionId, key);
         continue;
       }
 
       if (HermesHelper::partition_id_to_lock_manager_id(
               writeKey.get_partition_id(), n_lock_manager,
               replica_group_size) != lock_manager_id) {
+                        VLOG(DEBUG_V14) << "NANI? " << *(int*)key;
+
         continue;
       }
 
       auto value = writeKey.get_value();
       std::atomic<uint64_t> &tid = table->search_metadata(key);
       HermesHelper::write_lock_release(tid);
+      VLOG(DEBUG_V14) << "  unLOCK " << *(int*)key;
+
     }
   }
 

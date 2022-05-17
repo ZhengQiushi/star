@@ -16,8 +16,10 @@ namespace star {
 
 enum class HermesMessage {
   READ_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
-  TRANSFER_TRANSACTIONS,
+  TRANSFER_REQUEST,
   TRANSFER_RESPONSE,
+  TRANSFER_REQUEST_ROUTER_ONLY,
+  TRANSFER_RESPONSE_ROUTER_ONLY,
   NFIELDS
 };
 
@@ -55,7 +57,7 @@ public:
     return message_size;
   }
 
-  static std::size_t transfer_transaction(Message &message, 
+  static std::size_t transfer_request_message(Message &message, 
                                           Database &db, const Context &context, Partitioner *partitioner,
                                           ITable &table, uint32_t key_offset,
                                           Transaction& txn, bool& success){
@@ -95,7 +97,7 @@ public:
                         value_size;
     
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(HermesMessage::TRANSFER_TRANSACTIONS), message_size,
+        static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(message.data);
@@ -112,8 +114,8 @@ public:
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     // try to lock tuple. Ensure not locked by current node
+    VLOG(DEBUG_V14) << "  LOCK " << *(int*)key;
     latest_tid = HermesHelper::write_lock(tid); // be locked 
-
     if(!success){
       VLOG(DEBUG_V12) << "fail!  can't Lock " << *(int*)key; // << " " << tid_int;
       // encoder << latest_tid << key_offset << txn_id << success << remaster;
@@ -211,10 +213,42 @@ public:
     // wait for the commit / abort to unlock
     if(is_delete == false){
       HermesHelper::write_lock_release(tid);
+      VLOG(DEBUG_V14) << "  unLOCK " << *(int*)key;
     }
 
     return message_size;
   }
+
+  static std::size_t transfer_request_router_only_message(Message &message, ITable &table,
+                                        Transaction& txn, uint32_t key_offset, uint32_t target_coordi_id) {
+
+    /*
+     * The structure of a search request: (primary key, read key offset)
+     */
+    uint32_t txn_id = txn.id;
+    auto key = txn.readSet[key_offset].get_key();
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(txn_id) + sizeof(target_coordi_id);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST_ROUTER_ONLY), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset << txn_id << target_coordi_id;
+    message.flush();
+
+    VLOG(DEBUG_V11) << "R   " << txn_id << " " << *(int*)key << "router send " << message.get_source_node_id() << "->" << message.get_dest_node_id() << 
+                       " target_coordi_id: " << target_coordi_id  << " pending: " << txn.pendingResponses;
+
+    return message_size;
+  }
+
+
 };
 
 template <class Database> class HermesMessageHandler {
@@ -223,7 +257,7 @@ template <class Database> class HermesMessageHandler {
 
 public:
   static void
-  read_request_handler(MessagePiece inputPiece, Message &responseMessage,
+  read_request_message_handler(MessagePiece inputPiece, Message &responseMessage,
                        Database &db, const Context &context, Partitioner *partitioner,
                        ITable &table,
                        std::vector<std::unique_ptr<Transaction>> &txns) {
@@ -255,18 +289,18 @@ public:
     HermesRWKey &readKey = txns[tid]->readSet[key_offset];
     dec.read_n_bytes(readKey.get_value(), value_size);
     txns[tid]->remote_read.fetch_add(-1);
-    VLOG(DEBUG_V12) << "    read_request_handler : " <<  tid << " " << txns[tid]->remote_read.load() << 
+    VLOG(DEBUG_V12) << "    read_request_message_handler : " <<  tid << " " << txns[tid]->remote_read.load() << 
                  " " << *(int*) readKey.get_key() << 
                  " " << responseMessage.get_dest_node_id() << "->" << responseMessage.get_source_node_id();
   }
 
   static void
-  transfer_transaction_handler(MessagePiece inputPiece, Message &responseMessage,
+  transfer_request_message_handler(MessagePiece inputPiece, Message &responseMessage,
                        Database &db, const Context &context, Partitioner *partitioner,
                        ITable &table,
                        std::vector<std::unique_ptr<Transaction>> &txns) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(HermesMessage::TRANSFER_TRANSACTIONS));
+           static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     DCHECK(table_id == table.tableID());
@@ -364,7 +398,7 @@ public:
         DCHECK(coordinator_id_new != coordinator_id_old);
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
-        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tidd ;
+        // VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tidd ;
         // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
@@ -429,7 +463,7 @@ public:
         readKey.set_master_coordinator_id(coordinator_id_new);
         readKey.set_secondary_coordinator_id(new_secondary_coordinator_id);
 
-    VLOG(DEBUG_V12) << "    transfer_transaction_handler : " <<  txn_id << " " << txns[txn_id]->pendingResponses << 
+    VLOG(DEBUG_V12) << "    transfer_request_message_handler : " <<  txn_id << " " << txns[txn_id]->pendingResponses << 
                  " " << *(int*) readKey.get_key() << 
                  " " << responseMessage.get_dest_node_id() << "->" << responseMessage.get_source_node_id() << 
                  " new: " << coordinator_id_new << " new2: " << new_secondary_coordinator_id;
@@ -451,29 +485,30 @@ public:
 
   
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + sizeof(txn_id);
+    auto message_size = MessagePiece::get_header_size() + sizeof(txn_id) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(HermesMessage::TRANSFER_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header << txn_id;
+    encoder << message_piece_header << txn_id << key_offset;
     responseMessage.flush();
   }
   
   
     static void
-  transfer_response_handler(MessagePiece inputPiece, Message &responseMessage,
+  transfer_response_message_handler(MessagePiece inputPiece, Message &responseMessage,
                        Database &db, const Context &context, Partitioner *partitioner,
                        ITable &table,
                        std::vector<std::unique_ptr<Transaction>> &txns) {
     uint32_t txn_id;
+    uint32_t key_offset;
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(HermesMessage::TRANSFER_RESPONSE));
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + sizeof(txn_id));    
+           MessagePiece::get_header_size() + sizeof(txn_id) + sizeof(key_offset));    
 
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
@@ -485,16 +520,135 @@ public:
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> txn_id;
+    dec >> txn_id >> key_offset;
 
     /*
      * The structure of a replication response: ()
      */
     auto& txn = txns[txn_id];
+    auto& readKey = txn->readSet[key_offset];
+
     txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();                     
+    txn->network_size += inputPiece.get_message_length();  
+
+    VLOG(DEBUG_V12) << "    transfer_response : " <<  txn_id << " " << txns[txn_id]->pendingResponses << 
+                 " " << *(int*) readKey.get_key() << 
+                 " " << responseMessage.get_dest_node_id() << "->" << responseMessage.get_source_node_id();
+                   
   }
   
+
+
+  static void transfer_request_message_router_only_handler(MessagePiece inputPiece, Message &responseMessage,
+                       Database &db, const Context &context, Partitioner *partitioner,
+                       ITable &table,
+                       std::vector<std::unique_ptr<Transaction>> &txns) {
+    /**
+     * @brief directly move the data to the request node!
+     * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
+     * 
+     */
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST_ROUTER_ONLY));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read request: (primary key, read key offset)
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+    uint32_t txn_id; 
+    uint32_t target_coordi_id;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(txn_id) + sizeof(target_coordi_id));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    // auto row = table.search(key);
+
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset >> txn_id >> target_coordi_id; // index offset in the readSet from source request node
+    auto& txn = txns[txn_id];
+
+    VLOG(DEBUG_V11) << " Req   " << txn_id << " " << *(int*)key << "response send " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << 
+                       " target_coordi_id: " << target_coordi_id << " pending: " << txn->pendingResponses;
+
+    DCHECK(dec.size() == 0);
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + 
+                        sizeof(key_offset) + sizeof(txn_id);
+
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(HermesMessage::TRANSFER_RESPONSE_ROUTER_ONLY), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    encoder << key_offset << txn_id;
+
+    // lock the router_table 
+    auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+    auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+    
+    // create the new tuple in global router of source request node
+    auto coordinator_id_new = responseMessage.get_dest_node_id(); // target_coordi_id; // 
+    if(coordinator_id_new != coordinator_id_old){
+      auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+      // delete old value in router and real-replica
+      uint64_t secondary_coordinator_id_new = *(uint64_t*)router_table_old->search_value(key);
+      if(secondary_coordinator_id_new == coordinator_id_new){
+        // remaster
+        secondary_coordinator_id_new = coordinator_id_old;
+      } else {
+        // transfer, secondary not change
+      }
+      router_table_new->insert(key, &coordinator_id_new);
+      router_table_old->delete_(key);
+    }
+    // txn->pendingResponses--;
+
+    // VLOG(DEBUG_V11) << " Req   " << txn_id << " " << *(int*)key << "response send " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " pending: " << txn->pendingResponses;
+
+    responseMessage.flush();
+  }
+
+  static void transfer_response_message_router_only_handler(MessagePiece inputPiece, Message &responseMessage,
+                       Database &db, const Context &context, Partitioner *partitioner,
+                       ITable &table,
+                       std::vector<std::unique_ptr<Transaction>> &txns) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(HermesMessage::TRANSFER_RESPONSE_ROUTER_ONLY));
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+    uint32_t txn_id; 
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + sizeof(key_offset) + sizeof(txn_id));
+
+    star::Decoder dec(stringPiece);
+    dec >> key_offset >> txn_id; // index offset in the readSet from source request node
+
+    auto& txn = txns[txn_id];
+    // txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+    
+    auto& readKey = txn->readSet[key_offset];
+    auto key = readKey.get_key();
+
+    VLOG(DEBUG_V11) << " R   " << txn_id << " " << *(int*)key << "response get " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " pending: " << txn->pendingResponses;
+
+  }
 
 
   static std::vector<
@@ -510,9 +664,11 @@ public:
                            std::vector<std::unique_ptr<Transaction>> &)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
-    v.push_back(read_request_handler); // transfer_transaction_handler
-    v.push_back(transfer_transaction_handler); // 
-    v.push_back(transfer_response_handler);
+    v.push_back(read_request_message_handler); // transfer_request_message_handler
+    v.push_back(transfer_request_message_handler); // 
+    v.push_back(transfer_response_message_handler);
+    v.push_back(transfer_request_message_router_only_handler);
+    v.push_back(transfer_response_message_router_only_handler);
     return v;
   }
 };

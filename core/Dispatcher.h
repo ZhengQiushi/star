@@ -80,7 +80,7 @@ public:
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
         if(is_transaction_message(message.get())){
-          LOG(INFO) << workerId << " GET " << "TRANSFER_TRANSACTIONS";
+          LOG(INFO) << workerId << " GET " << "TRANSFER_REQUEST";
         }
         workers[workerId]->push_message(message.release());
         DCHECK(message == nullptr);
@@ -97,7 +97,7 @@ public:
 
   bool is_transaction_message(Message *message) {
     return (*(message->begin())).get_message_type() ==
-           static_cast<uint32_t>(HermesMessage::TRANSFER_TRANSACTIONS);
+           static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST);
   }
 
   bool is_record_txn_message_for_recorder(Message *message) {
@@ -177,12 +177,12 @@ public:
     network_size += message->get_message_length();
 
     if(is_transaction_message(message)){
-      LOG(INFO) << "send TRANSFER_TRANSACTIONS";
+      LOG(INFO) << "send TRANSFER_REQUEST";
     }
   }
   bool is_transaction_message(Message *message) {
     return (*(message->begin())).get_message_type() ==
-           static_cast<uint32_t>(HermesMessage::TRANSFER_TRANSACTIONS);
+           static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST);
   }
   // void dispatchMessage(const std::shared_ptr<Worker> &worker) {
   void dispatchMessage(const std::vector<std::shared_ptr<Worker>> &workers, size_t cur_id, size_t recorder_id) {

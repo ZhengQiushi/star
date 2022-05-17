@@ -801,15 +801,15 @@ public:
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
     auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-    auto static_coordinator_id = secondary_coordinator(partition_id);
+    // auto static_coordinator_id = secondary_coordinator(partition_id);
 
-    if(master_coordinator_id != static_coordinator_id){
-      return static_coordinator_id;
-    } else {
+    // if(master_coordinator_id != static_coordinator_id){
+    //   return static_coordinator_id;
+    // } else {
       auto router_table = db.find_router_table(table_id, master_coordinator_id);
       size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
       return secondary_coordinator_id;
-    }
+    // }
   }
   
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
@@ -822,6 +822,7 @@ public:
     } else {
       auto router_table = db.find_router_table(table_id, master_coordinator_id);
       size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
+      VLOG(DEBUG_V12) << *(int*)key << " " << coordinator_id << " " << secondary_coordinator_id; 
       return secondary_coordinator_id == coordinator_id;
     }
   }

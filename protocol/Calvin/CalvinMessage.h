@@ -53,7 +53,7 @@ class CalvinMessageHandler {
 
 public:
   static void
-  read_request_handler(MessagePiece inputPiece, Message &responseMessage,
+  read_request_message_handler(MessagePiece inputPiece, Message &responseMessage,
                        ITable &table,
                        std::vector<std::unique_ptr<Transaction>> &txns) {
     DCHECK(inputPiece.get_message_type() ==
@@ -95,7 +95,7 @@ public:
                            std::vector<std::unique_ptr<Transaction>> &)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
-    v.push_back(read_request_handler);
+    v.push_back(read_request_message_handler);
     return v;
   }
 };

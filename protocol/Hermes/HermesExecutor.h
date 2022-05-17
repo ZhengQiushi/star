@@ -247,14 +247,14 @@ public:
     for (auto i = 0u; i < readSet.size(); i++) {
       auto &readKey = readSet[i];
 
-      // auto tableId = readKey.get_table_id();
-      // auto partitionId = readKey.get_partition_id();
-      // auto key = readKey.get_key();
+      auto tableId = readKey.get_table_id();
+      auto partitionId = readKey.get_partition_id();
+      auto key = readKey.get_key();
 
-      // auto master_coordinator = partitioner.master_coordinator(tableId, partitionId, key);
-      // auto secondary_coordinator = partitioner.secondary_coordinator(tableId, partitionId, key);
-      // readKey.set_master_coordinator_id(master_coordinator);
-      // readKey.set_secondary_coordinator_id(secondary_coordinator);
+      auto master_coordinator = partitioner.master_coordinator(tableId, partitionId, key);
+      auto secondary_coordinator = partitioner.secondary_coordinator(tableId, partitionId, key);
+      readKey.set_master_coordinator_id(master_coordinator);
+      readKey.set_secondary_coordinator_id(secondary_coordinator);
 
       if (readKey.get_local_index_read_bit()) {
         continue;
@@ -272,10 +272,11 @@ public:
 
 
 
-  void transfer_transactions(TransactionType &txn){
+  void transfer_request_messages(TransactionType &txn){
 
     std::size_t target_coordi_id = (std::size_t)txn.router_coordinator_id;
     auto& readSet = txn.readSet;
+    txn.pendingResponses = 0; // 初始化一下?
 
     for (auto k = 0u; k < readSet.size(); k++) {
       auto& readKey = readSet[k];
@@ -291,34 +292,45 @@ public:
       VLOG(DEBUG_V12) << *(int*) key << " " << master_coordi_id << " " << secondary_coordi_id; 
       ITable *table = db.find_table(table_id, partition_id);
 
+      auto *worker = this->all_executors[id]; // current-lock-manager
+
       if(coordinator_id == target_coordi_id){
         // local, then receive all info away
         if(master_coordi_id == target_coordi_id){
           // key already at local, pass...
         } else {
           // mastership of the key is not at local, wait for transfer/remaster from other nodes
-          txn.pendingResponses ++ ;
+          txn.pendingResponses ++; // wait for transfer
         }
+
+        // wait for router
+        for(std::size_t c = 0; c < context.coordinator_num; c ++ ){
+          if(c == target_coordi_id || c == master_coordi_id){
+            continue;
+          }
+          int32_t sz = MessageFactoryType::transfer_request_router_only_message(*worker->messages[c], 
+                                        *table, txn, k, target_coordi_id);
+          // txn.pendingResponses ++ ;
+          txn.network_size.fetch_add(sz);
+        }
+
       } else {
         // remote, then send all info you need 
         if(coordinator_id == master_coordi_id){
           // has mastership of relational key, send key to the target
-          auto *worker = this->all_executors[id]; // current-lock-manager
           bool success = true;
 
-          int32_t sz;
-          // do {
-            sz = MessageFactoryType::transfer_transaction(*worker->messages[target_coordi_id], 
+          int32_t sz = MessageFactoryType::transfer_request_message(*worker->messages[target_coordi_id], 
                                           db, context, &partitioner,
                                           *table, k, txn, success);
-          //   txn.remote_request_handler(id);
           txn.pendingResponses ++ ;
-          // } while(success == false);
           txn.network_size.fetch_add(sz);
-        } else {
-          // !TODO router 
+        } else if(master_coordi_id != target_coordi_id){
+          // 不是主副本，但是主副本发生改变 wait master's only router-message to update local router
+          // txn.pendingResponses ++ ;
         }
       }
+
     }
 
     txn.message_flusher(id);
@@ -350,7 +362,7 @@ public:
       // }
 
       // do transactions remote
-      transfer_transactions(*transactions[i]);
+      transfer_request_messages(*transactions[i]);
 
       if (!transactions[i]->abort_no_retry) {
         bool grant_lock = false;
@@ -378,6 +390,9 @@ public:
           } else {
             transactions[i]->remote_read.fetch_add(1);
           }
+          VLOG(DEBUG_V12) << " @@@ " << master_coordinator_id << " " <<  coordinator_id << " " <<
+                             *(int*)key << " " << 
+                             transactions[i]->local_read.load() << " " << transactions[i]->remote_read.load();
           // if (!partitioner.is_partition_replicated_on(tableId, partitionId, key, coordinator_id)) {
           //   continue;
           // }
@@ -490,7 +505,8 @@ public:
       auto *worker = this->all_executors[worker_id];
       auto& readKey = txn.readSet[key_offset];
       VLOG(DEBUG_V12) << " read_handler : " << id << " " << *(int*)readKey.get_key() << " " << 
-                         "master_coordi : " << readKey.get_master_coordinator_id() << " " << 
+                         "master_coordi : " << readKey.get_master_coordinator_id() << 
+                         " sec: " << readKey.get_secondary_coordinator_id() << " " << 
                           txn.local_read.load() << " " << txn.remote_read.load();
 
       if (readKey.get_master_coordinator_id() == coordinator_id) {
@@ -498,10 +514,13 @@ public:
         HermesHelper::read(table->search(key), value, table->value_size());
 
         auto &active_coordinators = txn.active_coordinators;
-        for (auto i = 0u; i < active_coordinators.size(); i++) {
+        for (auto i = 0u; i < active_coordinators.size(); i ++ ){// active_coordinators.size(); i++) {
           // 发送到涉及到的且非本地coordinator
-          if (i == worker->coordinator_id || !active_coordinators[i])
+          if (i == worker->coordinator_id)// !active_coordinators[i])
             continue;
+          if(i != readKey.get_secondary_coordinator_id() && i != readKey.get_master_coordinator_id()){
+            continue;
+          }
           auto sz = MessageFactoryType::new_read_message(
               *worker->messages[i], *table, id, key_offset, key, value);
 

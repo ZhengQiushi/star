@@ -26,9 +26,9 @@ public:
   static myTestSet which_workload;
 
   Workload(std::size_t coordinator_id, DatabaseType &db, RandomType &random,
-           Partitioner &partitioner)
+           Partitioner &partitioner, int workload_type)
       : coordinator_id(coordinator_id), db(db), random(random),
-        partitioner(partitioner) {}
+        partitioner(partitioner), workload_type(workload_type) {}
 
   std::unique_ptr<TransactionType> next_transaction(const ContextType &context,
                                                     std::size_t partition_id,
@@ -73,6 +73,7 @@ private:
   DatabaseType &db;
   RandomType &random;
   Partitioner &partitioner;
+  int workload_type;
 };
 template <class Transaction>
 myTestSet Workload<Transaction>::which_workload = myTestSet::TPCC;

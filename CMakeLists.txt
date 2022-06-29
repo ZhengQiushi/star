@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.2)
 project(star)
 
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -O2")
+set(CMAKE_CXX_COMPILER "/usr/bin/g++")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -O2 -std=c++14")
 set(CMAKE_CXX_STANDARD 14)
 
 # set(CMAKE_EXE_LINKER_FLAGS "-static")
@@ -11,7 +11,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 
-find_library(jemalloc_lib jemalloc) # jemalloc 5.0
+# find_library(jemalloc_lib jemalloc) # jemalloc 5.0
+set(jemalloc_lib, "/usr/lib64/libjemalloc.so.1")
 
 # additional target to perform clang-format run, requires clang-format
 
@@ -41,10 +42,13 @@ if(APPLE)
     find_package(gflags REQUIRED)
     target_link_libraries(common ${jemalloc_lib} glog::glog gflags)# absl::flat_hash_map)
 else()
-    find_package(glog REQUIRED)
+    # find_package(glog REQUIRED)
     # set(gflags_NAMES libgflags.a)
-    find_package(gflags REQUIRED)
-    target_link_libraries(common ${jemalloc_lib} glog gflags) # absl::flat_hash_map  -static)
+    # find_package(gflags REQUIRED)
+    set(glog "/usr/local/lib/libglog.a")
+    set(gflags "/usr/local/lib/libgflags.a")
+
+    target_link_libraries(common ${jemalloc_lib} ${glog} ${gflags}) # absl::flat_hash_map  -static)
     # target_link_libraries(common libgflags.a)
     
 endif()

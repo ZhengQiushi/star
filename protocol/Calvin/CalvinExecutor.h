@@ -55,7 +55,7 @@ public:
         n_started_workers(n_started_workers),
         partitioner(coordinator_id, context.coordinator_num,
                     CalvinHelper::string_to_vint(context.replica_group)),
-        workload(coordinator_id, db, random, partitioner),
+        workload(coordinator_id, db, random, partitioner, workload_type),
         n_lock_manager(CalvinHelper::n_lock_manager(
             partitioner.replica_group_id, id,
             CalvinHelper::string_to_vint(context.lock_manager))),

@@ -31,11 +31,11 @@ public:
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
-                  Storage &storage)
+                  Storage &storage, int workload_type)
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db)) {}
+        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db, workload_type)) {}
 
 
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
@@ -244,7 +244,7 @@ public:
 
 
   void reset_query() override {
-    query = makeYCSBQuery<keys_num>()(context, partition_id, random, db);
+    query = makeYCSBQuery<keys_num>()(context, partition_id, random, db, 0);
   }
   
   const std::vector<u_int64_t> get_query() override{

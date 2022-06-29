@@ -23,7 +23,7 @@ public:
                                       //  0.001 = 200  
   using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
-                          Random &random, DatabaseType &db) const {
+                          Random &random, DatabaseType &db, int workload_type) const {
     // 
     DCHECK(context.partition_num > partitionID);
 

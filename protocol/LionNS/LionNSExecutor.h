@@ -91,8 +91,8 @@ public:
 
         VLOG_IF(DEBUG_V, this->id == 0) << "worker " << this->id << " prepare_transactions_to_run";
 
-        WorkloadType c_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->l_partitioner.get());
-        WorkloadType s_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->s_partitioner.get());
+        WorkloadType c_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->l_partitioner.get(), this->workload_type);
+        WorkloadType s_workload = WorkloadType (this->coordinator_id, this->db, this->random, *this->s_partitioner.get(), this->workload_type);
         StorageType storage;
 
         is_lion_king = (this->coordinator_id == lion_king_coordinator_id);

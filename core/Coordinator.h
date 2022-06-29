@@ -7,7 +7,7 @@
 #include "common/LockfreeQueue.h"
 #include "common/Message.h"
 #include "common/Socket.h"
-#include "common/PinThreadToCore.h"
+// #include "common/PinThreadToCore.h"
 
 #include "core/ControlMessage.h"
 #include "core/Dispatcher.h"
@@ -105,6 +105,11 @@ public:
                n_abort_read_validation = 0, n_local = 0,
                n_si_in_serializable = 0, n_network_size = 0;
 
+      // switch type in every 10 second;
+      int cur_workload_type = std::chrono::duration_cast<std::chrono::seconds>(
+                 std::chrono::steady_clock::now() - startTime)
+                 .count() / 10 % 6;
+
       for (auto i = 0u; i < workers.size(); i++) {
 
         n_commit += workers[i]->n_commit.load();
@@ -127,9 +132,11 @@ public:
 
         n_network_size += workers[i]->n_network_size.load();
         workers[i]->n_network_size.store(0);
+
+        workers[i]->workload_type = cur_workload_type;
       }
 
-      LOG(INFO) << "commit: " << n_commit << " abort: "
+      LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit << " abort: "
                 << n_abort_no_retry + n_abort_lock + n_abort_read_validation
                 << " (" << n_abort_no_retry << "/" << n_abort_lock << "/"
                 << n_abort_read_validation
@@ -358,23 +365,23 @@ private:
     CPU_SET(core_id++, &cpuset);
     int rc =
         pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-    CHECK(rc == 0);
+    CHECK(rc == 0) << rc;
 #endif
 
-#ifndef __linux__
-    static std::size_t core_id = context.cpu_core_id;
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_id++, &cpuset);
+// #ifndef __linux__
+//     static std::size_t core_id = context.cpu_core_id;
+//     cpu_set_t cpuset;
+//     CPU_ZERO(&cpuset);
+//     CPU_SET(core_id++, &cpuset);
 
-    print_affinity();
+//     print_affinity();
     
-    int rc =
-        pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-    CHECK(rc == 0);
+//     int rc =
+//         pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
+//     CHECK(rc == 0);
 
-    print_affinity();
-#endif
+//     print_affinity();
+// #endif
   }
 
 private:

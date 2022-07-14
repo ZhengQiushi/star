@@ -63,6 +63,7 @@ public:
       n_abort_read_validation, n_local, n_si_in_serializable, n_network_size;
 
   int workload_type; // 0-5
+  std::chrono::steady_clock::time_point start_time;
 };
 
 } // namespace star

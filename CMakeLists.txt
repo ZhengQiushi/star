@@ -12,56 +12,53 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 
 # find_library(jemalloc_lib jemalloc) # jemalloc 5.0
-set(jemalloc_lib, "/usr/lib64/libjemalloc.so.1")
+# set(jemalloc_lib, "/usr/lib64/libjemalloc.so.1")
 
 # additional target to perform clang-format run, requires clang-format
 
-# get all project files
-file(GLOB_RECURSE ALL_SOURCE_FILES benchmark/*.h common/*.h core/*.h protocol/*.h bench*.cpp)
+include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/third_party)
 
-add_custom_target(
-        format
-        COMMAND clang-format
-        -style=LLVM
-        -i
-        -sort-includes
-        ${ALL_SOURCE_FILES}
-)
+# get all project files
+file(GLOB_RECURSE ALL_SOURCE_FILES benchmark/*.h common/*.h core/*.h core/*.cpp protocol/*.h bench*.cpp)
 
 include_directories(${CMAKE_SOURCE_DIR})
 
 file(GLOB_RECURSE COMMON_SOURCE_FILES common/*.cpp)
-add_library(common STATIC ${COMMON_SOURCE_FILES})
+add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
 
-include_directories(absl_DIR /usr/local/include)
 
-# find_package(absl REQUIRED)
-
-if(APPLE)
-    find_package(glog REQUIRED)
-    find_package(gflags REQUIRED)
-    target_link_libraries(common ${jemalloc_lib} glog::glog gflags)# absl::flat_hash_map)
-else()
+# if(APPLE)
+#     find_package(glog REQUIRED)
+#     find_package(gflags REQUIRED)
+#     target_link_libraries(common ${jemalloc_lib} glog::glog gflags)# absl::flat_hash_map)
+# else()
     # find_package(glog REQUIRED)
     # set(gflags_NAMES libgflags.a)
     # find_package(gflags REQUIRED)
     set(glog "/usr/local/lib/libglog.a")
     set(gflags "/usr/local/lib/libgflags.a")
+    set(TFlowC_LIBRARIES "/usr/local/lib/libtensorflow_cc.so")
+    set(TFlowC_FRAMEWORK_LIBRARIES "/usr/local/lib/libtensorflow_framework.so")
+    set(GMOCK_LIBRARIES "/usr/local/lib64/libgmock.a")
+    set(GTEST_LIBRARIES "/usr/local/lib64/libgtest.a")
 
-    target_link_libraries(common ${jemalloc_lib} ${glog} ${gflags}) # absl::flat_hash_map  -static)
+    target_link_libraries(common ${jemalloc_lib} ${glog} ${gflags} 
+                                 ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+                                 ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES}) # absl::flat_hash_map  -static)
     # target_link_libraries(common libgflags.a)
-    
-endif()
+    # --[ Eigen3
+    find_package(Eigen3 REQUIRED)
+    include_directories(SYSTEM ${EIGEN3_INCLUDE_DIR})
 
-# include_directories(absl_DIR /usr/local/include) 
+# endif()
 
-# Process Abseil's CMake build system
-# add_subdirectory(3rd/abseil-cpp)
 
-add_executable(bench_tpcc bench_tpcc.cpp)
-target_link_libraries(bench_tpcc common)
+# add_executable(bench_tpcc bench_tpcc.cpp)
+# target_link_libraries(bench_tpcc common)
 
 add_executable(bench_ycsb bench_ycsb.cpp)
 target_link_libraries(bench_ycsb common) # -static
 
-# target_link_libraries(bench_ycsb absl::flat_hash_map)
+# 
+add_subdirectory(test)

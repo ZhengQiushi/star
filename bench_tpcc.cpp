@@ -1,6 +1,7 @@
 #include "benchmark/tpcc/Database.h"
 #include "core/Coordinator.h"
 #include "core/Macros.h"
+#include "brain/workload_cluster.h"
 
 DEFINE_bool(operation_replication, false, "use operation replication");
 DEFINE_string(query, "neworder", "tpcc query, mixed, neworder, payment");

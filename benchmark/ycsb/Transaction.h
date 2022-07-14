@@ -31,11 +31,11 @@ public:
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
-                  Storage &storage, int workload_type)
+                  Storage &storage, double cur_timestamp)
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db, workload_type)) {}
+        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db, cur_timestamp)) {}
 
 
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,

@@ -148,6 +148,12 @@ public:
     int times = 0;
     auto now = std::chrono::steady_clock::now();
 
+    if(id == 0 && coordinator_id == 0){
+      outfile_excel.open("/home/zqs/project/star/data/result.xls", std::ios::trunc); // ios::trunc
+
+      outfile_excel << "timestamp" << "\t" << "txn-items" << "\n";
+    }
+
     for (;;) {
       auto begin = std::chrono::steady_clock::now();
       ExecutorStatus status;
@@ -171,9 +177,9 @@ public:
       commit_transactions();
 
       VLOG_IF(DEBUG_V, id == 0) << "worker " << id << " prepare_transactions_to_run";
-
-      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *l_partitioner.get(), workload_type);
-      WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get(), workload_type);
+      
+      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *l_partitioner.get(), start_time);
+      WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get(), start_time);
       StorageType storage;
 
       is_lion_king = (coordinator_id == lion_king_coordinator_id);
@@ -330,7 +336,12 @@ public:
               << " milliseconds.";
     }
 
-      VLOG_IF(DEBUG_V, id == 0) << "TIMES : " << times; 
+    VLOG_IF(DEBUG_V, id == 0) << "TIMES : " << times; 
+
+    if(id == 0 && coordinator_id == 0){
+      outfile_excel.close();
+    }
+    
 
   }
 
@@ -384,6 +395,22 @@ public:
         if (status == ExecutorStatus::C_PHASE) {
           std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
           cur_transaction = c_workload.next_transaction(c_context, partition_id, storage);
+
+          /* trace transactions */
+          auto items_ = cur_transaction->get_query();
+
+          double current_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - start_time)
+                         .count() * 1.0 / 1000 / 1000;
+          
+          if(id == 0 && coordinator_id == 0){
+            outfile_excel << current_timestamp << "\t";
+            for(auto item: items_){
+              outfile_excel << item << "\t";
+            }
+            outfile_excel << "\n";
+          }
+
         } else {
           if(context.lion_no_switch == true || context.protocol == "LionNS"){
             std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
@@ -2150,6 +2177,9 @@ protected:
   std::deque<simpleTransaction> router_transactions_queue;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx
+
+  // for test
+  std::ofstream outfile_excel;
 
 };
 } // namespace star

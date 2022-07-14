@@ -91,13 +91,15 @@ public:
     // run timeToRun seconds
     uint64_t timeToRun = context.time_to_run;
     uint64_t warmup = 10, cooldown = 5;
-    auto startTime = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
 
     uint64_t total_commit = 0, total_abort_no_retry = 0, total_abort_lock = 0,
              total_abort_read_validation = 0, total_local = 0,
              total_si_in_serializable = 0, total_network_size = 0;
     uint64_t count = 0;
-
+    for(auto i = 0u ; i < workers.size(); i ++ ){
+      workers[i]->start_time = startTime;
+    }
     do {
       std::this_thread::sleep_for(std::chrono::seconds(1));
 

@@ -80,7 +80,7 @@ public:
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
         if(is_transaction_message(message.get())){
-          LOG(INFO) << workerId << " GET " << "TRANSFER_REQUEST";
+          VLOG(DEBUG_V8) << workerId << " GET " << "TRANSFER_REQUEST";
         }
         workers[workerId]->push_message(message.release());
         DCHECK(message == nullptr);
@@ -177,7 +177,7 @@ public:
     network_size += message->get_message_length();
 
     if(is_transaction_message(message)){
-      LOG(INFO) << "send TRANSFER_REQUEST";
+      VLOG(DEBUG_V8) << "send TRANSFER_REQUEST";
     }
   }
   bool is_transaction_message(Message *message) {

@@ -25,10 +25,7 @@
 #include <thread>
 #include <glog/logging.h>
 
-
-
 namespace star {
-
 
 template <class Workload> 
 class LionRecorder : public Worker {

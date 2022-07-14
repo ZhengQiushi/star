@@ -232,9 +232,6 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
   
   void transmit_record(const myMove<WorkloadType>& move){
     //!TODO: 应该将tableID通过msg传过来
-    
-    
-
     for(size_t i = 0 ; i < move.records.size(); i ++ ){
 
       const auto & rec = move.records[i];
@@ -477,6 +474,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
               // << " us, average batch size " << batch_size_percentile.nth(50)
               << "us .";
   }
+  
   void remove_on_secondary_coordinator(const myMove<WorkloadType>& move) {
     /**
      * @brief 注意当前是c—phase

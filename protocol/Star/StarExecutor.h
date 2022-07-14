@@ -181,8 +181,8 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " prepare_transactions_to_run";
 
-      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get(), workload_type);
-      WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get(), workload_type);
+      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *c_partitioner.get(), start_time);
+      WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get(), start_time);
       StorageType storage;
       auto now = std::chrono::steady_clock::now();
 
@@ -462,7 +462,7 @@ public:
     }
 
     ProtocolType protocol(db, phase_context, *partitioner, id);
-    WorkloadType workload(coordinator_id, db, random, *partitioner, workload_type);
+    WorkloadType workload(coordinator_id, db, random, *partitioner, start_time);
 
     // StorageType storage;
 

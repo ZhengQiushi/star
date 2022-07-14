@@ -42,7 +42,7 @@ public:
             context.partitioner, coordinator_id, context.coordinator_num)),
         random(reinterpret_cast<uint64_t>(this)),
         protocol(db, context, *partitioner),
-        workload(coordinator_id, db, random, *partitioner, workload_type),
+        workload(coordinator_id, db, random, *partitioner, start_time),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 

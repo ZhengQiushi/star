@@ -25,18 +25,22 @@ public:
   static myTestSet which_workload;
 
   Workload(std::size_t coordinator_id, DatabaseType &db, RandomType &random,
-           Partitioner &partitioner, int workload_type)
+           Partitioner &partitioner, std::chrono::steady_clock::time_point start_time)
       : coordinator_id(coordinator_id), db(db), random(random),
-        partitioner(partitioner), workload_type(workload_type) {}
+        partitioner(partitioner), start_time(start_time) {}
 
   std::unique_ptr<TransactionType> next_transaction(const ContextType &context,
                                                     std::size_t partition_id,
                                                     StorageType &storage) {
+    
+    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time)
+                 .count() * 1.0 / 1000 / 1000;
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
             coordinator_id, partition_id, db, context, random, partitioner,
-            storage, workload_type);
+            storage, cur_timestamp);
 
     return p;
   }
@@ -57,7 +61,7 @@ private:
   DatabaseType &db;
   RandomType &random;
   Partitioner &partitioner;
-  int workload_type;
+  std::chrono::steady_clock::time_point start_time;
 };
 template <class Transaction>
 myTestSet Workload<Transaction>::which_workload = myTestSet::YCSB;

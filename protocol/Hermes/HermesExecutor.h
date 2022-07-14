@@ -55,7 +55,7 @@ public:
         n_started_workers(n_started_workers),
         partitioner(coordinator_id, context.coordinator_num,
                     HermesHelper::string_to_vint(context.replica_group), db),
-        workload(coordinator_id, db, random, partitioner, workload_type),
+        workload(coordinator_id, db, random, partitioner, start_time),
         n_lock_manager(HermesHelper::n_lock_manager(
             partitioner.replica_group_id, id,
             HermesHelper::string_to_vint(context.lock_manager))),

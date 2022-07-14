@@ -1,0 +1,1 @@
+/usr/bin/g++   -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -O2 -std=c++14  -rdynamic CMakeFiles/augmented_nn_test.dir/brain/augmented_nn_test.cpp.o  -o augmented_nn_test 

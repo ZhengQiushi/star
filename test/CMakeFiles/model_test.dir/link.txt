@@ -1,0 +1,1 @@
+/usr/bin/g++   -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -O2 -std=c++14  -rdynamic CMakeFiles/model_test.dir/brain/model_test.cpp.o  -o model_test 

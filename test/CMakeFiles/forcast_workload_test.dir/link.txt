@@ -1,0 +1,1 @@
+/usr/bin/g++   -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -O2 -std=c++14  -rdynamic CMakeFiles/forcast_workload_test.dir/brain/forcast_workload_test.cpp.o  -o forcast_workload_test 

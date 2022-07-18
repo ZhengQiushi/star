@@ -45,12 +45,16 @@ public:
                const ContextType &context, uint32_t &batch_size,
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
-               std::atomic<uint32_t> &n_started_workers)
+               std::atomic<uint32_t> &n_started_workers, 
+               std::unordered_map<std::string, int> &data_pack_map)
+
+               // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue)
       : LionExecutor<Workload>(coordinator_id, id, db,
                context, batch_size,
                worker_status,
                n_complete_workers,
-               n_started_workers) {
+               n_started_workers,
+               data_pack_map) {
                }
 
   void start() override {

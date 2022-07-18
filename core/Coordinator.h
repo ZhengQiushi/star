@@ -367,7 +367,7 @@ private:
     CPU_SET(core_id++, &cpuset);
     int rc =
         pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-    CHECK(rc == 0) << rc;
+    // CHECK(rc == 0) << rc;
 #endif
 
 // #ifndef __linux__

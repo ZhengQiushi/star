@@ -83,4 +83,15 @@ struct ExecutionStep {
   RouterTxnOps ops;
 };
 
+struct data_pack {
+  double timestamp;
+  std::string template_name;
+  int times;
+  data_pack(const std::string& n, int t, double ts){
+    timestamp = ts;
+    template_name = n;
+    t = times;
+  }
+};
+
 } // namespace star

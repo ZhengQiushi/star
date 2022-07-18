@@ -11,6 +11,7 @@
 #include "core/Worker.h"
 
 #include "common/MyMove.h"
+#include "brain/workload_cluster.h"
 
 #include <iostream>
 #include <unordered_map>
@@ -328,6 +329,39 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
       std::this_thread::yield();
     }
   }
+  
+  void get_cluster(int sample_cnt, double cur_timestamp){
+    
+    // peloton::brain::get_workload_classified(cur_timestamp, last_timestamp, data);
+    static int data_pack_map_name_index_in_data = 0;
+
+    for(auto it = data_pack_map.begin(); it != data_pack_map.end(); it ++ ){
+      // 
+      auto name = it->first;
+      auto times = it->second;
+
+      data_pack_sampled.insert(name, cur_timestamp, times);
+    }
+
+    double period_duration = 40;
+    double sample_interval = 0.25;
+    const size_t top_cluster_num = 3;
+
+    std::map<std::string, std::vector<double>> raw_features_;
+    double start_timestamp, end_timestamp;
+    start_timestamp = cur_timestamp - 20;
+    end_timestamp = cur_timestamp + 20;
+
+    peloton::brain::QueryClusterer cluster =  peloton::brain::onlineClustering(raw_features_, start_timestamp, end_timestamp, 
+                                                                               period_duration , sample_interval, data_pack_sampled);
+    
+    std::vector<peloton::brain::Cluster*> top_k = peloton::brain::getTopCoverage(top_cluster_num, cluster);
+
+    DCHECK(top_k.size() == top_cluster_num);
+  }
+  void train_and_predict() {
+
+  }
   void coordinator_start()  {
 
     std::size_t n_workers = context.worker_num;
@@ -337,132 +371,32 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         clumpping_percentile, local_percentile, remote_percentile, 
         batch_size_percentile;
 
+    auto startTime = std::chrono::steady_clock::now();
+    int period = 40;
+    int sample_interval = 0.25;
+
     while (!stopFlag.load()) {
       
       int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
       auto now = std::chrono::steady_clock::now();
+      double cur_ = std::chrono::duration_cast<std::chrono::microseconds>(now - startTime).count() * 1.0 / 1000 / 1000 ;
+      static int sample_cnt = 0;
+      static int period_cnt = 0;
 
-      if(recorder_status.load() == static_cast<int32_t>(ExecutorStatus::START)){
-        // 触发了数据迁移
-        auto c_start = std::chrono::steady_clock::now();
-        auto cur_head = c_start;
-
-        LOG(INFO) << "start Transfroming!";
-        // do data transforming 
-        std::vector<myMove<WorkloadType> >  moves, moves_merged;
-        // find the moves (only keys)
-        // show_for_degree_set();
-
-        my_clay->find_clump(moves);
-        my_clay->reset();
-        
-        {
-          auto now = std::chrono::steady_clock::now();
-          auto all_time =
-              std::chrono::duration_cast<std::chrono::microseconds>(now - cur_head)
-                  .count();
-          cur_head = now;
-          clumpping_percentile.add(all_time);
-        }
-
-        bool is_ready = false;
-        //
-        wait_recorder_worker_transimit_start();
-
-        if(moves.size() != 0) {
-          // find the exact values for the key 
-          is_ready = prepare_for_transmit_clay(moves, moves_merged);
-         
-          if(is_ready == true && moves_merged.size() > 0) {
-            for(size_t cur_move = 0; cur_move < moves_merged.size(); cur_move ++ ){
-              myMove<WorkloadType>& move = moves_merged[cur_move];
-              DCHECK(move.records.size() > 0);
-              // 全副本节点开始准备迁移
-
-              // LOG(INFO) << "start transmit_record: " << cur_move; 
-              transmit_record(move);
-
-              // LOG(INFO) << "signal_recorder: " << cur_move; 
-
-              // 部分副本节点开始准备replicate
-              signal_recorder(move);
-              // LOG(INFO) << "singnal_done: " << cur_move; 
-
-            }
-            ////// for debug 
-            // for(int i = 0 ; i < 12; i ++ ){
-            //   ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-            //   LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-            // }
-           
-            {
-              auto now = std::chrono::steady_clock::now();
-              auto all_time =
-                  std::chrono::duration_cast<std::chrono::microseconds>(now - cur_head)
-                      .count();
-              cur_head = now;
-              local_percentile.add(all_time);
-            }
-            LOG(INFO) << "RECORDER wait4_ack"; 
-            wait4_ack(moves_merged.size());
-            LOG(INFO) << "CONTINUE wait4_ack"; 
-            {
-              auto now = std::chrono::steady_clock::now();
-              auto all_time =
-                  std::chrono::duration_cast<std::chrono::microseconds>(now - cur_head)
-                      .count();
-              cur_head = now;
-              remote_percentile.add(all_time);
-            }
-          }
-        }
-        
-
-
-
-        {
-          auto now = std::chrono::steady_clock::now();
-          auto all_time =
-              std::chrono::duration_cast<std::chrono::microseconds>(now - c_start)
-                  .count();
-
-          all_percentile.add(all_time);
-        }
-        // finish data transforming
-        LOG(INFO) << "finish data Transfroming!";
-        record_degree.clear();
-        // txn_queue.clear();
-
-        recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
-        transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
+      if(cur_ / 0.25 > sample_cnt){
+        get_cluster(sample_cnt, cur_);
+        sample_cnt ++ ;
       }
-      else {
-        auto record_start = std::chrono::steady_clock::now();
-        // 防止 lock-free queue一直被占用
-
-        while(txn_queue.empty()){
-          txn_queue.nop_pause();
-          if(recorder_status.load() == static_cast<int32_t>(ExecutorStatus::START) || 
-             stopFlag.load() ){
-               break;
-          }
-        }
-        if(recorder_status.load() == static_cast<int32_t>(ExecutorStatus::START)){
-          continue; 
-        } else if(stopFlag.load()){
-          break;
-        }
-        // LOG(INFO) << "txn_queue: " << txn_queue.read_available();
-        record_txn_appearance();
-
+      if(cur_ / 40 > period_cnt){
+        // 
+        LOG(INFO) << "data_pack_queue.size: " ; // << data_pack_queue.;
+        train_and_predict();
+        period_cnt ++ ;
       }
+
     }
-    // for(int i = 0 ; i < 12; i ++ ){
-    //   ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-    //   LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-    // }
-    recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
-    broadcast_stop();
+    
+
 
     LOG(INFO) << "Average data-transforming length " << all_percentile.nth(50)
               << " us, average clumpping length " << clumpping_percentile.nth(50) 
@@ -623,61 +557,40 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
   // outfile.open("/Users/lion/project/01_star/star/result_non_con_.txt", std::ios::trunc); // ios::trunc
   // outfile.close();
 
-    while (true) { 
-      if(wait4_stop_nonblock()){
-        break;
-      }
+    while (!stopFlag.load()) { 
+      // if(wait4_stop_nonblock()){
+      //   break;
+      // }
       
       // 
       // std::this_thread::yield();
-      myMove<WorkloadType> move;
-      // 防止退不出来
-      bool has_move = wait4_move(move);
-      if(has_move == false){
-        move_queue.nop_pause();// std::this_thread::yield();
-        continue;
-      }
-      // 
-      // show_for_moves(move);
+//       myMove<WorkloadType> move;
+//       // 防止退不出来
+//       bool has_move = wait4_move(move);
+//       if(has_move == false){
+//         move_queue.nop_pause();// std::this_thread::yield();
+//         continue;
+//       }
+//       // 
+//       // show_for_moves(move);
 
- //     LOG(INFO) << "move comes!";
-      if(move.records.size() > 0){
-        remove_on_secondary_coordinator(move);
-      }
-      // for(int i = 0 ; i < 12; i ++ ){
-      //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-      //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-      //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-      //   }
-      // }
-//      LOG(INFO) << "send_ack!";
-      send_ack();
+//  //     LOG(INFO) << "move comes!";
+//       if(move.records.size() > 0){
+//         remove_on_secondary_coordinator(move);
+//       }
+//       // for(int i = 0 ; i < 12; i ++ ){
+//       //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+//       //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+//       //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+//       //   }
+//       // }
+// //      LOG(INFO) << "send_ack!";
+//       send_ack();
 
     }
 
     
-    // for(int i = 0 ; i < 12; i ++ ){
-    //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-    //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-    //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-    //   }
-    // }
-    // ExecutorStatus status = wait4_signal();
-    // DCHECK(status == ExecutorStatus::START);
-    // n_completed_workers.store(0);
-    // n_started_workers.store(0);
-    // set_worker_status(ExecutorStatus::START);
-    // wait_all_workers_start();
-    // wait4_stop(1);
-    // set_worker_status(ExecutorStatus::STOP);
-    // wait_all_workers_finish();
-    // broadcast_stop();
-    // wait4_stop(n_coordinators - 2);
-    // process replication
-    // n_completed_workers.store(0);
-    // set_worker_status(ExecutorStatus::CLEANUP);
-    // wait_all_workers_finish();
-    // send_ack();
+
   }
 
   void wait_all_workers_finish() {
@@ -1339,7 +1252,12 @@ protected:
 
 public:
   DatabaseType& db;
-  
+
+  // LockfreeQueueMulti<data_pack*, 8064 > data_pack_queue;
+  std::unordered_map<std::string, int> data_pack_map;
+  std::unordered_map<std::string, int> data_pack_map_name_index;
+  peloton::brain::workload_data data_pack_sampled;
+
   std::atomic<uint32_t>& recorder_status;
   std::atomic<uint32_t>& transmit_status;
   std::atomic<uint32_t> worker_status;
@@ -1352,6 +1270,7 @@ public:
   std::unique_ptr<Partitioner> l_partitioner; //  s_partitioner,
 
   std::unique_ptr<Clay<WorkloadType> > my_clay;
+
 };
 
 } // namespace star

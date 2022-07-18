@@ -7,6 +7,7 @@
 # --[ Tests lists
 
 # creates 'tests' lists
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -std=c++14 -g -ggdb3")
 
 message("---start build test---")
 # peloton_pickup_peloton_sources(${PROJECT_SOURCE_DIR})

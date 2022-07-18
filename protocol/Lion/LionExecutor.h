@@ -43,7 +43,9 @@ public:
                const ContextType &context, uint32_t &batch_size,
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
-               std::atomic<uint32_t> &n_started_workers)
+               std::atomic<uint32_t> &n_started_workers,
+               std::unordered_map<std::string, int> &data_pack_map)
+               // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
         l_partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
@@ -53,6 +55,8 @@ public:
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        data_pack_map(data_pack_map),
+        // data_pack_queue(data_pack_queue),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -113,8 +117,7 @@ public:
   }
 
   void replication_fence(){
-    
-
+    // 
     while(async_message_num.load() != async_message_respond_num.load()){
       auto i = async_message_num.load();
       auto ii = async_message_respond_num.load();
@@ -140,8 +143,8 @@ public:
       
     }
   }
+  
   void start() override {
-
     LOG(INFO) << "Executor " << id << " starts.";
 
     // C-Phase to S-Phase, to C-phase ...
@@ -345,7 +348,27 @@ public:
 
   }
 
-
+  void get_txn_template(TransactionType* cur_transaction){
+    /**
+     * @brief 根据分区涉及情况，抽象成template
+     * 
+     */
+    /* trace transactions */
+    auto items_ = cur_transaction->get_query();
+    std::set<int> partition_;
+    for(auto i: items_){
+      partition_.insert(i / context.keysPerPartition);
+    }
+    std::string template_name = "";
+    for(auto it = partition_.begin(); it != partition_.end(); it ++ ){
+      template_name += "_" + std::to_string(*it);
+    }
+    if(data_pack_map.find(template_name) == data_pack_map.end()){
+      data_pack_map[template_name] = 1;
+    } else {
+      data_pack_map[template_name] ++;
+    }
+  }
   void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage, 
     bool is_lion_king){
     /** 
@@ -396,20 +419,16 @@ public:
           std::size_t partition_id = get_partition_id(ExecutorStatus::C_PHASE);
           cur_transaction = c_workload.next_transaction(c_context, partition_id, storage);
 
-          /* trace transactions */
-          auto items_ = cur_transaction->get_query();
+          get_txn_template(cur_transaction.get());
 
-          double current_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                         std::chrono::steady_clock::now() - start_time)
-                         .count() * 1.0 / 1000 / 1000;
-          
-          if(id == 0 && coordinator_id == 0){
-            outfile_excel << current_timestamp << "\t";
-            for(auto item: items_){
-              outfile_excel << item << "\t";
-            }
-            outfile_excel << "\n";
-          }
+
+          // if(id == 0 && coordinator_id == 0){
+          //   outfile_excel << current_timestamp << "\t";
+          //   for(auto item: items_){
+          //     outfile_excel << item << "\t";
+          //   }
+          //   outfile_excel << "\n";
+          // }
 
         } else {
           if(context.lion_no_switch == true || context.protocol == "LionNS"){
@@ -2143,6 +2162,10 @@ protected:
   std::atomic<uint32_t> async_message_respond_num;
 
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+  // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue;
+  std::unordered_map<std::string, int> &data_pack_map;
+  
+
   std::unique_ptr<Delay> delay;
   std::unique_ptr<BufferedFileWriter> logger;
   Percentile<uint64_t> percentile;

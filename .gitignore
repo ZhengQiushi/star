@@ -24,6 +24,6 @@ cmake/*
 !scripts/
 !brain/
 !test/
-!third_party
+!third_party/
 
 *.py

@@ -215,9 +215,9 @@ BaseTFModel::BaseTFModel(const std::string &modelgen_path,
                          const std::string &pymodel_path,
                          const std::string &graph_path)
     : // BaseModel(),
-      modelgen_path_(("/home/zqs/project/workload_predict/" + modelgen_path)), // peloton::FileUtil::GetRelativeToRootPath
-      pymodel_path_(("/home/zqs/project/workload_predict/" + pymodel_path)), // peloton::FileUtil::GetRelativeToRootPath(
-      graph_path_(("/home/zqs/project/workload_predict/" + graph_path)) { // peloton::FileUtil::GetRelativeToRootPath
+      modelgen_path_(("/home/zqs/star/" + modelgen_path)), // peloton::FileUtil::GetRelativeToRootPath
+      pymodel_path_(("/home/zqs/star/" + pymodel_path)), // peloton::FileUtil::GetRelativeToRootPath(
+      graph_path_(("/home/zqs/star/" + graph_path)) { // peloton::FileUtil::GetRelativeToRootPath
   tf_session_entity_ = std::unique_ptr<TfSessionEntity<float, float>>(
       new TfSessionEntity<float, float>());
   // PELOTON_ASSERT(FileUtil::Exists(pymodel_path_));

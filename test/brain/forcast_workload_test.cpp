@@ -52,7 +52,7 @@ class ModelTests : public PelotonTest {};
         peloton::matrix_eig data;
         data = peloton::matrix_eig::Zero(num_samples, num_feats);
 
-        std::ifstream ifs("/home/zqs/project/workload_predict/data/getWorkLoad.xls", std::ios::in);
+        std::ifstream ifs("/home/zqs/star/data/getWorkLoad.xls", std::ios::in);
         int row_cnt = 0;
         std::string _line = "";
 

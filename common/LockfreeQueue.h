@@ -6,6 +6,7 @@
 #include <thread>
 #include "glog/logging.h"
 #include <boost/lockfree/spsc_queue.hpp>
+#include <boost/lockfree/queue.hpp>
 // #include <immintrin.h>
 
 #if defined(__i386__) || defined(__x86_64__)
@@ -70,5 +71,51 @@ public:
     __asm__ volatile("nop" : :);
      }
 };
+
+template <class T, std::size_t N = 1024>
+class LockfreeQueueMulti
+    : public boost::lockfree::queue<T, boost::lockfree::capacity<N>> {
+public:
+  using element_type = T;
+  using base_type =
+      boost::lockfree::queue<T, boost::lockfree::capacity<N>>;
+
+  void push(const T &value) {
+    // while (base_type::write_available() == 0) {
+    //   nop_pause();
+    // }
+    bool ok = base_type::push(value);
+    CHECK(ok);
+  }
+  void clear() {
+    base_type::clear();
+    // auto cur_size = base_type::read_available();
+    // size_t i = 0;
+    // while(i ++ < cur_size) {
+    //   base_type::pop();
+    // }
+  }
+  void wait_till_non_empty() {
+    while (base_type::empty()) {
+      nop_pause();
+    }
+  }
+
+  bool wait_till_non_empty_timeout() {
+    while (base_type::empty()) {
+      nop_pause();
+    }
+    return true;
+  }
+
+  auto capacity() { return N; }
+
+
+  void nop_pause() { 
+    // SPINLOCK_YIELD;
+    __asm__ volatile("nop" : :);
+     }
+};
+
 } // namespace star
 

@@ -23,27 +23,63 @@
 namespace peloton {
 namespace brain {
     struct workload_data {
-        void insert(std::string workload_type, double timestamp){
-            if(contents.find(workload_type) == contents.end()){
+        workload_data(){
+            contents_index = 0;
+        }
+        /**
+         * @brief insert with transactions
+         * 
+         * @param workload_type 
+         * @param timestamp 
+         */
+        void insert(std::string workload_type, double timestamp, int times){
+            if(contents_name_index_hashmap.find(workload_type) == contents_name_index_hashmap.end()){
                 // insert into a new map
+                // figure out the index in vector
+                contents_name_index_hashmap[workload_type] = contents_index;
+                contents_index ++ ;
+                // alloc new map
                 std::map<double, int> new_;
-                new_[timestamp] = 1;
-                contents[workload_type] = new_;
+                new_[timestamp] = times;
+                contents.push_back(new_);
             } else {
-                // 
-                auto& workload_type_ = contents[workload_type];
+                // figure out the index
+                int workload_type_index = contents_name_index_hashmap[workload_type];
+                // find the workload
+                auto& workload_type_ = contents[workload_type_index];
                 if(workload_type_.find(timestamp) == workload_type_.end()){
-                    workload_type_[timestamp] = 1;
+                    workload_type_[timestamp] = times;
                 } else {
-                    workload_type_[timestamp] += 1;
+                    workload_type_[timestamp] += times;
                 }
             }
         }
 
+
+        // void insert(std::string workload_type, double timestamp, int times){
+        //     if(contents_name_index_hashmap.find(workload_type) == contents_name_index_hashmap.end()){
+        //         // insert into a new map
+        //         std::map<double, int> new_;
+        //         new_[timestamp] = times;
+        //         contents[workload_type] = new_;
+        //     } else {
+        //         // 
+        //         auto& workload_type_ = contents[workload_type];
+        //         if(workload_type_.find(timestamp) == workload_type_.end()){
+        //             workload_type_[timestamp] = times;
+        //         } else {
+        //             workload_type_[timestamp] += times;
+        //         }
+        //     }
+        // }
+
         void clear(){
             contents.clear();
         }
-        std::map<std::string, std::map<double, int> > contents;
+        // template_name ts frequency
+        int contents_index;
+        std::map<std::string, int> contents_name_index_hashmap;
+        std::vector<std::map<double, int> > contents;
     };
 
     struct assignment
@@ -63,8 +99,8 @@ namespace brain {
         bool verbose = false;
 
         //读文件
-        std::ifstream ifs("/home/zqs/project/workload_predict/data/result_test.xls", std::ios::in);
-        std::ofstream ofs("/home/zqs/project/workload_predict/data/result_.xls", std::ios::trunc);
+        std::ifstream ifs("/home/zqs/star/data/result_test.xls", std::ios::in);
+        std::ofstream ofs("/home/zqs/star/data/result_.xls", std::ios::trunc);
 
         std::string _line;
         int line = 0;
@@ -126,7 +162,7 @@ namespace brain {
 
             if(workload_type != ""){
                 // 
-                data.insert(workload_type, timestamp);
+                data.insert(workload_type, timestamp, 1);
                 if(int(timestamp) / 20 > cur_period){
                     cur_period ++;
                 }
@@ -162,7 +198,7 @@ namespace brain {
             int current_period_ts = i * period_duration;
             int next_period_ts = (i + 1) * period_duration;
 
-            for(auto& d_: data.contents){
+            for(auto& d_: data.contents_name_index_hashmap){
                 // loop for each template for each period
                 // sample using sub-intervals
                 std::vector<double> new_feature(feature_nums, 0);
@@ -171,7 +207,8 @@ namespace brain {
                 int total_sample_num = 0;
 
                 std::string fingerprint = d_.first;
-                auto& fingerprint_data = d_.second;
+
+                auto& fingerprint_data = data.contents[d_.second];
 
                 // data in current interval range
                 std::map<double, int>::iterator low = fingerprint_data.lower_bound(current_period_ts);

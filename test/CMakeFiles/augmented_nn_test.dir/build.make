@@ -83,8 +83,8 @@ test/augmented_nn_test: libcommon.a
 test/augmented_nn_test: test/libpeloton-test-common.a
 test/augmented_nn_test: /usr/local/lib/libglog.a
 test/augmented_nn_test: /usr/local/lib/libgflags.so
-test/augmented_nn_test: /usr/local/lib/libtensorflow.so
-test/augmented_nn_test: /usr/local/lib/libtensorflow_framework.so
+test/augmented_nn_test: /usr/local/lib/libtensorflow.so.bak
+test/augmented_nn_test: /usr/lib/libtensorflow_framework.so
 test/augmented_nn_test: /usr/local/lib64/libgmock.a
 test/augmented_nn_test: /usr/local/lib64/libgtest.a
 test/augmented_nn_test: test/CMakeFiles/augmented_nn_test.dir/link.txt

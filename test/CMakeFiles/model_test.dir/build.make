@@ -83,8 +83,8 @@ test/model_test: libcommon.a
 test/model_test: test/libpeloton-test-common.a
 test/model_test: /usr/local/lib/libglog.a
 test/model_test: /usr/local/lib/libgflags.so
-test/model_test: /usr/local/lib/libtensorflow.so
-test/model_test: /usr/local/lib/libtensorflow_framework.so
+test/model_test: /usr/local/lib/libtensorflow.so.bak
+test/model_test: /usr/lib/libtensorflow_framework.so
 test/model_test: /usr/local/lib64/libgmock.a
 test/model_test: /usr/local/lib64/libgtest.a
 test/model_test: test/CMakeFiles/model_test.dir/link.txt

@@ -39,6 +39,7 @@
 #include "brain/workload/base_tf.h"
 #include "brain/workload/workload_defaults.h"
 
+#include "brain/workload_forcast.h"
 
 
 // #include "util/file_util.h"
@@ -46,8 +47,6 @@
 using  namespace peloton; // {
 using  namespace test;// {
 class ModelTests : public PelotonTest {};
-
-
     peloton::matrix_eig GetWorkload(size_t& num_samples, size_t& num_feats) {
         peloton::matrix_eig data;
         data = peloton::matrix_eig::Zero(num_samples, num_feats);
@@ -88,7 +87,6 @@ class ModelTests : public PelotonTest {};
     }
 
 
-
     /**
      * @brief 
      * 
@@ -119,6 +117,7 @@ class ModelTests : public PelotonTest {};
         LOG(INFO) << "Using Model: " << (model.ToString().data());
 
         peloton::matrix_eig data = GetWorkload(num_samples, num_feats);
+        std::cout << data << std::endl;
         // std::cout << data << std::endl;
         peloton::brain::Normalizer n(normalize);
         val_interval = std::min<size_t>(val_interval, model.GetEpochs());
@@ -176,7 +175,7 @@ class ModelTests : public PelotonTest {};
         
         LOG(INFO) << "Predict done.";
         /** output y and y_hat**/
-        std::ofstream ofs("/home/zqs/project/workload_predict/data/y_hat.xls", std::ios::trunc);
+        std::ofstream ofs("/home/zqs/star/data/y_hat.xls", std::ios::trunc);
         for(int i = 0; i < C_.rows(); i ++ ){
             for(int j = 0; j < C_.cols(); j ++ ){
                 ofs << C_(i, j) << "\t";
@@ -188,7 +187,7 @@ class ModelTests : public PelotonTest {};
     }
 
 // Enable after resolving
-TEST_F(ModelTests, TimeSeriesLSTMTest) {
+TEST_F(ModelTests, DISABLED_TimeSeriesLSTMTest) { // 
     int PREIOD = 160; // 40 / 0.25
     int EPOCHS = 100;
     int CLIP_NORM = 0.25;
@@ -224,6 +223,23 @@ TEST_F(ModelTests, TimeSeriesLSTMTest) {
 }
 
 
+TEST_F(ModelTests, TimeSeriesLSTMTestClass) {
+    int preiod = 40 / 0.25;
+    int bptt = 1 * preiod; 
+    int horizon = 3 * preiod;
+
+    size_t num_samples = 1600;
+    size_t num_feats = 3;
+
+    float val_split = 0.5;
+    peloton::brain::my_predictor p_(preiod, bptt, horizon, val_split);
+
+    peloton::matrix_eig data = GetWorkload(num_samples, num_feats);
+    // std::cout << data << std::endl;
+    
+    p_.train(data);
+    p_.predict(data);
+}
 
 
 int main(int argc, char **argv)

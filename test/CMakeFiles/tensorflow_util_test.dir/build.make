@@ -83,8 +83,8 @@ test/tensorflow_util_test: libcommon.a
 test/tensorflow_util_test: test/libpeloton-test-common.a
 test/tensorflow_util_test: /usr/local/lib/libglog.a
 test/tensorflow_util_test: /usr/local/lib/libgflags.so
-test/tensorflow_util_test: /usr/local/lib/libtensorflow.so
-test/tensorflow_util_test: /usr/local/lib/libtensorflow_framework.so
+test/tensorflow_util_test: /usr/local/lib/libtensorflow.so.bak
+test/tensorflow_util_test: /usr/lib/libtensorflow_framework.so
 test/tensorflow_util_test: /usr/local/lib64/libgmock.a
 test/tensorflow_util_test: /usr/local/lib64/libgtest.a
 test/tensorflow_util_test: test/CMakeFiles/tensorflow_util_test.dir/link.txt

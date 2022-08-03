@@ -8,6 +8,8 @@
 
 #include "common/BufferedFileWriter.h"
 #include "common/Percentile.h"
+#include "common/HashMap.h"
+
 #include "core/Delay.h"
 #include "core/Worker.h"
 #include "glog/logging.h"
@@ -44,7 +46,8 @@ public:
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
                std::atomic<uint32_t> &n_started_workers,
-               std::unordered_map<std::string, int> &data_pack_map)
+               HashMap<9916, std::string, int> &data_pack_map)
+               // std::unordered_map<std::string, int> &data_pack_map)
                // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
@@ -363,8 +366,8 @@ public:
     for(auto it = partition_.begin(); it != partition_.end(); it ++ ){
       template_name += "_" + std::to_string(*it);
     }
-    if(data_pack_map.find(template_name) == data_pack_map.end()){
-      data_pack_map[template_name] = 1;
+    if(!data_pack_map.contains(template_name)){
+      data_pack_map.insert(template_name, 1);
     } else {
       data_pack_map[template_name] ++;
     }
@@ -2163,7 +2166,9 @@ protected:
 
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue;
-  std::unordered_map<std::string, int> &data_pack_map;
+
+  HashMap<9916, std::string, int> &data_pack_map;
+  // std::unordered_map<std::string, int> &data_pack_map;
   
 
   std::unique_ptr<Delay> delay;

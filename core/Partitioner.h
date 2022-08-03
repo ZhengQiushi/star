@@ -371,7 +371,7 @@ class LionInitPartitioner : public Partitioner {
 public:
   LionInitPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
       : Partitioner(coordinator_id, coordinator_num) {
-    CHECK(coordinator_num >= 2);
+    CHECK(coordinator_num >= 1);
   }
 
   ~LionInitPartitioner() override = default;
@@ -439,7 +439,7 @@ public:
 
   LionDynamicPartitioner(std::size_t coordinator_id, std::size_t coordinator_num, DatabaseType& db):
     LionInitPartitioner(coordinator_id, coordinator_num), db(db){
-    CHECK(coordinator_num >= 2);
+    CHECK(coordinator_num >= 1);
   }
 
   ~LionDynamicPartitioner() override = default;
@@ -555,7 +555,7 @@ public:
 
   LionStaticPartitioner(std::size_t coordinator_id, std::size_t coordinator_num, DatabaseType& db):
     LionInitPartitioner(coordinator_id, coordinator_num), db(db){
-    CHECK(coordinator_num >= 2);
+    CHECK(coordinator_num >= 1);
   }
 
   ~LionStaticPartitioner() override = default;

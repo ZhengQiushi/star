@@ -83,8 +83,8 @@ test/forcast_workload_test: libcommon.a
 test/forcast_workload_test: test/libpeloton-test-common.a
 test/forcast_workload_test: /usr/local/lib/libglog.a
 test/forcast_workload_test: /usr/local/lib/libgflags.so
-test/forcast_workload_test: /usr/local/lib/libtensorflow.so
-test/forcast_workload_test: /usr/local/lib/libtensorflow_framework.so
+test/forcast_workload_test: /usr/local/lib/libtensorflow.so.bak
+test/forcast_workload_test: /usr/lib/libtensorflow_framework.so
 test/forcast_workload_test: /usr/local/lib64/libgmock.a
 test/forcast_workload_test: /usr/local/lib64/libgtest.a
 test/forcast_workload_test: test/CMakeFiles/forcast_workload_test.dir/link.txt

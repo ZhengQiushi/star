@@ -55,24 +55,6 @@ namespace brain {
             }
         }
 
-
-        // void insert(std::string workload_type, double timestamp, int times){
-        //     if(contents_name_index_hashmap.find(workload_type) == contents_name_index_hashmap.end()){
-        //         // insert into a new map
-        //         std::map<double, int> new_;
-        //         new_[timestamp] = times;
-        //         contents[workload_type] = new_;
-        //     } else {
-        //         // 
-        //         auto& workload_type_ = contents[workload_type];
-        //         if(workload_type_.find(timestamp) == workload_type_.end()){
-        //             workload_type_[timestamp] = times;
-        //         } else {
-        //             workload_type_[timestamp] += times;
-        //         }
-        //     }
-        // }
-
         void clear(){
             contents.clear();
         }
@@ -172,7 +154,7 @@ namespace brain {
 
     /**
      * @brief 
-     * 
+     * @param raw_features_ 采样区间内的所有template的频数（0.25）
      * @param cur_timestamp 
      * @param last_timestamp 
      * @param period_duration 
@@ -180,18 +162,17 @@ namespace brain {
      * @param data 
      * @return QueryClusterer 
      */
-    QueryClusterer onlineClustering(std::map<std::string, std::vector<double>>& raw_features_, 
+    void onlineClustering(std::map<std::string, std::vector<double>>& raw_features_, 
                                     double cur_timestamp, double last_timestamp, 
                                     double period_duration, double sample_interval, 
+                                    QueryClusterer& cluster,
                                     workload_data& data){
         int feature_nums = int(ceil(period_duration / sample_interval));
-        // same cluster merging threshold
-        double threshold = 0.8;
+        // // same cluster merging threshold
+        // double threshold = 0.8;
         // divide into several period
-        int num_gaps = int(ceil(last_timestamp / period_duration));
+        int num_gaps = int(last_timestamp / period_duration);
 
-        QueryClusterer cluster(feature_nums, threshold);
-        
         for(int i = 0 ; i < num_gaps; i ++ ){
             VLOG(DEBUG_V6) << "@@@ gap[" << i << "] @@@";
             // loop for each period
@@ -247,7 +228,7 @@ namespace brain {
             }
         }
         
-        return cluster;
+        return;
     }
 
     /**

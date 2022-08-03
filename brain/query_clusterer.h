@@ -184,6 +184,9 @@ void QueryClusterer::UpdateTemplate(const std::string& fingerprint, bool is_new)
     kd_tree_.Insert(cluster);
     clusters_.insert(cluster);
     template_cluster_[fingerprint] = cluster;
+    
+    cluster->SetFrequency(cluster->GetFrequency() + frequency_[fingerprint]);
+
     VLOG(DEBUG_V6) << "new cluster created for @" << fingerprint << " index = " << cluster->GetIndex();
     return;
   }
@@ -207,6 +210,9 @@ void QueryClusterer::UpdateTemplate(const std::string& fingerprint, bool is_new)
     cluster = CreateNewCluster(fingerprint, feature);
     kd_tree_.Insert(cluster);
     clusters_.insert(cluster);
+
+    cluster->SetFrequency(cluster->GetFrequency() + frequency_[fingerprint]);
+
     VLOG(DEBUG_V6) << "new cluster created for @" << fingerprint << " index = " << cluster->GetIndex();
   }
 
@@ -310,6 +316,7 @@ void QueryClusterer::AddFeature(const std::string &fingerprint,
   // Normalize and add a feature into the cluster.
   // This is currently used only for testing.
   long long frequency = std::accumulate(feature.begin(), feature.end(),0);
+  frequency_[fingerprint] = frequency;
 
   double l2_norm = 0.0;
   for (uint i = 0; i < feature.size(); i++) l2_norm += feature[i] * feature[i];
@@ -327,7 +334,6 @@ void QueryClusterer::AddFeature(const std::string &fingerprint,
     features_[fingerprint] = feature;
     // VLOG(DEBUG_V6) << "update feature for @" << fingerprint;
   }
-  frequency_[fingerprint] = frequency;
 
 }
 

@@ -67,7 +67,24 @@ public:
   void clear() {
     _map([](std::unordered_map<KeyType, ValueType> &map) { map.clear(); });
   }
-
+  
+  void contents(std::vector<KeyType>& keys, std::vector<ValueType>& vals){
+    
+    int size_ = 0;
+    for(size_t i = 0 ; i < N; i ++ ){
+      size_ += maps_[i].size();
+    }
+    keys.reserve(size_);
+    vals.reserve(size_);
+    //
+    for(size_t i = 0 ; i < N; i ++ ){
+      for(auto it: maps_[i]){
+        keys.push_back(it.first);
+        vals.push_back(it.second);
+      }
+    }
+    return;
+  }
 private:
   template <class ApplyFunc>
   auto &_applyAtRef(ApplyFunc applyFunc, std::size_t i) {

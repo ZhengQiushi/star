@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.2)
 project(star)
 
 set(CMAKE_CXX_COMPILER "/usr/bin/g++")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -std=c++14 -g -ggdb3")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -O0  -g -ggdb3 -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-variadic-macros -pedantic -std=c++14") #
 
 set(CMAKE_CXX_STANDARD 14)
@@ -40,8 +39,8 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
     # find_package(gflags REQUIRED)
     set(glog "/usr/local/lib/libglog.a")
     set(gflags "/usr/local/lib/libgflags.so")
-    set(TFlowC_LIBRARIES "/usr/local/lib/libtensorflow.so")
-    set(TFlowC_FRAMEWORK_LIBRARIES "/usr/local/lib/libtensorflow_framework.so")
+    set(TFlowC_LIBRARIES "/usr/local/lib/libtensorflow.so.bak")
+    set(TFlowC_FRAMEWORK_LIBRARIES "/usr/lib/libtensorflow_framework.so")
     set(GMOCK_LIBRARIES "/usr/local/lib64/libgmock.a")
     set(GTEST_LIBRARIES "/usr/local/lib64/libgtest.a")
 

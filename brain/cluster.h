@@ -114,6 +114,9 @@ class Cluster {
    */
   const std::set<std::string> &GetTemplates() const { return templates_; }
 
+  const std::set<std::string> &get_templates(){
+    return templates_;
+  }
  private:
   // index of the cluster in the KDTree
   uint32_t index_;

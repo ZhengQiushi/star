@@ -83,8 +83,8 @@ test/bitmap_test: libcommon.a
 test/bitmap_test: test/libpeloton-test-common.a
 test/bitmap_test: /usr/local/lib/libglog.a
 test/bitmap_test: /usr/local/lib/libgflags.so
-test/bitmap_test: /usr/local/lib/libtensorflow.so
-test/bitmap_test: /usr/local/lib/libtensorflow_framework.so
+test/bitmap_test: /usr/local/lib/libtensorflow.so.bak
+test/bitmap_test: /usr/lib/libtensorflow_framework.so
 test/bitmap_test: /usr/local/lib64/libgmock.a
 test/bitmap_test: /usr/local/lib64/libgtest.a
 test/bitmap_test: test/CMakeFiles/bitmap_test.dir/link.txt

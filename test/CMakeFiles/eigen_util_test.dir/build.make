@@ -83,8 +83,8 @@ test/eigen_util_test: libcommon.a
 test/eigen_util_test: test/libpeloton-test-common.a
 test/eigen_util_test: /usr/local/lib/libglog.a
 test/eigen_util_test: /usr/local/lib/libgflags.so
-test/eigen_util_test: /usr/local/lib/libtensorflow.so
-test/eigen_util_test: /usr/local/lib/libtensorflow_framework.so
+test/eigen_util_test: /usr/local/lib/libtensorflow.so.bak
+test/eigen_util_test: /usr/lib/libtensorflow_framework.so
 test/eigen_util_test: /usr/local/lib64/libgmock.a
 test/eigen_util_test: /usr/local/lib64/libgtest.a
 test/eigen_util_test: test/CMakeFiles/eigen_util_test.dir/link.txt

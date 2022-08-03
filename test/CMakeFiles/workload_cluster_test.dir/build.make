@@ -83,8 +83,8 @@ test/workload_cluster_test: libcommon.a
 test/workload_cluster_test: test/libpeloton-test-common.a
 test/workload_cluster_test: /usr/local/lib/libglog.a
 test/workload_cluster_test: /usr/local/lib/libgflags.so
-test/workload_cluster_test: /usr/local/lib/libtensorflow.so
-test/workload_cluster_test: /usr/local/lib/libtensorflow_framework.so
+test/workload_cluster_test: /usr/local/lib/libtensorflow.so.bak
+test/workload_cluster_test: /usr/lib/libtensorflow_framework.so
 test/workload_cluster_test: /usr/local/lib64/libgmock.a
 test/workload_cluster_test: /usr/local/lib64/libgtest.a
 test/workload_cluster_test: test/CMakeFiles/workload_cluster_test.dir/link.txt

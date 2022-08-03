@@ -21,6 +21,8 @@ template <std::size_t N> class makeYCSBQuery {
 public:
   const double my_threshold = 0.001; // 20 0000 
                                       //  0.001 = 200  
+  const int period_duration = 5;
+
   using DatabaseType = Database;
   YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
                           Random &random, DatabaseType &db, double cur_timestamp) const {
@@ -124,11 +126,11 @@ public:
     }
     return query;
   }
-
+  
   int which_workload_(int which_type_workload, int cur_timestamp) const {
 
-    int x1 = (int)cur_timestamp % 20 - 10; // 20s for a circle
-    int x2 = (int)cur_timestamp % 40 - 20; // 40s for a circle 
+    int x1 = (int)cur_timestamp % (period_duration / 2) - period_duration / 4; // (period_duration / 2) s for a circle
+    int x2 = (int)cur_timestamp % period_duration - period_duration / 2;       // (period_duration) s for a circle 
 
     double cur_val[5] = {0, gd(x1, 0, 0.2),  gd(x1, 2, 1.0), gd(x2, 0, 5.0), gd(x2, -5, 0.5)};
     

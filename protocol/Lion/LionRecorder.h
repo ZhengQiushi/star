@@ -11,7 +11,10 @@
 #include "core/Worker.h"
 
 #include "common/MyMove.h"
+#include "common/HashMap.h"
+
 #include "brain/workload_cluster.h"
+#include "brain/workload_forcast.h"
 
 #include <iostream>
 #include <unordered_map>
@@ -25,6 +28,7 @@
 
 #include <thread>
 #include <glog/logging.h>
+#include <mutex>          // std::mutex, std::lock_guard
 
 namespace star {
 
@@ -70,7 +74,7 @@ public:
       outfile.close();
     }
     std::ofstream outfile;
-	  outfile.open("/Users/lion/project/01_star/star/result.txt", std::ios::trunc); // ios::trunc
+	  outfile.open("/home/zqs/star/data/test.txt", std::ios::trunc); // ios::trunc
     outfile << "lion is the best\n";
     outfile.close();
 
@@ -284,10 +288,6 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     //   }
     //   outfile.close();
     // }
-
-
-    
-    
   }
 
   void signal_recorder(const myMove<WorkloadType>& move) {
@@ -329,41 +329,82 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
       std::this_thread::yield();
     }
   }
-  
-  void get_cluster(int sample_cnt, double cur_timestamp){
-    
-    // peloton::brain::get_workload_classified(cur_timestamp, last_timestamp, data);
-    static int data_pack_map_name_index_in_data = 0;
-
-    for(auto it = data_pack_map.begin(); it != data_pack_map.end(); it ++ ){
+  void get_sampled(int sample_cnt, double cur_timestamp){
+    // get data into `data_pack_sampled`
+    std::vector<std::string> keys;
+    std::vector<int> vals;
+    data_pack_map.contents(keys, vals);
+    int size_ = vals.size();
+    for(int i = 0 ; i < size_; i ++ ){
       // 
-      auto name = it->first;
-      auto times = it->second;
+      auto name = keys[i];
+      auto times = vals[i];
 
       data_pack_sampled.insert(name, cur_timestamp, times);
     }
-
-    double period_duration = 40;
-    double sample_interval = 0.25;
-    const size_t top_cluster_num = 3;
-
-    std::map<std::string, std::vector<double>> raw_features_;
-    double start_timestamp, end_timestamp;
-    start_timestamp = cur_timestamp - 20;
-    end_timestamp = cur_timestamp + 20;
-
-    peloton::brain::QueryClusterer cluster =  peloton::brain::onlineClustering(raw_features_, start_timestamp, end_timestamp, 
-                                                                               period_duration , sample_interval, data_pack_sampled);
-    
-    std::vector<peloton::brain::Cluster*> top_k = peloton::brain::getTopCoverage(top_cluster_num, cluster);
-
-    DCHECK(top_k.size() == top_cluster_num);
+    data_pack_map.clear();
   }
-  void train_and_predict() {
 
+  void get_cluster(int sample_cnt, double cur_timestamp, 
+                   peloton::brain::QueryClusterer& cluster, 
+                   std::vector<peloton::brain::Cluster*>& top_k, 
+                   std::map<std::string, std::vector<double>>& raw_features_){
+    // 
+    double start_timestamp, end_timestamp;
+    start_timestamp = std::max(cur_timestamp - sample_period_num * period_duration, 0.0);
+    end_timestamp = cur_timestamp;
+
+    peloton::brain::onlineClustering(raw_features_, start_timestamp, end_timestamp, 
+                                     period_duration, sample_interval, cluster, 
+                                     data_pack_sampled);
+    top_k = peloton::brain::getTopCoverage(top_cluster_num, cluster);
+
+    DCHECK(top_k.size() <= top_cluster_num);
+  }
+  void train_and_predict(peloton::brain::my_predictor& predictor_,
+                         std::vector<peloton::brain::Cluster*>& top_k, 
+                         int sample_num,
+                         std::map<std::string, std::vector<double>>& raw_features_) {
+    /**
+     * @brief 
+     * 
+     */
+    std::vector<std::vector<int> > data_raw(top_cluster_num, std::vector<int>(sample_num, 0)); // keep feats_num = 3
+    for(size_t i = 0; i < top_k.size(); i ++ ){
+      // 
+      peloton::brain::Cluster* cur = top_k[i];
+      auto& templates_ = cur->get_templates();
+
+      for(auto it = templates_.begin(); it != templates_.end(); it ++ ){
+        std::string tempalet_name = *it;
+        std::vector<double>& one_ = raw_features_[tempalet_name];
+        size_t one_size = one_.size() - 1;
+
+        for(size_t j = 0 ; j <= one_size && sample_num; j ++ ){
+          // from newest to oldest 
+          data_raw[i][one_size - j] += one_[one_size - j];
+        }
+      }
+    }
+    peloton::matrix_eig data_mat = peloton::brain::GetWorkload(data_raw); // frequnce[i][j]  0-2 | 0-1600
+    // LOG(INFO) << data_mat;
+
+    predictor_.train(data_mat);
+
+    // predict next period
+    peloton::matrix_eig result = predictor_.predict(data_mat);
+
+    int feature_nums = period_duration / sample_interval;
+
+    {
+      std::lock_guard<std::mutex> lck(predict_res);
+      cur_predict_for_next_period = 
+            predictor_.get_normalizer().Transform(result.bottomRows(static_cast<size_t>(feature_nums)));
+    }
+    
+    
   }
   void coordinator_start()  {
-
     std::size_t n_workers = context.worker_num;
     std::size_t n_coordinators = context.coordinator_num;
 
@@ -372,25 +413,46 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         batch_size_percentile;
 
     auto startTime = std::chrono::steady_clock::now();
-    int period = 40;
-    int sample_interval = 0.25;
+
+    int feature_nums = period_duration / sample_interval;
+    peloton::brain::QueryClusterer cluster(feature_nums, threshold);
+    std::vector<peloton::brain::Cluster*> top_k;
+
+    // 
+    int preiod = feature_nums;
+    int bptt = 1 * preiod; 
+    int horizon = 1 * preiod;
+
+    // size_t num_samples = 1600;
+    size_t num_feats = 3;
+
+    float val_split = 0.5;
+
+    peloton::brain::my_predictor predictor_(preiod, bptt, horizon, val_split);
 
     while (!stopFlag.load()) {
-      
+      // 
       int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
       auto now = std::chrono::steady_clock::now();
       double cur_ = std::chrono::duration_cast<std::chrono::microseconds>(now - startTime).count() * 1.0 / 1000 / 1000 ;
       static int sample_cnt = 0;
       static int period_cnt = 0;
 
-      if(cur_ / 0.25 > sample_cnt){
-        get_cluster(sample_cnt, cur_);
+      // 
+      if(int(cur_ / sample_interval) > sample_cnt){
+        get_sampled(sample_cnt, cur_);
         sample_cnt ++ ;
       }
-      if(cur_ / 40 > period_cnt){
+
+      // 
+      if(int(cur_ / period_duration) > period_cnt){
         // 
+        std::map<std::string, std::vector<double>> raw_features_;
+        get_cluster(sample_cnt, cur_, cluster, top_k, raw_features_);
         LOG(INFO) << "data_pack_queue.size: " ; // << data_pack_queue.;
-        train_and_predict();
+        if(int(cur_ / period_duration) >= sample_period_num){
+          train_and_predict(predictor_, top_k, sample_period_num * feature_nums, raw_features_);
+        }
         period_cnt ++ ;
       }
 
@@ -551,43 +613,45 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
   }
 
   void non_coordinator_start()  {
-    std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
-  // std::ofstream outfile;
-  // outfile.open("/Users/lion/project/01_star/star/result_non_con_.txt", std::ios::trunc); // ios::trunc
-  // outfile.close();
 
-    while (!stopFlag.load()) { 
-      // if(wait4_stop_nonblock()){
-      //   break;
-      // }
-      
-      // 
-      // std::this_thread::yield();
-//       myMove<WorkloadType> move;
-//       // 防止退不出来
-//       bool has_move = wait4_move(move);
-//       if(has_move == false){
-//         move_queue.nop_pause();// std::this_thread::yield();
-//         continue;
-//       }
-//       // 
-//       // show_for_moves(move);
+    coordinator_start();
+//     std::size_t n_workers = context.worker_num;
+//     std::size_t n_coordinators = context.coordinator_num;
+//   // std::ofstream outfile;
+//   // outfile.open("/Users/lion/project/01_star/star/result_non_con_.txt", std::ios::trunc); // ios::trunc
+//   // outfile.close();
 
-//  //     LOG(INFO) << "move comes!";
-//       if(move.records.size() > 0){
-//         remove_on_secondary_coordinator(move);
-//       }
-//       // for(int i = 0 ; i < 12; i ++ ){
-//       //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
-//       //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
-//       //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
-//       //   }
+//     while (!stopFlag.load()) { 
+//       // if(wait4_stop_nonblock()){
+//       //   break;
 //       // }
-// //      LOG(INFO) << "send_ack!";
-//       send_ack();
+      
+//       // 
+//       // std::this_thread::yield();
+// //       myMove<WorkloadType> move;
+// //       // 防止退不出来
+// //       bool has_move = wait4_move(move);
+// //       if(has_move == false){
+// //         move_queue.nop_pause();// std::this_thread::yield();
+// //         continue;
+// //       }
+// //       // 
+// //       // show_for_moves(move);
 
-    }
+// //  //     LOG(INFO) << "move comes!";
+// //       if(move.records.size() > 0){
+// //         remove_on_secondary_coordinator(move);
+// //       }
+// //       // for(int i = 0 ; i < 12; i ++ ){
+// //       //   if(l_partitioner->is_partition_replicated_on(i, coordinator_id)) {
+// //       //     ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i);
+// //       //     LOG(INFO) << "TABLE [" << i << "]: " << dest_table->table_record_num();
+// //       //   }
+// //       // }
+// // //      LOG(INFO) << "send_ack!";
+// //       send_ack();
+
+//     }
 
     
 
@@ -1241,6 +1305,12 @@ private:
 private:
   std::vector<myMove<WorkloadType>> move_in_history;
 
+  const double period_duration = 5;   // 20
+  const double sample_interval = 0.05;// 0.25
+  const size_t top_cluster_num = 3;
+  const double threshold = 0.8;
+  const size_t sample_period_num = 4;
+
 protected:
   const Context &context;
   std::atomic<bool> &stopFlag;
@@ -1254,9 +1324,10 @@ public:
   DatabaseType& db;
 
   // LockfreeQueueMulti<data_pack*, 8064 > data_pack_queue;
-  std::unordered_map<std::string, int> data_pack_map;
+  HashMap<9916, std::string, int> data_pack_map;
+  // std::unordered_map<std::string, int> data_pack_map;
   std::unordered_map<std::string, int> data_pack_map_name_index;
-  peloton::brain::workload_data data_pack_sampled;
+  peloton::brain::workload_data data_pack_sampled; // name - timestamp - times 
 
   std::atomic<uint32_t>& recorder_status;
   std::atomic<uint32_t>& transmit_status;
@@ -1270,6 +1341,9 @@ public:
   std::unique_ptr<Partitioner> l_partitioner; //  s_partitioner,
 
   std::unique_ptr<Clay<WorkloadType> > my_clay;
+
+  std::mutex predict_res;
+  peloton::matrix_eig cur_predict_for_next_period;
 
 };
 

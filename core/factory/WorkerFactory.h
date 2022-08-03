@@ -182,7 +182,7 @@ public:
             manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
       }
       workers.push_back(manager);
-      // workers.push_back(recorder);  
+      workers.push_back(recorder);  
     } else if (context.protocol == "LionWithBrain") {
 
       CHECK(context.partition_num %

@@ -83,8 +83,8 @@ test/query_logger_test: libcommon.a
 test/query_logger_test: test/libpeloton-test-common.a
 test/query_logger_test: /usr/local/lib/libglog.a
 test/query_logger_test: /usr/local/lib/libgflags.so
-test/query_logger_test: /usr/local/lib/libtensorflow.so
-test/query_logger_test: /usr/local/lib/libtensorflow_framework.so
+test/query_logger_test: /usr/local/lib/libtensorflow.so.bak
+test/query_logger_test: /usr/lib/libtensorflow_framework.so
 test/query_logger_test: /usr/local/lib64/libgmock.a
 test/query_logger_test: /usr/local/lib64/libgtest.a
 test/query_logger_test: test/CMakeFiles/query_logger_test.dir/link.txt

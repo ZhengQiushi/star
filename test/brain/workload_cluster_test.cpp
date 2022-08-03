@@ -13,8 +13,8 @@
 #include "brain/workload_cluster.h"
 #include "common/harness.h"
 
-using  namespace peloton;//  {
-using  namespace test;// {
+using  namespace peloton;
+using  namespace test;
 
 
 class QueryClustererTests : public PelotonTest {};
@@ -32,11 +32,15 @@ TEST(QueryClustererTests, ClusterTest) {
     const size_t top_cluster_num = 3;
 
     std::map<std::string, std::vector<double>> raw_features_;
-
-    peloton::brain::QueryClusterer cluster =  peloton::brain::onlineClustering(raw_features_, cur_timestamp, last_timestamp, 
-                                                                               period_duration , sample_interval, data);
+    // 
+    int num_features = period_duration / sample_interval; 
+    double threshold = 0.8;
+    brain::QueryClusterer query_clusterer(num_features, threshold);
+    peloton::brain::onlineClustering(raw_features_, cur_timestamp, last_timestamp, 
+                                                                               period_duration , sample_interval, 
+                                                                               query_clusterer, data);
     
-    std::vector<peloton::brain::Cluster*> top_k = peloton::brain::getTopCoverage(top_cluster_num, cluster);
+    std::vector<peloton::brain::Cluster*> top_k = peloton::brain::getTopCoverage(top_cluster_num, query_clusterer);
 
     DCHECK(top_k.size() == top_cluster_num);
 }

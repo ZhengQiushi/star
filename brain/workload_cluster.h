@@ -81,8 +81,8 @@ namespace brain {
         bool verbose = false;
 
         //读文件
-        std::ifstream ifs("/home/zqs/star/data/result_test.xls", std::ios::in);
-        std::ofstream ofs("/home/zqs/star/data/result_.xls", std::ios::trunc);
+        std::ifstream ifs("/root/star/data/result_test.xls", std::ios::in);
+        std::ofstream ofs("/root/star/data/result_.xls", std::ios::trunc);
 
         std::string _line;
         int line = 0;

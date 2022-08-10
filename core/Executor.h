@@ -46,17 +46,106 @@ public:
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       messages.emplace_back(std::make_unique<Message>());
       init_message(messages[i].get(), i);
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
+    controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
+
     message_stats.resize(messageHandlers.size(), 0);
     message_sizes.resize(messageHandlers.size(), 0);
   }
 
   ~Executor() = default;
+
+
+  void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
+                                std::deque<simpleTransaction>& router_transactions_queue_,
+                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_){
+
+    while(!router_transactions_queue_.empty()){
+      simpleTransaction simple_txn = router_transactions_queue_.front();
+      router_transactions_queue_.pop_front();
+      
+      n_network_size.fetch_add(simple_txn.size);
+
+      auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
+      r_transactions_queue_.push_back(std::move(p));
+    }
+  }
+
+    void run_transaction(const ContextType& phase_context,
+                         Partitioner *partitioner,
+                         std::deque<std::unique_ptr<TransactionType>>& cur_transactions_queue) {
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    ProtocolType protocol(db, phase_context, *partitioner);
+    WorkloadType workload(coordinator_id, db, random, *partitioner, start_time);
+
+    uint64_t last_seed = 0;
+
+    auto i = 0u;
+    size_t cur_queue_size = cur_transactions_queue.size();    
+    for (auto i = 0u; i < cur_queue_size; i++) {
+      if(cur_transactions_queue.empty()){
+        break;
+      }
+      bool retry_transaction = false;
+
+      transaction =
+              std::move(cur_transactions_queue.front());
+      transaction->startTime = std::chrono::steady_clock::now();;
+
+      do {
+        process_request();
+        last_seed = random.get_seed();
+
+        if (retry_transaction) {
+          transaction->reset();
+        } else {
+          std::size_t partition_id = transaction->get_partition_id();
+          setupHandlers(*transaction);
+        }
+        auto result = transaction->execute(id);
+
+        if (result == TransactionResult::READY_TO_COMMIT) {
+          // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
+
+          bool commit = protocol.commit(*transaction, messages);
+          n_network_size.fetch_add(transaction->network_size);
+          if (commit) {
+            n_commit.fetch_add(1);
+            retry_transaction = false;
+          } else {
+            if (transaction->abort_lock) {
+              n_abort_lock.fetch_add(1);
+            } else {
+              DCHECK(transaction->abort_read_validation);
+              n_abort_read_validation.fetch_add(1);
+            }
+            random.set_seed(last_seed);
+            retry_transaction = true;
+          }
+        } else {
+          protocol.abort(*transaction, messages);
+          n_abort_no_retry.fetch_add(1);
+        }
+      } while (retry_transaction);
+
+      cur_transactions_queue.pop_front();
+
+      if (i % phase_context.batch_flush == 0) {
+        flush_messages();
+      }
+    }
+    flush_messages();
+  }
+
 
   void start() override {
 
@@ -78,61 +167,15 @@ public:
     do {
       process_request();
 
-      if (!partitioner->is_backup()) {
-        // backup node stands by for replication
-        last_seed = random.get_seed();
-
-        if (retry_transaction) {
-          transaction->reset();
-        } else {
-
-          auto partition_id = get_partition_id();
-
-          transaction =
-              workload.next_transaction(context, partition_id, storage);
-          setupHandlers(*transaction);
-        }
-
-        auto result = transaction->execute(id);
-        if (result == TransactionResult::READY_TO_COMMIT) {
-          bool commit = protocol.commit(*transaction, messages);
-          n_network_size.fetch_add(transaction->network_size);
-          if (commit) {
-            n_commit.fetch_add(1);
-            if (transaction->si_in_serializable) {
-              n_si_in_serializable.fetch_add(1);
-            }
-            if (transaction->local_validated) {
-              n_local.fetch_add(1);
-            }
-            retry_transaction = false;
-            auto latency =
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - transaction->startTime)
-                    .count();
-            percentile.add(latency);
-            if (transaction->distributed_transaction) {
-              dist_latency.add(latency);
-            } else {
-              local_latency.add(latency);
-            }
-          } else {
-            if (transaction->abort_lock) {
-              n_abort_lock.fetch_add(1);
-            } else {
-              DCHECK(transaction->abort_read_validation);
-              n_abort_read_validation.fetch_add(1);
-            }
-            if (context.sleep_on_retry) {
-              std::this_thread::sleep_for(std::chrono::microseconds(
-                  random.uniform_dist(0, context.sleep_time)));
-            }
-            random.set_seed(last_seed);
-            retry_transaction = true;
-          }
-        } else {
-          protocol.abort(*transaction, messages);
-          n_abort_no_retry.fetch_add(1);
+      unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
+      if(r_transactions_queue.size() > 0){
+        size_t r_size = r_transactions_queue.size();
+        run_transaction(context, partitioner.get(), r_transactions_queue); // 
+        for(size_t r = 0; r < r_size; r ++ ){
+          // 发回原地...
+          size_t generator_id = context.coordinator_num;
+          ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
+          flush_messages();
         }
       }
 
@@ -234,11 +277,18 @@ public:
         DCHECK(type < messageHandlers.size());
         ITable *table = db.find_table(messagePiece.get_table_id(),
                                       messagePiece.get_partition_id());
-
-        messageHandlers[type](messagePiece,
+        if(type < controlMessageHandlers.size()){
+          // transaction router from Generator
+          controlMessageHandlers[type](
+            messagePiece,
+            *messages[message->get_source_node_id()], db,
+            &router_transactions_queue
+          );
+        } else {
+          messageHandlers[type](messagePiece,
                               *messages[message->get_source_node_id()], *table,
                               transaction.get());
-
+        }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
       }
@@ -293,6 +343,14 @@ protected:
   std::vector<
       std::function<void(MessagePiece, Message &, ITable &, TransactionType *)>>
       messageHandlers;
+
+  std::vector<
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* )>>
+      controlMessageHandlers;
+
+  std::deque<simpleTransaction> router_transactions_queue;           // router
+  std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
+
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *> in_queue, out_queue;
 };

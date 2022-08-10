@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
   "CMakeFiles/query_logger_test.dir/brain/query_logger_test.cpp.o"
-  "query_logger_test.pdb"
   "query_logger_test"
+  "query_logger_test.pdb"
 )
 
 # Per-language clean rules from dependency scanning.

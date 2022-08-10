@@ -399,7 +399,7 @@ public:
         auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
 
         // VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tidd ;
-        // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        // for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
         // }

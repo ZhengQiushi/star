@@ -22,7 +22,7 @@ public:
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       messages.emplace_back(std::make_unique<Message>());
       init_message(messages[i].get(), i);
     }
@@ -33,7 +33,7 @@ public:
   virtual void coordinator_start() {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     n_started_workers.store(0);
     n_completed_workers.store(0);
@@ -59,7 +59,7 @@ public:
   virtual void non_coordinator_start() {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     ExecutorStatus status = wait4_signal();
     DCHECK(status == ExecutorStatus::START);
@@ -104,11 +104,11 @@ public:
   void signal_worker(ExecutorStatus status) {
 
     // only the coordinator node calls this function
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
     set_worker_status(status);
 
     // signal to everyone
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       if (i == coordinator_id) {
         continue;
       }
@@ -120,7 +120,7 @@ public:
 
   ExecutorStatus wait4_signal() {
     // only non-coordinator calls this function
-    DCHECK(coordinator_id != 0);
+    DCHECK(coordinator_id != context.coordinator_num);
 
     signal_in_queue.wait_till_non_empty();
 
@@ -167,14 +167,13 @@ public:
     std::chrono::steady_clock::time_point start;
 
     // only coordinator waits for ack
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators - 1; i++) {
+    for (auto i = 0u; i <= n_coordinators - 1; i++) {
 
       ack_in_queue.wait_till_non_empty();
-
       std::unique_ptr<Message> message(ack_in_queue.front());
       bool ok = ack_in_queue.pop();
       CHECK(ok);
@@ -200,7 +199,7 @@ public:
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators; i++) {
+    for (auto i = 0u; i <= n_coordinators; i++) {
       if (i == coordinator_id)
         continue;
       ControlMessageFactory::new_stop_message(*messages[i]);
@@ -214,15 +213,15 @@ public:
   void send_ack() {
 
     // only non-coordinator calls this function
-    DCHECK(coordinator_id != 0);
+    DCHECK(coordinator_id != context.coordinator_num);
 
-    ControlMessageFactory::new_ack_message(*messages[0]);
+    ControlMessageFactory::new_ack_message(*messages[context.coordinator_num]);
     flush_messages();
   }
 
   void start() override {
 
-    if (coordinator_id == 0) {
+    if (coordinator_id == context.coordinator_num) {
       LOG(INFO) << "Manager(worker id = " << id
                 << ") on the coordinator node started.";
       coordinator_start();

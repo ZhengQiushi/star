@@ -51,7 +51,7 @@ class ModelTests : public PelotonTest {};
         peloton::matrix_eig data;
         data = peloton::matrix_eig::Zero(num_samples, num_feats);
 
-        std::ifstream ifs("/home/zqs/star/data/getWorkLoad.xls", std::ios::in);
+        std::ifstream ifs("/root/star/data/getWorkLoad.xls", std::ios::in);
         int row_cnt = 0;
         std::string _line = "";
 
@@ -175,7 +175,7 @@ class ModelTests : public PelotonTest {};
         
         LOG(INFO) << "Predict done.";
         /** output y and y_hat**/
-        std::ofstream ofs("/home/zqs/star/data/y_hat.xls", std::ios::trunc);
+        std::ofstream ofs("/root/star/data/y_hat.xls", std::ios::trunc);
         for(int i = 0; i < C_.rows(); i ++ ){
             for(int j = 0; j < C_.cols(); j ++ ){
                 ofs << C_(i, j) << "\t";

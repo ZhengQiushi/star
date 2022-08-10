@@ -52,7 +52,7 @@ public:
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
 
@@ -134,7 +134,7 @@ public:
   }
   
   void router_transaction_to_coordinator(){
-    DCHECK(context.coordinator_id != 0);
+    DCHECK(context.coordinator_id != 0); // context.coordinator_num
     
     size_t batch_size = c_transactions_queue.size();
     for(size_t i = 0; i < batch_size; i ++ ){

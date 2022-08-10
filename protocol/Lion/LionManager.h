@@ -79,7 +79,7 @@ public:
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators - 1; i++) {
+    for (auto i = 0u; i <= n_coordinators - 1; i++) {
 
       ack_in_queue.wait_till_non_empty();
 
@@ -102,7 +102,7 @@ public:
     set_worker_status(status);
 
     // signal to everyone
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       if (i == coordinator_id) {
         continue;
       }
@@ -114,7 +114,7 @@ public:
   
   bool lion_action_start(ExecutorStatus status, size_t lion_king_coordinator_id){
 
-      std::size_t n_coordinators = context.coordinator_num;
+      std::size_t n_coordinators = context.coordinator_num + 1;
       if(lion_king_coordinator_id == coordinator_id){
         // current node is the true-coordinator 
         int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;

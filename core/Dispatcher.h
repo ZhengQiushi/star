@@ -70,18 +70,22 @@ public:
           continue;
         }
         
-        if (is_record_txn_message_for_recorder(message.get())){
-          // 最后一个是manager
-          workers[numWorkers - 1]->push_message(message.release());
-          continue;
-        }
+        // if (is_record_txn_message_for_recorder(message.get())){
+        //   // 最后一个是manager
+        //   workers[numWorkers - 1]->push_message(message.release());
+        //   continue;
+        // }
 
         auto workerId = message->get_worker_id();
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
-        if(is_transaction_message(message.get())){
-          VLOG(DEBUG_V8) << workerId << " GET " << "TRANSFER_REQUEST";
-        }
+
+        auto print_message_type = [&](Message *message){
+          LOG(INFO) << (*(message->begin())).get_message_type();
+          return true;
+        };
+
+        // print_message_type(message.get());
         workers[workerId]->push_message(message.release());
         DCHECK(message == nullptr);
       }
@@ -176,9 +180,9 @@ public:
 
     network_size += message->get_message_length();
 
-    if(is_transaction_message(message)){
-      VLOG(DEBUG_V8) << "send TRANSFER_REQUEST";
-    }
+    // if(is_transaction_message(message)){
+    //   VLOG(DEBUG_V8) << "send TRANSFER_REQUEST";
+    // }
   }
   bool is_transaction_message(Message *message) {
     return (*(message->begin())).get_message_type() ==

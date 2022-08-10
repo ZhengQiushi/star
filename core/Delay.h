@@ -14,7 +14,7 @@ class Delay {
 
 public:
   Delay(std::size_t coordinator_id, std::size_t coordinator_num) {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
     this->coordinator_id = coordinator_id;
     this->coordinator_num = coordinator_num;
   }

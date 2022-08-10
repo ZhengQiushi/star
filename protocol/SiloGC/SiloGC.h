@@ -313,7 +313,7 @@ private:
         }
       }
 
-      DCHECK(replicate_count == partitioner.replica_num() - 1);
+      // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 
     sync_messages(txn, false);

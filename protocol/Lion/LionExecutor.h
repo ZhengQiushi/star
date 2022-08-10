@@ -63,7 +63,7 @@ public:
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       messages.emplace_back(std::make_unique<Message>());
       init_message(messages[i].get(), i);
 

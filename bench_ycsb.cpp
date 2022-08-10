@@ -16,7 +16,7 @@ DEFINE_int64(n_nop, 0, "total number of nop");
 
 int main(int argc, char *argv[]) {
 
-  google::InitGoogleLogging(argv[0]);
+   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler(); 
   google::ParseCommandLineFlags(&argc, &argv, true);
   // FLAGS_log_dir = "/Users/lion/project/01_star/star/logs/";
@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     context.isUniform = false;
     star::Zipf::globalZipf().init(context.keysPerPartition, FLAGS_zipf);
   }
-
+  DCHECK(context.peers.size() >= 2) << " The size of ip peers must gt 2.(At least one generator, one worker)";
   star::ycsb::Database db;
   db.initialize(context);
 

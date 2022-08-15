@@ -4,7 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_CXX
-  "/home/zqs/star/test/brain/forcast_workload_test.cpp" "/home/zqs/star/test/CMakeFiles/forcast_workload_test.dir/brain/forcast_workload_test.cpp.o"
+  "/home/star/test/brain/forcast_workload_test.cpp" "/home/star/test/CMakeFiles/forcast_workload_test.dir/brain/forcast_workload_test.cpp.o"
   )
 set(CMAKE_CXX_COMPILER_ID "GNU")
 
@@ -21,8 +21,8 @@ set(CMAKE_CXX_TARGET_INCLUDE_PATH
 
 # Targets to which this target links.
 set(CMAKE_TARGET_LINKED_INFO_FILES
-  "/home/zqs/star/CMakeFiles/common.dir/DependInfo.cmake"
-  "/home/zqs/star/test/CMakeFiles/peloton-test-common.dir/DependInfo.cmake"
+  "/home/star/CMakeFiles/common.dir/DependInfo.cmake"
+  "/home/star/test/CMakeFiles/peloton-test-common.dir/DependInfo.cmake"
   )
 
 # Fortran module output directory.

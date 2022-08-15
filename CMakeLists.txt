@@ -39,10 +39,10 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
     # find_package(gflags REQUIRED)
     set(glog "/usr/local/lib/libglog.a")
     set(gflags "/usr/local/lib/libgflags.so")
-    set(TFlowC_LIBRARIES "/usr/local/lib/libtensorflow.so.bak")
-    set(TFlowC_FRAMEWORK_LIBRARIES "/usr/lib/libtensorflow_framework.so")
-    set(GMOCK_LIBRARIES "/usr/local/lib64/libgmock.a")
-    set(GTEST_LIBRARIES "/usr/local/lib64/libgtest.a")
+    set(TFlowC_LIBRARIES "/usr/local/lib/libtensorflow.so")
+    set(TFlowC_FRAMEWORK_LIBRARIES "/usr/local/lib/libtensorflow_framework.so")
+    set(GMOCK_LIBRARIES "/usr/local/lib/libgmock.a")
+    set(GTEST_LIBRARIES "/usr/local/lib/libgtest.a")
 
     target_link_libraries(common ${jemalloc_lib} ${glog} ${gflags} 
                                  ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}

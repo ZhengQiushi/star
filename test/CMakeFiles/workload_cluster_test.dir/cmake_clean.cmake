@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
   "CMakeFiles/workload_cluster_test.dir/brain/workload_cluster_test.cpp.o"
-  "workload_cluster_test.pdb"
   "workload_cluster_test"
+  "workload_cluster_test.pdb"
 )
 
 # Per-language clean rules from dependency scanning.

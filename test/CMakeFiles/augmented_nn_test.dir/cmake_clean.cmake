@@ -1,7 +1,7 @@
 file(REMOVE_RECURSE
   "CMakeFiles/augmented_nn_test.dir/brain/augmented_nn_test.cpp.o"
-  "augmented_nn_test.pdb"
   "augmented_nn_test"
+  "augmented_nn_test.pdb"
 )
 
 # Per-language clean rules from dependency scanning.

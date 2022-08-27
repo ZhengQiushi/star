@@ -299,6 +299,9 @@ public:
     from_nodes_id.insert(context.coordinator_id);
     return from_nodes_id.size() > 1; 
   }
+  std::size_t get_partition_id(){
+    return partition_id;
+  }
 private:
   DatabaseType &db;
   const ContextType &context;

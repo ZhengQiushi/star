@@ -780,7 +780,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators - 1; i++) {
+    for (auto i = 0u; i <= n_coordinators - 1; i++) {
       for(size_t j = 0 ; j < num; j ++ ){
         ack_in_queue.wait_till_non_empty();
 
@@ -906,7 +906,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators; i++) {
+    for (auto i = 0u; i <= n_coordinators; i++) {
       if (i == coordinator_id)
         continue;
       ControlMessageFactory::new_stop_message(*messages[i]);

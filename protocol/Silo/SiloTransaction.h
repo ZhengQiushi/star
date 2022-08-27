@@ -66,7 +66,8 @@ public:
 
   virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
-
+  virtual std::size_t get_partition_id() = 0;
+  
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,
                           const KeyType &key, ValueType &value) {

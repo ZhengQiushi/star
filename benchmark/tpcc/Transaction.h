@@ -704,7 +704,9 @@ public:
     from_nodes_id.insert(context.coordinator_id);
     return from_nodes_id.size() > 1; 
   }
-
+  std::size_t get_partition_id(){
+    return partition_id;
+  }
 private:
   void get_item_stock_keys_query(std::vector<item::key>& item_keys, std::vector<stock::key>& stock_keys){
     for (int i = 0; i < query.O_OL_CNT; i++) {
@@ -941,7 +943,9 @@ public:
     from_nodes_id.insert(context.coordinator_id);
     return from_nodes_id.size() > 1; 
   }
-
+  std::size_t get_partition_id(){
+    return partition_id;
+  }
 private:
   DatabaseType &db;
   const ContextType &context;

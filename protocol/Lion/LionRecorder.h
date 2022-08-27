@@ -57,7 +57,7 @@ public:
         l_partitioner(std::make_unique<LionDynamicPartitioner<Workload>>(
             context.coordinator_id, context.coordinator_num, db)) {
 
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       messages.emplace_back(std::make_unique<Message>());
       init_message(messages[i].get(), i);
     }
@@ -74,7 +74,7 @@ public:
       outfile.close();
     }
     std::ofstream outfile;
-	  outfile.open("/home/zqs/star/data/test.txt", std::ios::trunc); // ios::trunc
+	  outfile.open("/root/star/data/test.txt", std::ios::trunc); // ios::trunc
     outfile << "lion is the best\n";
     outfile.close();
 
@@ -292,10 +292,10 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
   void signal_recorder(const myMove<WorkloadType>& move) {
     // only the coordinator node calls this function
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
 
     // signal to everyone
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       if (i == coordinator_id) {
         continue;
       }
@@ -450,7 +450,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         std::map<std::string, std::vector<double>> raw_features_;
         get_cluster(sample_cnt, cur_, cluster, top_k, raw_features_);
         LOG(INFO) << "data_pack_queue.size: " ; // << data_pack_queue.;
-        if(int(cur_ / period_duration) >= sample_period_num){
+        if(int(cur_ / period_duration) >= int(sample_period_num)){
           train_and_predict(predictor_, top_k, sample_period_num * feature_nums, raw_features_);
         }
         period_cnt ++ ;
@@ -682,11 +682,11 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
   void signal_worker(ExecutorStatus status) {
 
     // only the coordinator node calls this function
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
     set_worker_status(status);
 
     // signal to everyone
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       if (i == coordinator_id) {
         continue;
       }
@@ -698,7 +698,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
   ExecutorStatus wait4_signal() {
     // only non-coordinator calls this function
-    DCHECK(coordinator_id != 0);
+    DCHECK(coordinator_id != context.coordinator_num);
 
     signal_in_queue.wait_till_non_empty();
 
@@ -752,11 +752,11 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     std::chrono::steady_clock::time_point start;
 
     // only coordinator waits for ack
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators - 1; i++) {
+    for (auto i = 0u; i <= n_coordinators - 1; i++) {
       for(size_t j = 0 ; j < num; j ++ ){
         ack_in_queue.wait_till_non_empty();
 
@@ -846,7 +846,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     std::chrono::steady_clock::time_point start;
 
     // only secondary-coordinator waits for ack
-    DCHECK(coordinator_id != 0);
+    DCHECK(coordinator_id != context.coordinator_num);
 
     if(move_queue.empty()){
       return false;
@@ -882,7 +882,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators; i++) {
+    for (auto i = 0u; i <= n_coordinators; i++) {
       if (i == coordinator_id)
         continue;
       ControlMessageFactory::new_stop_message(*messages[i]);
@@ -894,15 +894,15 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
   void send_ack() {
 
     // only non-coordinator calls this function
-    DCHECK(coordinator_id != 0);
+    DCHECK(coordinator_id != context.coordinator_num);
 
-    ControlMessageFactory::new_ack_message(*messages[0]);
+    ControlMessageFactory::new_ack_message(*messages[context.coordinator_num]);
     flush_messages();
   }
 
   void start() override {
 
-    if (coordinator_id == 0) {
+    if (coordinator_id == context.coordinator_num) {
       LOG(INFO) << "Recorder(worker id = " << id
                 << ") on the coordinator node started.";
       coordinator_start();

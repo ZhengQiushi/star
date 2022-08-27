@@ -48,12 +48,12 @@ public:
   void signal_worker(ExecutorStatus status) {
 
     // only the coordinator node calls this function
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
     std::tuple<uint32_t, ExecutorStatus> split = split_signal(status);
     set_worker_status(std::get<1>(split));
 
     // signal to everyone
-    for (auto i = 0u; i < context.coordinator_num; i++) {
+    for (auto i = 0u; i <= context.coordinator_num; i++) {
       if (i == coordinator_id) {
         continue;
       }
@@ -68,11 +68,11 @@ public:
     std::chrono::steady_clock::time_point start;
 
     // only coordinator waits for ack
-    DCHECK(coordinator_id == 0);
+    DCHECK(coordinator_id == context.coordinator_num);
 
     std::size_t n_coordinators = context.coordinator_num;
 
-    for (auto i = 0u; i < n_coordinators - 1; i++) {
+    for (auto i = 0u; i <= n_coordinators - 1; i++) {
 
       ack_in_queue.wait_till_non_empty();
 
@@ -111,7 +111,7 @@ public:
   void coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     Percentile<int64_t> all_percentile, c_percentile, s_percentile,
         batch_size_percentile;

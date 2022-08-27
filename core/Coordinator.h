@@ -34,7 +34,12 @@ public:
     ioStopFlag.store(false);
     LOG(INFO) << "Coordinator initializes " << context.worker_num
               << " workers.";
-    workers = WorkerFactory::create_workers(id, db, context, workerStopFlag);
+    if(context.coordinator_num == id){
+      // last in peer is generator
+      workers = WorkerFactory::create_generator(id, db, context, workerStopFlag);
+    } else {
+      workers = WorkerFactory::create_workers(id, db, context, workerStopFlag);
+    }
 
     // init sockets vector
     inSockets.resize(context.io_thread_num);
@@ -210,9 +215,9 @@ public:
   void connectToPeers() {
 
     // single node test mode
-    if (peers.size() == 1) {
-      return;
-    }
+    // if (peers.size() == 1) {
+    //   return;
+    // }
 
     auto getAddressPort = [](const std::string &addressPort) {
       std::vector<std::string> result;
@@ -230,6 +235,7 @@ public:
           [id = this->id, peers = this->peers, &inSockets = this->inSockets[i],
            &getAddressPort,
            tcp_quick_ack = context.tcp_quick_ack](std::size_t listener_id) {
+            // thread 
             std::vector<std::string> addressPort = getAddressPort(peers[id]);
 
             Listener l(addressPort[0].c_str(),
@@ -395,7 +401,7 @@ private:
    */
 
   std::size_t id, coordinator_num;
-  const std::vector<std::string> &peers;
+  const std::vector<std::string> &peers; // ip and port ?
   const Context &context;
   std::vector<std::vector<Socket>> inSockets, outSockets;
   std::atomic<bool> workerStopFlag, ioStopFlag;

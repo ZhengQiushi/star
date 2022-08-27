@@ -6,29 +6,29 @@
 
 #IncludeRegexTransform: 
 
-/home/zqs/star/test/brain/testing_augmented_nn_util.cpp
+/root/star/test/brain/testing_augmented_nn_util.cpp
 brain/testing_augmented_nn_util.h
-/home/zqs/star/test/brain/brain/testing_augmented_nn_util.h
+/root/star/test/brain/brain/testing_augmented_nn_util.h
 limits
 -
 brain/util/model_util.h
-/home/zqs/star/test/brain/brain/util/model_util.h
+/root/star/test/brain/brain/util/model_util.h
 brain/util/eigen_util.h
-/home/zqs/star/test/brain/brain/util/eigen_util.h
+/root/star/test/brain/brain/util/eigen_util.h
 gtest/gtest.h
 -
 random
 -
 
-/home/zqs/star/test/brain/testing_forecast_util.cpp
+/root/star/test/brain/testing_forecast_util.cpp
 brain/testing_forecast_util.h
-/home/zqs/star/test/brain/brain/testing_forecast_util.h
+/root/star/test/brain/brain/testing_forecast_util.h
 limits
 -
 brain/util/model_util.h
-/home/zqs/star/test/brain/brain/util/model_util.h
+/root/star/test/brain/brain/util/model_util.h
 brain/util/eigen_util.h
-/home/zqs/star/test/brain/brain/util/eigen_util.h
+/root/star/test/brain/brain/util/eigen_util.h
 gflags/gflags.h
 -
 gmock/gmock.h

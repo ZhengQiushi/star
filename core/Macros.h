@@ -57,7 +57,7 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
 #define SETUP_CONTEXT(context)                                                 \
   boost::algorithm::split(context.peers, FLAGS_servers,                        \
                           boost::is_any_of(";"));                              \
-  context.coordinator_num = context.peers.size();                              \
+  context.coordinator_num = context.peers.size() - 1;                          \
   context.coordinator_id = FLAGS_id;                                           \
   context.worker_num = FLAGS_threads;                                          \
   context.io_thread_num = FLAGS_io;                                            \

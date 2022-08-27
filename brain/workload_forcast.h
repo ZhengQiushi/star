@@ -147,7 +147,7 @@ namespace brain {
             
             LOG(INFO) << "Predict done.";
             /** output y and y_hat**/
-            std::ofstream ofs("/home/zqs/star/data/y_hat.xls", std::ios::trunc);
+            std::ofstream ofs("/root/star/data/y_hat.xls", std::ios::trunc);
             for(int i = 0; i < C_.rows(); i ++ ){
                 for(int j = 0; j < C_.cols(); j ++ ){
                     ofs << C_(i, j) << "\t";

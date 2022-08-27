@@ -295,7 +295,7 @@ public:
   }
   void allocate_router_table(const Context& context){
 
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
       auto warehouseTableID = warehouse::tableID;
       tbl_warehouse_vec_router.push_back(
           std::make_unique<Table<997, warehouse::key, warehouse::value>>(

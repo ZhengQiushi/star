@@ -16,7 +16,7 @@ namespace star {
 class Partitioner {
 public:
   Partitioner(std::size_t coordinator_id, std::size_t coordinator_num) {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
     this->coordinator_id = coordinator_id;
     this->coordinator_num = coordinator_num;
   }
@@ -75,7 +75,7 @@ public:
   HashReplicatedPartitioner(std::size_t coordinator_id,
                             std::size_t coordinator_num)
       : Partitioner(coordinator_id, coordinator_num) {
-    CHECK(N > 0 && N <= coordinator_num);
+    // CHECK(N > 0 && N <= coordinator_num);
   }
 
   ~HashReplicatedPartitioner() override = default;
@@ -96,7 +96,7 @@ public:
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
     std::size_t first_replica = master_coordinator(partition_id);
     std::size_t last_replica = (first_replica + N - 1) % coordinator_num;
 
@@ -165,7 +165,7 @@ public:
 
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
     return true;
   }
   
@@ -238,7 +238,7 @@ public:
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
 
     auto master_id = master_coordinator(partition_id);
     auto secondary_id = 0u; // case 1
@@ -299,7 +299,7 @@ public:
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
 
     if (coordinator_id == 0)
       return true;
@@ -396,7 +396,7 @@ public:
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
     // judge if it is replicated partition or not
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
 
     auto master_id = master_coordinator(partition_id);
     auto secondary_id = secondary_coordinator(partition_id); // case 1
@@ -491,7 +491,7 @@ public:
 
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
       // static replica
       auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
       if(master_coordinator_id == coordinator_id){
@@ -598,7 +598,7 @@ public:
   
     // then should 
 
-    // DCHECK(coordinator_id < coordinator_num);
+    // DCHECK(coordinator_id <= coordinator_num);
     // if(has_master_partition(table_id, partition_id, key) == true){
     //   return true;
     // }
@@ -814,7 +814,7 @@ public:
   
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
-    DCHECK(coordinator_id < coordinator_num);
+    DCHECK(coordinator_id <= coordinator_num);
     // static replica
     auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
     if(master_coordinator_id == coordinator_id){
@@ -847,7 +847,7 @@ public:
   static std::unique_ptr<Partitioner>
   create_partitioner(const std::string &part, std::size_t coordinator_id,
                      std::size_t coordinator_num) {
-
+    // number means the number of replica 
     if (part == "hash") {
       return std::make_unique<HashPartitioner>(coordinator_id, coordinator_num);
     } else if (part == "hash2") {

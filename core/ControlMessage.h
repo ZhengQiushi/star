@@ -8,15 +8,58 @@
 #include "common/Message.h"
 #include "common/MessagePiece.h"
 #include "common/MyMove.h"
+#include <deque>
 
 namespace star {
 
-enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, COUNT, TRANSMIT, NFIELDS };
+enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, COUNT, TRANSMIT, 
+                            ROUTER_TRANSACTION_REQUEST, ROUTER_TRANSACTION_RESPONSE, NFIELDS };
 // COUNT means 统计事务涉及到的record关联性
 
 class ControlMessageFactory {
 
 public:
+  static std::size_t new_router_transaction_message(Message &message, int table_id, 
+                                                    simpleTransaction& txn, uint64_t op){
+    // 
+    // op = src_coordinator_id
+    auto& update_ = txn.update; // txn->get_query_update();
+    auto& key_ = txn.keys; // txn->get_query();
+    uint64_t txn_size = (uint64_t)key_.size();
+    auto key_size = sizeof(uint64_t);
+    
+    auto message_size =
+        MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_REQUEST), message_size,
+        table_id, 0);
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder << op << txn_size;
+    for(size_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key = key_[i];
+      bool update = update_[i];
+      encoder.write_n_bytes((void*) &key, key_size);
+      encoder.write_n_bytes((void*) &update, sizeof(bool));
+//      LOG(INFO) <<  key_[i] << " " << update_[i];
+    }
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t router_transaction_response_message(Message &message){
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE), message_size,
+        0, 0);
+    star::Encoder encoder(message.data);
+    encoder << message_piece_header;
+    message.flush();
+    return message_size;
+  }
+
   static std::size_t new_statistics_message(Message &message, double value) {
     /*
      * The structure of a statistics message: (statistics value : double)
@@ -153,5 +196,74 @@ public:
     return message_size;
   }
 };
+
+template <class Database> class ControlMessageHandler {
+public:
+  static void router_transaction_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db,
+                                      std::deque<simpleTransaction>* router_txn_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_REQUEST));
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint64_t txn_size, op;
+    simpleTransaction new_router_txn;
+
+    // get op
+    op = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(op));
+
+    // get key_size
+    txn_size = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(txn_size));
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + 
+           (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
+
+    star::Decoder dec(stringPiece);
+    for(uint64_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key;
+      bool update;
+
+      key = *(uint64_t*)stringPiece.data();
+      stringPiece.remove_prefix(sizeof(key));
+
+      update = *(bool*)stringPiece.data();
+      stringPiece.remove_prefix(sizeof(update));
+
+      new_router_txn.keys.push_back(key);
+      new_router_txn.update.push_back(update);
+    }
+
+    new_router_txn.op = static_cast<RouterTxnOps>(op);
+    new_router_txn.size = inputPiece.get_message_length();
+    router_txn_queue->push_back(new_router_txn);
+
+  }
+  
+  static void router_transaction_response_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db,
+                                      std::deque<simpleTransaction>* router_txn_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE));
+    return;
+
+}
+  static std::vector<
+      std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>* )>>
+  get_message_handlers() {
+    std::vector<
+        std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>* )>>
+        v;
+    v.resize(static_cast<int>(ControlMessage::NFIELDS) - 2);
+    v.push_back(ControlMessageHandler::router_transaction_handler);
+    v.push_back(ControlMessageHandler::router_transaction_response_handler);
+    return v;
+  }
+};
+
 
 } // namespace star

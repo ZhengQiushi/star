@@ -222,7 +222,7 @@ public:
     // initalize_router_table
     if(true){ // context.protocol == "Lion"
       // quick look-up for certain-key on which node, pre-allocate space
-      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
         tbl_ycsb_vec_router.push_back(
             std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
       }

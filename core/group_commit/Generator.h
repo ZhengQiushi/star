@@ -11,7 +11,6 @@
 #include "core/Partitioner.h"
 #include "core/Worker.h"
 #include "glog/logging.h"
-// #include "core/Coordinator.h"
 #include <chrono>
 
 namespace star {

@@ -10,6 +10,8 @@
 #include "common/MyMove.h"
 #include <deque>
 
+#include <thread>
+
 namespace star {
 
 enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, COUNT, TRANSMIT, 
@@ -19,6 +21,31 @@ enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, COUNT, TRANSMIT,
 class ControlMessageFactory {
 
 public:
+  static int pin_thread_to_core(const Context &context, std::thread &t) {
+#ifndef __APPLE__
+    static std::size_t core_id = context.cpu_core_id;
+    std::size_t core_id_ = core_id;
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id++, &cpuset);
+    int rc =
+        pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
+    // CHECK(rc == 0) << rc;
+    return core_id_;
+#endif
+  }
+
+  static void pin_thread_to_core(const Context &context, std::thread &t, std::size_t core_id) {
+#ifndef __APPLE__
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    int rc =
+        pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
+    // CHECK(rc == 0) << rc;
+    return;
+#endif
+  }
   static std::size_t new_router_transaction_message(Message &message, int table_id, 
                                                     simpleTransaction& txn, uint64_t op){
     // 

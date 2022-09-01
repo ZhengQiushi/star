@@ -13,6 +13,9 @@
 #include "glog/logging.h"
 #include <chrono>
 
+#include "core/Coordinator.h"
+#include <mutex>          // std::mutex, std::lock_guard
+
 namespace star {
 namespace group_commit {
 
@@ -62,32 +65,38 @@ public:
     router_transaction_done.store(0);
     router_transactions_send.store(0);
 
-    transactions_queue.resize(context.coordinator_num);
+    // is_full_signal.resize(context.coordinator_num);
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      is_full_signal[i].store(0);
+    }
+    generator_core_id.resize(context.coordinator_num);
+    // transactions_queue.resize(context.coordinator_num);
   }
 
-  void prepare_transactions_to_run(WorkloadType& workload, StorageType& storage){
+  bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage, int n){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-    std::size_t query_num = context.batch_size * (context.coordinator_num + 1);
-    uint64_t last_seed = 0;
+    // std::size_t query_num = context.batch_size;//  * context.coordinator_num;
+    // uint64_t last_seed = 0;
 
-    for (auto i = 0u; i < query_num; i++) {
-      std::size_t partition_id = get_random_partition_id(); // get_partition_id();
+    // for (auto i = 0u; i < query_num; i++) {
+      std::size_t partition_id = get_random_partition_id(n, context.coordinator_num); // get_partition_id();
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id, storage);
       
-      simpleTransaction txn;
-      txn.keys = cur_transaction->get_query();
-      txn.update = cur_transaction->get_query_update();
-      txn.partition_id = cur_transaction->get_partition_id();
 
-      transactions_queue[partition_id % context.coordinator_num].push_back(txn);
+      simpleTransaction* txn = new simpleTransaction();
+      txn->keys = cur_transaction->get_query();
+      txn->update = cur_transaction->get_query_update();
+      txn->partition_id = cur_transaction->get_partition_id();
+
+      
       // transactions_queue.push_back(std::move(cur_transaction));
-    } // END FOR
+    // } // END FOR
 
     // VLOG_IF(DEBUG_V6, id == 0) << "transactions_queue: " << transactions_queue.size();
-    return;
+    return transactions_queue[n].push_no_wait(txn);
   }
 
   void router_transaction_to_coordinator(simpleTransaction& txn, size_t coordinator_id_dst){
@@ -96,7 +105,7 @@ public:
     DCHECK(coordinator_id_dst != context.coordinator_id);
     // 
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
-        *(this->async_messages[coordinator_id_dst]), 0, txn, 
+        *async_messages[coordinator_id_dst].get(), 0, txn, 
         context.coordinator_id);
 
     n_network_size.fetch_add(router_size);
@@ -113,10 +122,9 @@ public:
       int b = router_transactions_send.load();
       process_request(); 
     }
-    router_transaction_done.store(0);
+    router_transaction_done.store(0);//router_transaction_done.fetch_sub(router_transactions_send.load());
     router_transactions_send.store(0);
   }
-  
   void start() override {
 
     LOG(INFO) << "Generator " << id << " starts.";
@@ -129,6 +137,40 @@ public:
     std::queue<std::unique_ptr<TransactionType>> q;
     std::size_t count = 0;
 
+
+    // generators
+    std::vector<std::thread> generators;
+    for (auto n = 0u; n < context.coordinator_num; n++) {
+      generators.emplace_back([&](int n) {
+        ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+        while(status != ExecutorStatus::EXIT){
+          // 
+          bool is_not_full = prepare_transactions_to_run(workload, storage, n);
+          if(!is_not_full){
+            is_full_signal[n].store(1);
+            while(is_full_signal[n].load() == 1 && status != ExecutorStatus::EXIT){
+              std::this_thread::sleep_for(std::chrono::microseconds(5));
+              status = static_cast<ExecutorStatus>(worker_status.load());
+            }
+          }
+          status = static_cast<ExecutorStatus>(worker_status.load());
+        }
+        LOG(INFO) << "generators " << n << " exits.";
+      }, n);
+
+      if (context.cpu_affinity) {
+        generator_core_id[n] = ControlMessageFactory::pin_thread_to_core(context, generators[n]);
+      }
+    }
+
+
+    
+    for(int n = 0 ; n < context.coordinator_num; n ++ ){
+      while(is_full_signal[n].load() == 0){
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
+    }
+
     for (;;) {
 
       ExecutorStatus status;
@@ -137,6 +179,11 @@ public:
 
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "Executor " << id << " exits.";
+            
+          for (auto &t : generators) {
+            t.join();
+          }
+  
           return;
         }
       } while (status != ExecutorStatus::START);
@@ -155,7 +202,7 @@ public:
       auto test = std::chrono::steady_clock::now();
 
       
-      prepare_transactions_to_run(workload, storage);
+      // prepare_transactions_to_run(workload, storage);
       LOG(INFO) << "prepare_transactions_to_run: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
                            .count();
@@ -174,25 +221,35 @@ public:
 
       std::vector<std::thread> threads;
       for (auto n = 0u; n < context.coordinator_num; n++) {
-        threads.emplace_back([&](std::deque<simpleTransaction>& transactions_queue_, const ContextType &context) {
-          size_t batch_size = transactions_queue_.size();
+        threads.emplace_back([&](int n) {
+          
+          size_t batch_size = transactions_queue[n].size() < context.batch_size ? transactions_queue[n].size(): context.batch_size;
           for(size_t i = 0; i < batch_size; i ++ ){
-            simpleTransaction txn = transactions_queue_.front();
-            size_t coordinator_id_dst = txn.partition_id % context.coordinator_num;
-            router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
-            transactions_queue_.pop_front();
-          }
-        }, std::ref(transactions_queue[n]), std::ref(context));
+            std::unique_ptr<simpleTransaction> txn(transactions_queue[n].front());
+            size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
+            // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
 
-        // if (context.cpu_affinity) {
-        //   pin_thread_to_core(threads[n]);
-        // }
+            size_t router_size = ControlMessageFactory::new_router_transaction_message(
+                *async_messages[coordinator_id_dst].get(), 0, *txn, 
+                context.coordinator_id);
+            n_network_size.fetch_add(router_size);
+            
+            flush_message(async_messages, coordinator_id_dst);
+            router_transactions_send.fetch_add(1);
+            transactions_queue[n].pop();
+          }
+          is_full_signal[n].store(0);
+          
+        }, n);
+
+        if (context.cpu_affinity) {
+          ControlMessageFactory::pin_thread_to_core(context, threads[n], generator_core_id[n]);
+        }
       }
 
       for (auto &t : threads) {
         t.join();
       }
-
 
       LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
@@ -228,6 +285,7 @@ public:
       process_request();
       n_complete_workers.fetch_add(1);
     }
+    // not end here!
   }
 
   void onExit() override {
@@ -274,8 +332,10 @@ public:
     return partition_id;
   }
 
-  std::size_t get_random_partition_id() {
-    return random.uniform_dist(0, context.partition_num - 1);
+  std::size_t get_random_partition_id(int coordinator_id, int coordinator_num) {
+    //!TODO 
+
+    return (coordinator_id + coordinator_num * random.uniform_dist(0, context.partition_num - 1)) % coordinator_num;
   }
 
   void push_message(Message *message) override { 
@@ -381,6 +441,26 @@ protected:
     }
   }
 
+  void flush_message(std::vector<std::unique_ptr<Message>> &messages, int i) {
+    //for (auto i = 0u; i < messages.size(); i++) {
+      if (i == coordinator_id) {
+        return;
+      }
+
+      if (messages[i]->get_message_count() == 0) {
+        return;
+      }
+
+      auto message = messages[i].release();
+      
+      mm.lock();
+      out_queue.push(message); // 单入单出的...
+      mm.unlock();
+
+      messages[i] = std::make_unique<Message>();
+      init_message(messages[i].get(), i);
+    // }
+  }
   void flush_sync_messages() { flush_messages(sync_messages); }
 
   void flush_async_messages() { flush_messages(async_messages); }
@@ -393,8 +473,11 @@ protected:
 
 protected:
   // std::deque<std::unique_ptr<TransactionType>> transactions_queue;
-  std::vector<std::deque<simpleTransaction>> transactions_queue;
+  LockfreeQueue<simpleTransaction*, 4096> transactions_queue[20];
+  std::atomic<uint32_t> is_full_signal[20];
 
+  std::vector<int> generator_core_id;
+  std::mutex mm;
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
   DatabaseType &db;
@@ -422,7 +505,7 @@ protected:
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *> in_queue, out_queue;
+  LockfreeQueue<Message *, 10086> in_queue, out_queue;
 };
 } // namespace group_commit
 

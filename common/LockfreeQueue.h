@@ -36,12 +36,20 @@ public:
   using base_type =
       boost::lockfree::spsc_queue<T, boost::lockfree::capacity<N>>;
 
+  int size(){
+    return base_type::read_available();
+  }
+
   void push(const T &value) {
     while (base_type::write_available() == 0) {
       nop_pause();
     }
     bool ok = base_type::push(value);
     CHECK(ok);
+  }
+  bool push_no_wait(const T &value) {
+    bool ok = base_type::push(value);
+    return ok;
   }
   void clear() {
     auto cur_size = base_type::read_available();

@@ -26,6 +26,9 @@ namespace star {
 
 class Coordinator {
 public:
+
+
+
   template <class Database, class Context>
   Coordinator(std::size_t id, Database &db, const Context &context)
       : id(id), coordinator_num(context.peers.size()), peers(context.peers),
@@ -77,8 +80,8 @@ public:
       oDispatcherThreads.emplace_back(&OutgoingDispatcher::start,
                                       oDispatchers[i].get());
       if (context.cpu_affinity) {
-        pin_thread_to_core(iDispatcherThreads[i]);
-        pin_thread_to_core(oDispatcherThreads[i]);
+        ControlMessageFactory::pin_thread_to_core(context, iDispatcherThreads[i]);
+        ControlMessageFactory::pin_thread_to_core(context, oDispatcherThreads[i]);
       }
     }
 
@@ -89,7 +92,7 @@ public:
     for (auto i = 0u; i < workers.size(); i++) {
       threads.emplace_back(&Worker::start, workers[i].get());
       if (context.cpu_affinity) {
-        pin_thread_to_core(threads[i]);
+        ControlMessageFactory::pin_thread_to_core(context, threads[i]);
       }
     }
 
@@ -365,32 +368,7 @@ private:
     }
   }
 
-  void pin_thread_to_core(std::thread &t) {
-#ifndef __APPLE__
-    static std::size_t core_id = context.cpu_core_id;
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(core_id++, &cpuset);
-    int rc =
-        pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-    // CHECK(rc == 0) << rc;
-#endif
 
-// #ifndef __linux__
-//     static std::size_t core_id = context.cpu_core_id;
-//     cpu_set_t cpuset;
-//     CPU_ZERO(&cpuset);
-//     CPU_SET(core_id++, &cpuset);
-
-//     print_affinity();
-    
-//     int rc =
-//         pthread_setaffinity_np(t.native_handle(), sizeof(cpu_set_t), &cpuset);
-//     CHECK(rc == 0);
-
-//     print_affinity();
-// #endif
-  }
 
 private:
   /*

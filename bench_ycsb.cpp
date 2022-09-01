@@ -14,9 +14,10 @@ DEFINE_int64(n_nop, 0, "total number of nop");
 // ./main --logtostderr=1 --id=1 --servers="127.0.0.1:10010;127.0.0.1:10011"
 // cmake -DCMAKE_BUILD_TYPE=Release 
 
+
 int main(int argc, char *argv[]) {
 
-   google::InitGoogleLogging(argv[0]);
+  google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler(); 
   google::ParseCommandLineFlags(&argc, &argv, true);
   // FLAGS_log_dir = "/Users/lion/project/01_star/star/logs/";

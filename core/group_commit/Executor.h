@@ -149,7 +149,22 @@ public:
     flush_sync_messages();
   }
 
-
+  bool is_router_stopped(){
+    bool ret = false;
+    if(router_stop_queue.size() < context.coordinator_num){
+      ret = false;
+    } else {
+      //
+      int i = context.coordinator_num;
+      while(i > 0){
+        i --;
+        DCHECK(router_stop_queue.size() > 0);
+        router_stop_queue.pop_front();
+      }
+      ret = true;
+    }
+    return ret;
+  }
 
   void start() override {
 
@@ -187,10 +202,15 @@ public:
 
       n_started_workers.fetch_add(1);
       
-      auto startTime = std::chrono::steady_clock::now();
+      // auto startTime = std::chrono::steady_clock::now();
 
-      do {
+      // do {
         process_request();
+
+        while(!is_router_stopped()){
+          process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
 
         unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
 
@@ -215,7 +235,7 @@ public:
         // }
 
         status = static_cast<ExecutorStatus>(worker_status.load());
-      } while (status != ExecutorStatus::STOP);
+      // } while (status != ExecutorStatus::STOP);
 
       flush_async_messages();
 
@@ -323,7 +343,8 @@ public:
           controlMessageHandlers[type](
             messagePiece,
             *async_messages[message->get_source_node_id()], db,
-            &router_transactions_queue
+            &router_transactions_queue,
+            &router_stop_queue
           );
         } else {
           messageHandlers[type](messagePiece,
@@ -393,10 +414,11 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
   std::deque<simpleTransaction> router_transactions_queue;           // router
+  std::deque<int> router_stop_queue;           // router stop-SIGNAL
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
 
   std::vector<std::size_t> message_stats, message_sizes;

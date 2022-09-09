@@ -282,7 +282,8 @@ public:
           controlMessageHandlers[type](
             messagePiece,
             *messages[message->get_source_node_id()], db,
-            &router_transactions_queue
+            &router_transactions_queue,
+            &router_stop_queue
           );
         } else {
           messageHandlers[type](messagePiece,
@@ -345,10 +346,11 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
   std::deque<simpleTransaction> router_transactions_queue;           // router
+  std::deque<int> router_stop_queue;
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
 
   std::vector<std::size_t> message_stats, message_sizes;

@@ -249,6 +249,7 @@ public:
 
     switch (message_type) {
     case ControlMessage::SIGNAL:
+      VLOG(DEBUG_V3) << "SIGNAL " << id; 
       signal_in_queue.push(message);
       break;
     case ControlMessage::ACK:

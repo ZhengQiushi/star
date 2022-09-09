@@ -57,6 +57,7 @@ public:
       if (i == coordinator_id) {
         continue;
       }
+      LOG(INFO) << " new_signal_message from " << coordinator_id << " -> " << i;
       ControlMessageFactory::new_signal_message(*messages[i],
                                                 static_cast<uint32_t>(status));
     }

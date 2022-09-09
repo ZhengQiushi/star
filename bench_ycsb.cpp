@@ -15,6 +15,7 @@ DEFINE_int64(n_nop, 0, "total number of nop");
 // cmake -DCMAKE_BUILD_TYPE=Release 
 
 
+
 int main(int argc, char *argv[]) {
 
   google::InitGoogleLogging(argv[0]);

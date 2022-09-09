@@ -23,10 +23,10 @@ cmake/*
 !protocol/
 !scripts/
 !brain/
-# !test/brain
-# !test/common
-# !test/include
-# !test/CMakeLists
+!test/brain
+!test/common
+!test/include
+!test/CMakeLists
 !third_party/
 
 *.py

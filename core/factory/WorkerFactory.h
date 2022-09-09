@@ -10,6 +10,7 @@
 #include "core/group_commit/Generator.h"
 
 
+
 #include "benchmark/tpcc/Workload.h"
 #include "benchmark/ycsb/Workload.h"
 
@@ -28,7 +29,7 @@
 #include "protocol/Star/Star.h"
 #include "protocol/Star/StarExecutor.h"
 #include "protocol/Star/StarManager.h"
-
+#include "protocol/Star/StarGenerator.h"
 
 #include "protocol/Lion/Lion.h"
 #include "protocol/Lion/LionExecutor.h"
@@ -377,56 +378,39 @@ public:
       auto manager = std::make_shared<group_commit::Manager>(
           coordinator_id, context.worker_num, context, stop_flag);
 
-      // for (auto i = 0u; i < context.worker_num; i++) {
+      for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::Generator<WorkloadType, Silo<DatabaseType>>>(
-              coordinator_id, 0, db, context, manager->worker_status,
+              coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers));
-      // }
+      }
 
       workers.push_back(manager);
 
-    } else {
-      DCHECK(false);
+    } else if (context.protocol == "Star") {
+      //  CHECK(context.partition_num %
+      //           (context.worker_num * context.coordinator_num) ==
+      //       0)
+      //     << "In Star, each partition is managed by only one thread.";
+
+      using TransactionType = star::SiloTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+          
+      auto manager = std::make_shared<StarManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag, db);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<group_commit::StarGenerator<WorkloadType, Silo<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      }
+      workers.push_back(manager);
+      // workers.push_back(recorder);
+
     }
-    // else if (context.protocol == "SiloGC") {
-
-    //   using TransactionType = star::SiloTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
-
-    //   auto manager = std::make_shared<group_commit::Manager>(
-    //       coordinator_id, context.worker_num, context, stop_flag);
-
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
-    //           coordinator_id, i, db, context, manager->worker_status,
-    //           manager->n_completed_workers, manager->n_started_workers));
-    //   }
-    //   workers.push_back(manager);
-
-    // } else if (context.protocol == "Star") {
-
-    //   CHECK(context.partition_num %
-    //             (context.worker_num * context.coordinator_num) ==
-    //         0)
-    //       << "In Star, each partition is managed by only one thread.";
-
-    //   using TransactionType = star::SiloTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
-
-    //   auto manager = std::make_shared<StarManager<WorkloadType>>(
-    //       coordinator_id, context.worker_num, context, stop_flag, db);
-
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
-    //           coordinator_id, i, db, context, manager->worker_status,
-    //           manager->n_completed_workers, manager->n_started_workers));
-    //   }
-    //   workers.push_back(manager);
-    //   // workers.push_back(recorder);
-
-    // } else if (context.protocol == "Lion") {
+    // else if (context.protocol == "Lion") {
 
     //   CHECK(context.partition_num %
     //             (context.worker_num * context.coordinator_num) ==

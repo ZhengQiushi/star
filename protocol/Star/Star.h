@@ -323,6 +323,7 @@ private:
             txn.network_size +=
                 MessageFactoryType::new_sync_value_replication_message(
                     *syncMessages[k], *table, key, value, commit_tid);
+            // LOG(INFO) << async_message_num.load() << " " << context.coordinator_id << " -> " << k;
             async_message_num.fetch_add(1);
             // static int total_send = 0 ;
             // total_send ++ ;

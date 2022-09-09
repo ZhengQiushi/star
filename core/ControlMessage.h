@@ -15,7 +15,7 @@
 namespace star {
 
 enum class ControlMessage { STATISTICS, SIGNAL, ACK, STOP, COUNT, TRANSMIT, 
-                            ROUTER_TRANSACTION_REQUEST, ROUTER_TRANSACTION_RESPONSE, NFIELDS };
+                            ROUTER_TRANSACTION_REQUEST, ROUTER_TRANSACTION_RESPONSE, ROUTER_STOP, NFIELDS };
 // COUNT means 统计事务涉及到的record关联性
 
 class ControlMessageFactory {
@@ -54,16 +54,17 @@ public:
     auto& key_ = txn.keys; // txn->get_query();
     uint64_t txn_size = (uint64_t)key_.size();
     auto key_size = sizeof(uint64_t);
-    
+    uint64_t is_distributed = txn.is_distributed;
+
     auto message_size =
-        MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
+        MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_REQUEST), message_size,
         table_id, 0);
 
     Encoder encoder(message.data);
     encoder << message_piece_header;
-    encoder << op << txn_size;
+    encoder << op << is_distributed <<  txn_size;
     for(size_t i = 0 ; i < txn_size; i ++ ){
       uint64_t key = key_[i];
       bool update = update_[i];
@@ -84,6 +85,19 @@ public:
     star::Encoder encoder(message.data);
     encoder << message_piece_header;
     message.flush();
+    return message_size;
+  }
+
+  static std::size_t router_stop_message(Message &message){
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(ControlMessage::ROUTER_STOP), message_size,
+        0, 0);
+    star::Encoder encoder(message.data);
+    encoder << message_piece_header;
+    message.flush();
+    
     return message_size;
   }
 
@@ -228,25 +242,30 @@ template <class Database> class ControlMessageHandler {
 public:
   static void router_transaction_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
-                                      std::deque<simpleTransaction>* router_txn_queue
+                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      std::deque<int>* stop_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_REQUEST));
 
     auto stringPiece = inputPiece.toStringPiece();
-    uint64_t txn_size, op;
+    uint64_t txn_size, op, is_distributed;
     simpleTransaction new_router_txn;
 
     // get op
     op = *(uint64_t*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(op));
 
+    // 
+    is_distributed = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(is_distributed));
+
     // get key_size
     txn_size = *(uint64_t*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(txn_size));
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + 
+           MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(txn_size) + 
            (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
 
     star::Decoder dec(stringPiece);
@@ -266,28 +285,45 @@ public:
 
     new_router_txn.op = static_cast<RouterTxnOps>(op);
     new_router_txn.size = inputPiece.get_message_length();
+    new_router_txn.is_distributed = is_distributed;
+    
     router_txn_queue->push_back(new_router_txn);
 
   }
   
   static void router_transaction_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
-                                      std::deque<simpleTransaction>* router_txn_queue
+                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      std::deque<int>* stop_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE));
     return;
 
 }
+
+  static void router_stop_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db,
+                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      std::deque<int>* stop_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(ControlMessage::ROUTER_STOP));
+    stop_queue->push_back(1);
+    VLOG(DEBUG_V12) << "GET ROUTER_STOP";
+    return;
+
+}
   static std::vector<
-      std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>* )>>
+      std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>*, std::deque<int>* )>>
   get_message_handlers() {
     std::vector<
-        std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>* )>>
+        std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>*, std::deque<int>* )>>
         v;
-    v.resize(static_cast<int>(ControlMessage::NFIELDS) - 2);
+    v.resize(static_cast<int>(ControlMessage::NFIELDS) - 3);
     v.push_back(ControlMessageHandler::router_transaction_handler);
     v.push_back(ControlMessageHandler::router_transaction_response_handler);
+    v.push_back(ControlMessageHandler::router_stop_handler);
     return v;
   }
 };

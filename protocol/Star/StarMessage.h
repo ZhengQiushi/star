@@ -306,8 +306,10 @@ public:
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_RESPONSE),
         message_size, table_id, partition_id);
+    
+    // static int recv_ = 0;
+    // LOG(INFO) << "SYNC_VALUE_REPLICATION_RESPONSE "<< recv_++ << " " << responseMessage.get_source_node_id() << " " << responseMessage.get_dest_node_id();
 
-    static int recv_ = 0;
     // LOG(INFO) << "recv : " << ++recv_;
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;

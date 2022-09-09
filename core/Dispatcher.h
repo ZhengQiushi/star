@@ -80,10 +80,10 @@ public:
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
 
-        auto print_message_type = [&](Message *message){
-          LOG(INFO) << (*(message->begin())).get_message_type();
-          return true;
-        };
+        // auto print_message_type = [&](Message *message){
+        //   LOG(INFO) << (*(message->begin())).get_message_type();
+        //   return true;
+        // };
 
         // print_message_type(message.get());
         workers[workerId]->push_message(message.release());

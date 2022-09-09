@@ -77,6 +77,7 @@ struct simpleTransaction {
   RouterTxnOps op;
   uint64_t size;
   uint64_t partition_id;
+  bool is_distributed;
 };
 
 struct ExecutionStep {

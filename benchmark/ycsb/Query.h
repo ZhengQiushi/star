@@ -19,6 +19,7 @@ template <std::size_t N> struct YCSBQuery {
 
 template <std::size_t N> class makeYCSBQuery {
 public:
+// need to reconsider
   const double my_threshold = 0.001; // 20 0000 
                                       //  0.001 = 200  
   const int period_duration = 5;

@@ -296,7 +296,7 @@ public:
      * @return true/false
      */
     std::set<int> from_nodes_id = std::move(txn_nodes_involved(is_dynamic));
-    from_nodes_id.insert(context.coordinator_id);
+    // from_nodes_id.insert(context.coordinator_id);
     return from_nodes_id.size() > 1; 
   }
   std::size_t get_partition_id(){

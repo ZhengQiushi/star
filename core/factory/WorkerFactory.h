@@ -36,10 +36,10 @@
 #include "protocol/Lion/LionManager.h"
 #include "protocol/Lion/LionTransaction.h"
 #include "protocol/Lion/LionRecorder.h"
+#include "protocol/Lion/LionGenerator.h"
 
-
-#include "protocol/LionNS/LionNSExecutor.h"
-#include "protocol/LionNS/LionNSManager.h"
+// #include "protocol/LionNS/LionNSExecutor.h"
+// #include "protocol/LionNS/LionNSManager.h"
 
 
 #include "protocol/Calvin/Calvin.h"
@@ -183,7 +183,7 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<LionManager<WorkloadType>>(
+      auto manager = std::make_shared<StarManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
@@ -199,7 +199,7 @@ public:
             manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
       }
       workers.push_back(manager);
-      workers.push_back(recorder);  
+      // workers.push_back(recorder);  
     } else if (context.protocol == "LionWithBrain") {
 
       CHECK(context.partition_num %
@@ -228,35 +228,37 @@ public:
       }
       workers.push_back(manager);
       // workers.push_back(recorder);  
-    } else if (context.protocol == "LionNS") {
-
-      CHECK(context.partition_num %
-                (context.worker_num * context.coordinator_num) ==
-            0)
-          << "In Lion, each partition is managed by only one thread.";
-
-      using TransactionType = star::LionTransaction ;// TwoPLTransaction;
-      using WorkloadType =
-          typename InferType<Context>::template WorkloadType<TransactionType>;
-
-      auto manager = std::make_shared<LionNSManager<WorkloadType>>(
-          coordinator_id, context.worker_num, context, stop_flag, db);
-
-      // add recorder for data-transformation
-      auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-          coordinator_id, context.worker_num + 1, context, stop_flag, db,
-          manager->recorder_status, manager->transmit_status, 
-          manager->n_completed_workers, manager->n_started_workers);
-
-      for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<LionNSExecutor<WorkloadType>>(
-            coordinator_id, i, db, context, manager->batch_size,
-            manager->worker_status, manager->n_completed_workers,
-            manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
-      }
-      workers.push_back(manager);
-      // workers.push_back(recorder);  
     } 
+    // else if (context.protocol == "LionNS") {
+
+    //   CHECK(context.partition_num %
+    //             (context.worker_num * context.coordinator_num) ==
+    //         0)
+    //       << "In Lion, each partition is managed by only one thread.";
+
+    //   using TransactionType = star::LionTransaction ;// TwoPLTransaction;
+    //   using WorkloadType =
+    //       typename InferType<Context>::template WorkloadType<TransactionType>;
+
+    //   auto manager = std::make_shared<LionNSManager<WorkloadType>>(
+    //       coordinator_id, context.worker_num, context, stop_flag, db);
+
+    //   // add recorder for data-transformation
+    //   auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+    //       coordinator_id, context.worker_num + 1, context, stop_flag, db,
+    //       manager->recorder_status, manager->transmit_status, 
+    //       manager->n_completed_workers, manager->n_started_workers);
+
+    //   for (auto i = 0u; i < context.worker_num; i++) {
+    //     workers.push_back(std::make_shared<LionNSExecutor<WorkloadType>>(
+    //         coordinator_id, i, db, context, manager->batch_size,
+    //         manager->worker_status, manager->n_completed_workers,
+    //         manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
+    //   }
+    //   workers.push_back(manager);
+    //   // workers.push_back(recorder);  
+    // } 
+    
     else if (context.protocol == "TwoPL") {
 
       using TransactionType = star::TwoPLTransaction;
@@ -410,28 +412,31 @@ public:
       // workers.push_back(recorder);
 
     }
-    // else if (context.protocol == "Lion") {
+    else if (context.protocol == "Lion") {
 
-    //   CHECK(context.partition_num %
-    //             (context.worker_num * context.coordinator_num) ==
-    //         0)
-    //       << "In Lion, each partition is managed by only one thread.";
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
 
-    //   using TransactionType = star::LionTransaction ;// TwoPLTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
+      using TransactionType = star::LionTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
 
-    //   auto manager = std::make_shared<LionManager<WorkloadType>>(
-    //       coordinator_id, context.worker_num, context, stop_flag, db);
+      auto manager = std::make_shared<LionManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag, db);
 
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
-    //           coordinator_id, i, db, context, manager->worker_status,
-    //           manager->n_completed_workers, manager->n_started_workers));
-    //   }
-    //   workers.push_back(manager);
-    //   // workers.push_back(recorder);  
-    // } else if (context.protocol == "LionWithBrain") {
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<group_commit::LionGenerator<WorkloadType>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      }
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    } 
+    // else if (context.protocol == "LionWithBrain") {
 
     //   CHECK(context.partition_num %
     //             (context.worker_num * context.coordinator_num) ==

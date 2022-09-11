@@ -350,6 +350,7 @@ public:
       init_message(message.get(), id, 0);
       ControlMessageFactory::new_statistics_message(*message, value);
       out_queue.push(message.release());
+      LOG(INFO) << "new_statistics_message send";
     }
     return sum;
   }

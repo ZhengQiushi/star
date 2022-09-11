@@ -651,15 +651,18 @@ std::deque<simpleTransaction>* router_txn_queue
       table.deserialize_value(key, valueStringPiece);
       TwoPLHelper::write_lock_release(tid, commit_tid);
     }
+    
+    int debug_key = *(int*)key;
+//    LOG(INFO) << " request from : " << debug_key;
 
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size();
+    auto message_size = MessagePiece::get_header_size() + sizeof(debug_key);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE), message_size,
         table_id, partition_id);
-
+//    LOG(INFO) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key;
     star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header;
+    encoder << message_piece_header << debug_key;
     responseMessage.flush();
   }
 
@@ -678,12 +681,18 @@ std::deque<simpleTransaction>* router_txn_queue
 
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
+    int key = 0;
 
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() + sizeof(key));
+
+    auto stringPiece = inputPiece.toStringPiece();
+
+    const void *key_ = stringPiece.data();
+    key = *(int*) key_;
     /*
      * The structure of a replication response: ()
      */
-
+    // LOG(INFO) << "  replication response: " << key;
     // txn->pendingResponses--;
     // txn->network_size += inputPiece.get_message_length();
   }

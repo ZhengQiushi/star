@@ -366,6 +366,8 @@ private:
           txn.network_size += MessageFactoryType::new_replication_message(
               *messages[coordinatorID], *table, readKey.get_key(),
               readKey.get_value(), commit_tid);
+
+//          LOG(INFO) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key();
           async_message_num.fetch_add(1);
           send_replica = true;
         }

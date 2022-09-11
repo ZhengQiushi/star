@@ -42,6 +42,8 @@ public:
 
   void push(const T &value) {
     while (base_type::write_available() == 0) {
+      int a = base_type::write_available();
+      int b = base_type::read_available();
       nop_pause();
     }
     bool ok = base_type::push(value);

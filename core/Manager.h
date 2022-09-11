@@ -160,6 +160,7 @@ public:
       auto type = static_cast<ControlMessage>(messagePiece.get_message_type());
       CHECK(type == ControlMessage::STOP);
     }
+    // LOG(INFO) << "wait4_stop done : " << stop_in_queue.size();
   }
 
   void wait4_ack() {
@@ -257,7 +258,7 @@ public:
       ack_in_queue.push(message);
       break;
     case ControlMessage::STOP:
-      VLOG(DEBUG_V3) << "STOP " << id; 
+      VLOG(DEBUG_V3) << "STOP " << id << " " << stop_in_queue.size(); 
       stop_in_queue.push(message);
       break;
     default:

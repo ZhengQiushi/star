@@ -289,6 +289,35 @@ public:
       }
      return from_nodes_id;
    }
+   std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) override {
+      std::unordered_map<int, int> from_nodes_id;
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto query_keys = this->get_query();
+      int max_cnt = 0;
+
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        if(is_dynamic){
+          // look-up the dynamic router to find-out where
+          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+        } else {
+          // cal the partition to figure out the coordinator-id
+          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        }
+        if(!from_nodes_id.count(cur_c_id)){
+          from_nodes_id[cur_c_id] = 1;
+        } else {
+          from_nodes_id[cur_c_id] += 1;
+        }
+        if(from_nodes_id[cur_c_id] > max_cnt){
+          max_cnt = from_nodes_id[cur_c_id];
+          max_node = cur_c_id;
+        }
+      }
+     return from_nodes_id;
+   }
 
    bool check_cross_node_txn(bool is_dynamic) override{
     /**

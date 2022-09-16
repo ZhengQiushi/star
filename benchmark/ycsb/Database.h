@@ -33,10 +33,11 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id, std::size_t coordinator_id) {
-    DCHECK(table_id < tbl_vecs.size());
-    DCHECK(coordinator_id < tbl_vecs[table_id].size());
-    return tbl_vecs_router[table_id][coordinator_id];
+  ITable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
+    // 找某个节点的路由表
+    // DCHECK(table_id < tbl_vecs.size());
+    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id]; // tbl_vecs_router[table_id][coordinator_id];
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
@@ -44,15 +45,16 @@ public:
      * @brief from router table to find the coordinator
      * 
      */
-    std::size_t ret = coordinator_num;
-    for(size_t i = 0 ; i < coordinator_num; i ++ ){
-      ITable* tab = find_router_table(table_id, i);
-      if(tab->contains(key)){
-        ret = i;
-        break;
-      }
-    }
-
+    // std::size_t ret = coordinator_num;
+    // for(size_t i = 0 ; i < coordinator_num; i ++ ){
+    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    auto pair = (std::pair<size_t, std::set<size_t>>*)(tab->search_value(key));
+    //   if(tab->contains(key)){
+    //     ret = i;
+    //     break;
+    //   }
+    // }
+    
     // if(ret == coordinator_num){
     //   for(size_t i = 0 ; i < coordinator_num; i ++ ){
     //     ITable* tab = find_router_table(table_id, i);
@@ -61,7 +63,7 @@ public:
     // }
 
     // DCHECK(ret != coordinator_num) << " " << table_id << " " << *(int*)key;
-    return ret;
+    return pair->first;
   }
 
   void init_router_table(const Context& context){
@@ -83,39 +85,36 @@ public:
           DCHECK(context.getPartitionID(i) == partitionID);
           ycsb::key key(i);
 
-          if(context.protocol == "Hermes"){
-            int router_coordinator = (partitionID) % context.coordinator_num;
-            size_t router_secondary_coordinator = (partitionID + 1) % context.coordinator_num;
+          // if(context.protocol == "Hermes"){
+          //   int router_coordinator = (partitionID) % context.coordinator_num;
+          //   size_t router_secondary_coordinator = (partitionID + 1) % context.coordinator_num;
 
-            ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
-            table_router->insert(&key, &router_secondary_coordinator); // 
-          } else {
-            int router_coordinator = (partitionID + 1) % context.coordinator_num;
-            size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
+          //   ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
+          //   table_router->insert(&key, &router_secondary_coordinator); // 
+          // } else {
+          int router_coordinator = (partitionID + 1) % context.coordinator_num;
+          size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
 
-            ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
-            table_router->insert(&key, &router_secondary_coordinator); // 
-          }
+          ITable *table_router = tbl_vecs_router[0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
+          
+          std::set<size_t> s;
+          s.insert(router_coordinator);
+          s.insert(router_secondary_coordinator);
+          std::pair<size_t, std::set<size_t>> router = std::make_pair(router_coordinator, s);
+          table_router->insert(&key, &router); // 
+
+          // }
         }
       } else {
         // not available so far
         DCHECK(false);
-        // use round-robin hash partitioning
-        for (auto i = partitionID; i < totalKeys; i += partitionNum) {
-          DCHECK(context.getPartitionID(i) == partitionID);
-          ycsb::key key(i);
-
-          int router_coordinator = partitionID % context.coordinator_num;
-          ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
-          table_router->insert(&key, &router_coordinator);
-        }
       }
     }
   }
 
   void init_star_router_table(const Context& context){
     /**
-     * @brief for Lion only.
+     * @brief for Star only.
      * 
      */
     auto keysPerPartition = context.keysPerPartition;
@@ -133,22 +132,21 @@ public:
           ycsb::key key(i);
 
           int router_coordinator = partitionID % context.coordinator_num;
-          ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
-          table_router->insert(&key, &router_coordinator);
+          ITable *table_router = tbl_vecs_router[0];
+
+          std::set<size_t> s;
+          s.insert(0);
+          s.insert(router_coordinator);
+          std::pair<size_t, std::set<size_t>> router = std::make_pair(0, s);
+          table_router->insert(&key, &router); // 
+
           // if(*(int*)(&key) == 7200034){
           //   LOG(INFO) << "*(int*)(key) == 7200034 " << router_coordinator ;
           // }
         }
       } else {
         // use round-robin hash partitioning
-        for (auto i = partitionID; i < totalKeys; i += partitionNum) {
-          DCHECK(context.getPartitionID(i) == partitionID);
-          ycsb::key key(i);
-
-          int router_coordinator = partitionID % context.coordinator_num;
-          ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get();
-          table_router->insert(&key, &router_coordinator);
-        }
+        DCHECK(false);
       }
     }
   }
@@ -190,9 +188,9 @@ public:
 
   void initialize(const Context &context) {
 
-    std::size_t coordinator_id = context.coordinator_id;
-    std::size_t partitionNum = context.partition_num;
-    std::size_t threadsNum = context.worker_num;
+    coordinator_id = context.coordinator_id;
+    partitionNum = context.partition_num;
+    threadsNum = context.worker_num;
 
     auto partitioner = PartitionerFactory::create_partitioner(
         context.partitioner, coordinator_id, context.coordinator_num);
@@ -222,13 +220,14 @@ public:
     // initalize_router_table
     if(true){ // context.protocol == "Lion"
       // quick look-up for certain-key on which node, pre-allocate space
-      for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
-        tbl_ycsb_vec_router.push_back(
-            std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
-      }
+      // for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
+      tbl_ycsb_vec_router = (std::make_unique<Table<9973, ycsb::key, std::pair<size_t, std::set<size_t>>>>(ycsbTableID, 0));
+          // std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
+      // }
       tbl_vecs_router.resize(1);
-      std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[0]), tFunc);
+      tbl_vecs_router[0] = tbl_ycsb_vec_router.get();
+      // std::transform(tbl_ycsb_vec_router.begin(), tbl_ycsb_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[0]), tFunc);
       // init router information
       if(context.protocol == "Lion" || context.protocol == "LionNS" || context.protocol == "Hermes"){
         init_router_table(context);
@@ -321,12 +320,15 @@ private:
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;
-  std::vector<std::vector<ITable *>> tbl_vecs_router;
+  std::vector<ITable *> tbl_vecs_router;
   
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec;
-  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router; // table_id, coordinator_id
+  std::unique_ptr<ITable> tbl_ycsb_vec_router; // table_id, coordinator_id
                                                             // key
                                                             // 
+  std::size_t coordinator_id; // = context.coordinator_id;
+  std::size_t partitionNum; // = context.partition_num;
+  std::size_t threadsNum; // = context.worker_num;
 };
 } // namespace ycsb
 } // namespace star

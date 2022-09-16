@@ -140,9 +140,16 @@ public:
       n_network_size.fetch_add(simple_txn.size);
 
       if(simple_txn.is_distributed){
+        int max_node = -1;
         auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
-        c_transactions_queue.push_back(std::move(p));
-        c_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
+        if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
+          c_transactions_queue.push_back(std::move(p));
+          c_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
+        } else {
+          r_transactions_queue.push_back(std::move(p));
+          r_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
+        }
+
       } else {
         auto p = s_workload.unpack_transaction(context, 0, storage, simple_txn);
         s_transactions_queue.push_back(std::move(p));
@@ -168,7 +175,35 @@ public:
     }
     return ret;
   }
+     std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
+      std::unordered_map<int, int> from_nodes_id;
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto query_keys = t->keys;
+      int max_cnt = 0;
 
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        if(is_dynamic){
+          // look-up the dynamic router to find-out where
+          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+        } else {
+          // cal the partition to figure out the coordinator-id
+          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        }
+        if(!from_nodes_id.count(cur_c_id)){
+          from_nodes_id[cur_c_id] = 1;
+        } else {
+          from_nodes_id[cur_c_id] += 1;
+        }
+        if(from_nodes_id[cur_c_id] > max_cnt){
+          max_cnt = from_nodes_id[cur_c_id];
+          max_node = cur_c_id;
+        }
+      }
+     return from_nodes_id;
+   }
   void start() override {
 
     LOG(INFO) << "Executor " << id << " starts.";
@@ -213,7 +248,7 @@ public:
       }
       unpack_route_transaction(c_workload, s_workload, storage); // 
 
-      VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << s_transactions_queue.size();
+      VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
@@ -227,9 +262,12 @@ public:
         VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
 
-        size_t r_size = c_transactions_queue.size();
+        size_t r_size = c_transactions_queue.size() + r_transactions_queue.size();;
         // LOG(INFO) << "c_transactions_queue.size() : " <<  r_size;
+        run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue ,async_message_num);
+        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish r_transactions_queue";
         run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
+        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish c_transactions_queue";
         for(size_t r = 0; r < r_size; r ++ ){
           // 发回原地...
           size_t generator_id = context.coordinator_num;
@@ -558,7 +596,8 @@ public:
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
-    VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time4 / 1000 << "  execute: " << time2 / 1000 << "  commit: " << time3 / 1000 << "  router : " << time1 / 1000; 
+    if(cur_queue_size > 0)
+      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time4 / cur_queue_size << "  execute: " << time2 / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 
@@ -798,32 +837,31 @@ private:
       bool local_read = false;
 
       auto &readKey = txn.readSet[key_offset];
+      // master-replica
       auto coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      size_t coordinator_secondaryID = context.coordinator_num + 1;
+      std::set<size_t> coordinator_secondaryIDs; // = context.coordinator_num + 1;
       if(readKey.get_write_lock_bit()){
-        coordinator_secondaryID = this->partitioner->secondary_coordinator(table_id, partition_id, key);
+        // write key, the find all its replica
+        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
+        coordinator_secondaryIDs = tmp->secondary_coordinators(table_id, partition_id, key);
       }
 
       if(coordinatorID == context.coordinator_num || 
-         coordinator_secondaryID == context.coordinator_num || 
-         coordinatorID == coordinator_secondaryID){
+         coordinator_secondaryIDs.empty()){
+         // coordinator_secondaryID == context.coordinator_num || 
+         // coordinatorID == coordinator_secondaryID){
         success = false;
         return 0;
       }
-
+      // sec keys replicas
       readKey.set_dynamic_coordinator_id(coordinatorID);
-      readKey.set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
-
-      // SiloRWKey *writeKey = txn.get_write_key(readKey.get_key());
-      // if(writeKey != nullptr){
-      //   writeKey->set_dynamic_coordinator_id(coordinatorID);
-      //   writeKey->set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
-      // }
+      readKey.set_dynamic_secondary_coordinator_ids(coordinator_secondaryIDs);
 
       bool remaster = false;
 
       ITable *table = this->db.find_table(table_id, partition_id);
       if (coordinatorID == coordinator_id) {
+        // master-replica is at local node 
         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
         if(success == false){
           return 0;
@@ -831,10 +869,10 @@ private:
         // 赶快本地lock
         if(readKey.get_write_lock_bit()){
           TwoPLHelper::write_lock(tid, success);
-          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id();
+          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id_printed();
         } else {
           TwoPLHelper::read_lock(tid, success);
-          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id();
+          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id_printed();
         }
         if(success){
           readKey.set_read_respond_bit();
@@ -843,10 +881,7 @@ private:
         }
         local_read = true;
       } else {
-        // if(table_id == 2){
-        //   LOG(INFO) << "nani?";
-        //   txn.readSet[key_offset].get_dynamic_coordinator_id();
-        // }
+        // master not at local, but has a secondary one. need to be remastered
         // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
         remaster = table->contains(key); // current coordniator
         
@@ -857,15 +892,17 @@ private:
         auto ret = protocol.search(table_id, partition_id, key, value, success);
         return ret;
       } else {
-        
-        for(size_t i = 0; i < context.coordinator_num; i ++ ){
+        for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+          // also send to generator to update the router-table
           if(i == coordinator_id){
-            continue;
+            continue; // local
           }
           if(i == coordinatorID){
+            // target
             txn.network_size += MessageFactoryType::new_search_message(
                 *(this->messages[i]), *table, key, key_offset, remaster);
           } else {
+            // others, only change the router
             txn.network_size += MessageFactoryType::new_search_router_only_message(
                 *(this->messages[i]), *table, key, key_offset);
           }            
@@ -945,8 +982,8 @@ private:
       auto message = messages_[i].release();
       ////debug
 
-      auto it = message->begin(); 
-      MessagePiece messagePiece = *it;
+//      auto it = message->begin(); 
+//      MessagePiece messagePiece = *it;
 //      LOG(INFO) << "messagePiece " << messagePiece.get_message_type() << " " << i << " = " << static_cast<int>(LionMessage::REPLICATION_RESPONSE);
       ////
       out_queue.push(message);
@@ -1018,7 +1055,7 @@ private:
 
   std::deque<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue, 
                                                r_transactions_queue;
-  std::deque<uint64_t> s_source_coordinator_ids, c_source_coordinator_ids;
+  std::deque<uint64_t> s_source_coordinator_ids, c_source_coordinator_ids, r_source_coordinator_ids;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx
 

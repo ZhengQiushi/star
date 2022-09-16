@@ -287,90 +287,94 @@ public:
       responseMessage.flush();
       return;
     } else {
-      VLOG(DEBUG_V12) << " Lock" << *(int*)key << " " << tid << " " << latest_tid;
+      VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
 
     bool is_delete = false;
 
     // lock the router_table 
     if(partitioner->is_dynamic()){
-          // 该数据原来的位置
+          // 数据所在节点
           auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-          auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+          // 数据所在节点的路由表
+          auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
           
-          uint64_t old_secondary_coordinator_id = *(uint64_t*)router_table_old->search_value(key);
-          uint64_t static_coordinator_id = partition_id % context.coordinator_num; //; partitioner->secondary_coordinator(partition_id);
+          auto pair = (std::pair<size_t, std::set<size_t>>*)router_table->search_value(key);
+          uint64_t static_coordinator_id = partition_id % context.coordinator_num;
 
           // create the new tuple in global router of source request node
           auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+
           if(coordinator_id_new != coordinator_id_old){
-            DCHECK(coordinator_id_new != coordinator_id_old);
-            auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
-
-            VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id;
-            // 
-            char* value_transfer = new char[value_size + 1];
-            if(success == true && remaster == false){
-              auto row = table.search(key);
-              TwoPLHelper::read(row, value_transfer, value_size);
-            }
-
+            // 数据更新到 发req的对面
+            // auto router_table_new = db.find_router_table(table_id); // , coordinator_id_new);
+            VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
             
+            // update the router 
+            pair->first = coordinator_id_new;
+            pair->second.insert(coordinator_id_new);
 
-            size_t new_secondary_coordinator_id;
-            // be related with static replica 涉及 静态副本 
-            if(coordinator_id_new == static_coordinator_id || 
-              coordinator_id_old == static_coordinator_id ){ 
-              // local is or new destination has a replica 
-              if(coordinator_id_new == static_coordinator_id) {
-                // move to static replica 迁移到 静态副本, 
-                // 动态从副本 为 原来的位置
-                new_secondary_coordinator_id = coordinator_id_old;
-              } else {
-                // 从静态副本迁出
-                // 动态从副本 为 静态副本的位置
-                new_secondary_coordinator_id = static_coordinator_id;
-              }
+            // 
+            // size_t new_secondary_coordinator_id = ;
+            // // be related with static replica 涉及 静态副本 
+            // if(coordinator_id_new == static_coordinator_id || 
+            //   coordinator_id_old == static_coordinator_id ){ 
+            //   // local is or new destination has a replica 
+            //   if(coordinator_id_new == static_coordinator_id) {
+            //     // move to static replica 迁移到 静态副本, 
+            //     // 动态从副本 为 原来的位置
+            //     new_secondary_coordinator_id = coordinator_id_old;
+            //   } else {
+            //     // 从静态副本迁出
+            //     // 动态从副本 为 静态副本的位置
+            //     new_secondary_coordinator_id = static_coordinator_id;
+            //   }
 
-              // 从静态副本迁出，且迁出地不是动态从副本的地方！
-              //!TODO 需要删除原从副本 
-              //
+            //   // 从静态副本迁出，且迁出地不是动态从副本的地方！
+            //   //!TODO 需要删除原从副本 
+            //   //
 
-            } else {
-              // only transfer can reach
-              if(remaster == true){
-                success = false;
-                VLOG(DEBUG_V12) << "  Not Transfer " << *(int*)key; // << " " << tid_int;
-              } else {
-                // 非静态 迁到 新的非静态 1. delete old
-                VLOG(DEBUG_V12) << "  DELETE " << *(int*)key << " " << coordinator_id_old << " --> " << coordinator_id_new;
-                table.delete_(key);
-                is_delete = true;
-                // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
-                // 2. 
-                new_secondary_coordinator_id = static_coordinator_id;
-              }
+            // } else {
+            //   // only transfer can reach
+            //   if(remaster == true){
+            //     success = false;
+            //     VLOG(DEBUG_V12) << "  Not Transfer " << *(int*)key; // << " " << tid_int;
+            //   } else {
+            //     // 非静态 迁到 新的非静态 1. delete old
+            //     VLOG(DEBUG_V12) << "  DELETE " << *(int*)key << " " << coordinator_id_old << " --> " << coordinator_id_new;
+            //     // table.delete_(key);
+            //     is_delete = true;
+            //     // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+            //     // 2. 
+            //     new_secondary_coordinator_id = static_coordinator_id;
+            //   }
 
-            }
+            // }
 
             encoder << latest_tid << key_offset << success << remaster;
             // reserve size for read
             responseMessage.data.append(value_size, 0);
-
+            
+//            auto value = table.search_value(key);
+//            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
+            
             if(success == true && remaster == false){
               // transfer: read from db and load data into message buffer
               void *dest =
                   &responseMessage.data[0] + responseMessage.data.size() - value_size;
-              memcpy(dest, value_transfer, value_size);
+              auto row = table.search(key);
+              TwoPLHelper::read(row, dest, value_size);
+              // memcpy(dest, value_transfer, value_size);
             }
             responseMessage.flush();
 
-            delete[] value_transfer;
+            // delete[] value_transfer;
 
             // 修改路由表
-            router_table_new->insert(key, &new_secondary_coordinator_id); // 
-            // delete old value in router and real-replica
-            router_table_old->delete_(key);
+            // router_table_new->insert(key, &new_secondary_coordinator_id); // 
+            // // delete old value in router and real-replica
+            // router_table_old->delete_(key);
+
           } else if(coordinator_id_new == coordinator_id_old) {
             success = false;
             VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
@@ -411,6 +415,11 @@ public:
                                       Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue
 ) {
+    /**
+     * @brief 
+     * 
+     * 
+     */
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE));
     auto table_id = inputPiece.get_table_id();
@@ -438,9 +447,6 @@ std::deque<simpleTransaction>* router_txn_queue
       value_size = 0;
     }
 
-    stringPiece = inputPiece.toStringPiece();
-    stringPiece.remove_prefix(value_size);
-
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   sizeof(tid) +
                                                   sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
@@ -449,7 +455,7 @@ std::deque<simpleTransaction>* router_txn_queue
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
     
-    SiloRWKey &readKey = txn->readSet[key_offset];
+    LionRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
     bool is_exist = table.contains(key);
@@ -459,6 +465,7 @@ std::deque<simpleTransaction>* router_txn_queue
     uint64_t last_tid = 0;
 
     if(success == true){
+      // request return success
       if(is_exist){
         std::atomic<uint64_t>& tid_c = table.search_metadata(key);// 
         if(readKey.get_write_lock_bit()){
@@ -490,11 +497,18 @@ std::deque<simpleTransaction>* router_txn_queue
         readKey.set_tid(tid);
       } else {
         // transfer read from message piece
-        dec = Decoder(inputPiece.toStringPiece());
+        stringPiece = inputPiece.toStringPiece();
+        stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster));
+
+        dec = Decoder(stringPiece);
         dec.read_n_bytes(readKey.get_value(), value_size);
         readKey.set_tid(tid);
       }
       
+      VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << tidd << " " << tid << "  " << remaster << " | " << success << " " << can_be_locked;
+
+      DCHECK(strlen((char*)readKey.get_value()) > 0);
+
       // insert remote tuple to local replica 
       if(partitioner->is_dynamic()){
         // key && value
@@ -502,94 +516,109 @@ std::deque<simpleTransaction>* router_txn_queue
         auto value = readKey.get_value();
 
         auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-        auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+        auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
         
-        uint64_t old_secondary_coordinator_id = *(uint64_t*)router_table_old->search_value(key);
-        uint64_t static_coordinator_id = partition_id % context.coordinator_num; //; partitioner->secondary_coordinator(partition_id);
+        auto pair = (std::pair<size_t, std::set<size_t>>*)router_table->search_value(key);
+        uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
 
         // create the new tuple in global router of source request node
         auto coordinator_id_new = responseMessage.get_source_node_id(); 
         DCHECK(coordinator_id_new != coordinator_id_old);
-        auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
+        // auto router_table_new = db.find_router_table(table_id); //, coordinator_id_new);
 
-        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tidd << " " << tid;
+        VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tidd << " " << tid << "  " << remaster;
         // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         //   ITable* tab = db.find_router_table(table_id, i);
         //   LOG(INFO) << i << ": " << tab->table_record_num();
         // }
 
-
-        // 
-        size_t new_secondary_coordinator_id;
-        // be related with static replica
-        // 涉及 静态副本 
-        if(coordinator_id_new == static_coordinator_id || 
-           coordinator_id_old == static_coordinator_id ){ 
-          // local is or new destination has a replica 
-          if(coordinator_id_new == static_coordinator_id) {
-            // move to static replica 迁移到 静态副本, 
-            // 动态从副本 为 原来的位置
-            new_secondary_coordinator_id = coordinator_id_old;
-          } else {
-            // 从静态副本迁出
-            // 动态从副本 为 静态副本的位置
-            new_secondary_coordinator_id = static_coordinator_id;
-          }
-
-          // 从静态副本迁出，且迁出地不是动态从副本的地方！
-          if(coordinator_id_old == static_coordinator_id && 
-             coordinator_id_new != old_secondary_coordinator_id){
-            //!TODO 现在可能会重复插入
-            if(remaster == true){
-              // 不应该进入
-              DCHECK(false);
-            }
-            if(!table.contains(key)){
-              table.insert(key, value, (void*)& tidd); 
-            }
-            // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
-
-          }
-
+        if(remaster){
+          
         } else {
-          // 非静态 迁到 新的非静态
-          // 1. insert new
-          if(remaster == true){
-            // 不应该进入
-            DCHECK(false);
-          }
-          if(!table.contains(key)){
-            table.insert(key, value, (void*)& tidd);
-          }
-          // LOG(INFO) << *(int*) key << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+          DCHECK(pair->second.count(coordinator_id_new) == 0);
+        }
+        pair->first = coordinator_id_new;
+        pair->second.insert(coordinator_id_new);
 
-          // 2. 
-          new_secondary_coordinator_id = static_coordinator_id;
+        if(!table.contains(key)){
+          table.insert(key, value, (void*)& tidd); 
+          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+        } else {
+          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " remaster " << coordinator_id_old << " --> " << coordinator_id_new;
         }
 
-        // 修改路由表
-        if(!router_table_new->contains(key)){
-          router_table_new->insert(key, &new_secondary_coordinator_id);
-          router_table_old->delete_(key);
-        }
+        
+        // // 
+        // // size_t new_secondary_coordinator_id;
+        // // be related with static replica
+        // // 涉及 静态副本 
+        // if(coordinator_id_new == static_coordinator_id || 
+        //    coordinator_id_old == static_coordinator_id ){ 
+        //   // local is or new destination has a replica 
+        //   if(coordinator_id_new == static_coordinator_id) {
+        //     // move to static replica 迁移到 静态副本, 
+        //     // 动态从副本 为 原来的位置
+        //     new_secondary_coordinator_id = coordinator_id_old;
+        //   } else {
+        //     // 从静态副本迁出
+        //     // 动态从副本 为 静态副本的位置
+        //     new_secondary_coordinator_id = static_coordinator_id;
+        //   }
+
+        //   // 从静态副本迁出，且迁出地不是动态从副本的地方！
+        //   if(coordinator_id_old == static_coordinator_id && 
+        //      coordinator_id_new != old_secondary_coordinator_id){
+        //     //!TODO 现在可能会重复插入
+        //     if(remaster == true){
+        //       // 不应该进入
+        //       // DCHECK(false);
+        //       // txn->abort_lock = true;
+        //       // return;
+        //     }
+        //     if(!table.contains(key)){
+        //       table.insert(key, value, (void*)& tidd); 
+        //     }
+        //     
+
+        //   }
+
+        // } else {
+        //   // 非静态 迁到 新的非静态
+        //   // 1. insert new
+        //   if(remaster == true){
+        //     // 不应该进入
+        //     // DCHECK(false);
+        //     // txn->abort_lock = true;
+        //     // return;
+        //   }
+        //   if(!table.contains(key)){
+        //     table.insert(key, value, (void*)& tidd);
+        //   }
+        //   VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert " << coordinator_id_old << " --> " << coordinator_id_new;
+
+        //   // 2. 
+        //   new_secondary_coordinator_id = static_coordinator_id;
+        // }
+
+        // // 修改路由表
+        // if(!router_table_new->contains(key)){
+        //   router_table_new->insert(key, &new_secondary_coordinator_id);
+        //   router_table_old->delete_(key);
+        // }
 
         // update txn->writekey dynamic coordinator_id
+        std::set<size_t> copy_set = pair->second;
+
         readKey.set_dynamic_coordinator_id(coordinator_id_new);
-        readKey.set_dynamic_secondary_coordinator_id(new_secondary_coordinator_id);
+        readKey.set_dynamic_secondary_coordinator_ids(copy_set);
         readKey.set_read_respond_bit();
 
-        DCHECK(coordinator_id_new != new_secondary_coordinator_id);
+        // DCHECK(coordinator_id_new != coordinator_id_old);
 
-        // SiloRWKey *writeKey = txn->get_write_key(readKey.get_key());
-        // if(writeKey != nullptr){
-        //   writeKey->set_dynamic_coordinator_id(coordinator_id_new);
-        //   writeKey->set_dynamic_secondary_coordinator_id(new_secondary_coordinator_id);
-        //   writeKey->set_read_respond_bit();
-        // }
       }
 
     } else {
-      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tidd;
+      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tidd; // VLOG(DEBUG_V14)
       txn->abort_lock = true;
     }
 
@@ -635,32 +664,38 @@ std::deque<simpleTransaction>* router_txn_queue
     dec >> commit_tid;
 
     DCHECK(dec.size() == 0);
-
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
-
     bool success;
-    TwoPLHelper::write_lock(tid, success);
-    // while(success != true){
-    //   std::this_thread::yield();
-    //   // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
-    //   TwoPLHelper::write_lock(tid, success);
-    // }
-    if(success){
-      //! TODO logic needs to be checked
-      // DCHECK(last_tid < commit_tid);
-      table.deserialize_value(key, valueStringPiece);
-      TwoPLHelper::write_lock_release(tid, commit_tid);
-    }
-    
-    int debug_key = *(int*)key;
-//    LOG(INFO) << " request from : " << debug_key;
 
+    std::atomic<uint64_t> &tid = table.search_metadata(key, success);
+    int debug_key = *(int*)key;
+
+    if(success){
+      TwoPLHelper::write_lock(tid, success);
+      // while(success != true){
+      //   std::this_thread::yield();
+      //   // 说明local data 本来就已经被locked，会被 Thomas write rule 覆盖... 
+      //   TwoPLHelper::write_lock(tid, success);
+      // }
+      
+      // LOG(INFO) << " request from : " << debug_key;
+      if(success){
+        auto test = table.search_value(key);
+
+        VLOG(DEBUG_V14) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key << " " << (char*)test;
+
+        //! TODO logic needs to be checked
+        // DCHECK(last_tid < commit_tid);
+        table.deserialize_value(key, valueStringPiece);
+        TwoPLHelper::write_lock_release(tid, commit_tid);
+      }
+    } else {
+      LOG(INFO) << " replication failed: " << debug_key;
+    }
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + sizeof(debug_key);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE), message_size,
         table_id, partition_id);
-//    LOG(INFO) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key;
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header << debug_key;
     responseMessage.flush();
@@ -707,7 +742,7 @@ std::deque<simpleTransaction>* router_txn_queue
     /**
      * @brief directly move the data to the request node!
      * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
-     * 
+     * Transaction *txn unused
      */
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_ROUTER_ONLY));
@@ -759,7 +794,7 @@ std::deque<simpleTransaction>* router_txn_queue
     // lock the router_table 
     if(partitioner->is_dynamic()){
       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-      auto router_table_old = db.find_router_table(table_id, coordinator_id_old);
+      // auto router_table_old = db.find_router_table(table_id); // , coordinator_id_old);
       
       // preemption
       // bool success;
@@ -773,16 +808,17 @@ std::deque<simpleTransaction>* router_txn_queue
       // create the new tuple in global router of source request node
       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
       if(coordinator_id_new != coordinator_id_old){
-        auto router_table_new = db.find_router_table(table_id, coordinator_id_new);
-
+        auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
+        auto pair = (std::pair<size_t, std::set<size_t>>*)router_table->search_value(key);
         // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
 
-        router_table_new->insert(key, &coordinator_id_new);
+        pair->first = coordinator_id_new;// (key, &coordinator_id_new);
+        pair->second.insert(coordinator_id_new);
         // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
         // TwoPLHelper::lock(tid_r_new); // locked, not available so far
 
         // delete old value in router and real-replica
-        router_table_old->delete_(key);
+        // router_table_old->delete_(key);
         
         // TwoPLHelper::unlock(tid_r_new); 
       }
@@ -904,7 +940,7 @@ std::deque<simpleTransaction>* router_txn_queue
     Decoder dec(stringPiece);
     dec >> tid >> key_offset;
 
-    SiloRWKey &readKey = txn->readSet[key_offset];
+    LionRWKey &readKey = txn->readSet[key_offset];
     dec = Decoder(inputPiece.toStringPiece());
     dec.read_n_bytes(readKey.get_value(), value_size);
     readKey.set_tid(tid);

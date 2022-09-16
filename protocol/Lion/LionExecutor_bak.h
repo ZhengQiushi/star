@@ -2005,12 +2005,6 @@ protected:
       readKey.set_dynamic_coordinator_id(coordinatorID);
       readKey.set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
 
-      // SiloRWKey *writeKey = txn.get_write_key(readKey.get_key());
-      // if(writeKey != nullptr){
-      //   writeKey->set_dynamic_coordinator_id(coordinatorID);
-      //   writeKey->set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
-      // }
-
       bool remaster = false;
 
       ITable *table = this->db.find_table(table_id, partition_id);

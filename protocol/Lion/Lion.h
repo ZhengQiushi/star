@@ -16,9 +16,9 @@
 // #include "protocol/TwoPL/TwoPLRWKey.h"
 // #include "protocol/TwoPL/TwoPLTransaction.h"
 
-#include "protocol/Silo/SiloHelper.h"
-#include "protocol/Silo/SiloRWKey.h"
-#include "protocol/Silo/SiloTransaction.h"
+// #include "protocol/Silo/SiloHelper.h"
+#include "protocol/Lion/LionRWKey.h"
+// #include "protocol/Silo/SiloTransaction.h"
 
 #include "protocol/Lion/LionTransaction.h"
 #include "protocol/Lion/LionManager.h"
@@ -320,8 +320,8 @@ private:
 
       // lock dynamic replica
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
-      auto secondary_coordinatorID = readKey.get_dynamic_secondary_coordinator_id();
-      DCHECK(coordinatorID != secondary_coordinatorID);
+      auto secondary_coordinatorIDs = readKey.get_dynamic_secondary_coordinator_id();
+      // DCHECK(coordinatorID != secondary_coordinatorID);
       // auto router_table = db.find_router_table(tableId, coordinatorID);
       // std::atomic<uint64_t> &tid_ = router_table->search_metadata(key);
 
@@ -347,7 +347,7 @@ private:
       for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
         
         // k does not have this partition
-        if (k != secondary_coordinatorID && k != coordinatorID) {
+        if (!secondary_coordinatorIDs.count(k) && k != coordinatorID) {
           continue;
         }
 
@@ -366,8 +366,9 @@ private:
           txn.network_size += MessageFactoryType::new_replication_message(
               *messages[coordinatorID], *table, readKey.get_key(),
               readKey.get_value(), commit_tid);
-
-//          LOG(INFO) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key();
+          
+          VLOG(DEBUG_V14) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
+          DCHECK(strlen((char*)readKey.get_value()) > 0);
           async_message_num.fetch_add(1);
           send_replica = true;
         }

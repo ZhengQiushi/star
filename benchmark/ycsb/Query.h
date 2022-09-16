@@ -43,23 +43,23 @@ public:
     int workload_type = which_workload_(crossPartition, (int)cur_timestamp);
 
     // generate a key in a partition
-    if (crossPartition <= context.crossPartitionProbability &&
-          context.partition_num > 1) {
-        // 保障跨分区
-        if(key_range % 2 == 0){ // partition even
-          first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
-                  random.uniform_dist(0, 
-                                      my_threshold / 2 * (static_cast<int>(context.keysPerPartition) - 1));
-        } else { // partition odd
-          first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
-                  random.uniform_dist(my_threshold / 2 * (static_cast<int>(context.keysPerPartition) - 1) + 1, 
-                                      my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
-        }
-    } else {
+    // if (crossPartition <= context.crossPartitionProbability &&
+    //       context.partition_num > 1) {
+    //     // 保障跨分区
+    //     if(key_range % 2 == 0){ // partition even
+    //       first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+    //               random.uniform_dist(0, 
+    //                                   my_threshold / 2 * (static_cast<int>(context.keysPerPartition) - 1));
+    //     } else { // partition odd
+    //       first_key = (int32_t(key_range / 2) * 2)  * static_cast<int32_t>(context.keysPerPartition) + 
+    //               random.uniform_dist(my_threshold / 2 * (static_cast<int>(context.keysPerPartition) - 1) + 1, 
+    //                                   my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+    //     }
+    // } else {
         // 单分区
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
                 random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
-    }
+    // }
 
     for (auto i = 0u; i < N; i++) {
       // read or write

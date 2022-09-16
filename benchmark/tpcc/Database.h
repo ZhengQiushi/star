@@ -40,10 +40,10 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id, std::size_t coordinator_id) {
+  ITable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
     DCHECK(table_id < tbl_vecs.size());
-    DCHECK(coordinator_id < tbl_vecs[table_id].size());
-    return tbl_vecs_router[table_id][coordinator_id];
+    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id]; // [coordinator_id];
   }
 
   ITable *tbl_warehouse(std::size_t partition_id) {
@@ -160,11 +160,11 @@ public:
       // void warehouseInit(std::size_t partitionID) {
       warehouse::key key;
       key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
-      ITable *table_router = tbl_warehouse_vec_router[router_coordinator].get();
+      ITable *table_router = tbl_warehouse_vec_router.get();
       table_router->insert(&key, &secondary_router_coordinator);
 
       // void districtInit(std::size_t partitionID)
-      table_router = tbl_district_vec_router[router_coordinator].get();
+      table_router = tbl_district_vec_router.get();
       for (int i = 1; i <= 10; i++) {
         district::key key;
         key.D_W_ID = partitionID + 1;
@@ -173,7 +173,7 @@ public:
       }
 
       // customerInit(std::size_t partitionID)
-      table_router = tbl_customer_vec_router[router_coordinator].get();
+      table_router = tbl_customer_vec_router.get();
       for (int i = 1; i <= 10; i++) {
         for (int j = 1; j <= 3000; j++) {
 
@@ -187,11 +187,11 @@ public:
       }
 
       // customerNameIdxInit
-      table_router = tbl_customer_name_idx_vec_router[router_coordinator].get();
+      table_router = tbl_customer_name_idx_vec_router.get();
       // todo
 
       // stockInit
-      table_router = tbl_stock_vec_router[router_coordinator].get();
+      table_router = tbl_stock_vec_router.get();
       for (int i = 1; i <= 100000; i++) {
         stock::key key;
         key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
@@ -205,7 +205,7 @@ public:
     for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
 
       int router_coordinator = int(c_id);
-      ITable *table_router = tbl_item_vec_router[router_coordinator].get();
+      ITable *table_router = tbl_item_vec_router.get();
 
       // 100,000 rows in the ITEM table
       for (int i = 1; i <= 100000; i++) {
@@ -235,11 +235,11 @@ public:
       // void warehouseInit(std::size_t partitionID) {
       warehouse::key key;
       key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
-      ITable *table_router = tbl_warehouse_vec_router[router_coordinator].get();
+      ITable *table_router = tbl_warehouse_vec_router.get();
       table_router->insert(&key, &router_coordinator);
 
       // void districtInit(std::size_t partitionID)
-      table_router = tbl_district_vec_router[router_coordinator].get();
+      table_router = tbl_district_vec_router.get();
       for (int i = 1; i <= 10; i++) {
         district::key key;
         key.D_W_ID = partitionID + 1;
@@ -248,7 +248,7 @@ public:
       }
 
       // customerInit(std::size_t partitionID)
-      table_router = tbl_customer_vec_router[router_coordinator].get();
+      table_router = tbl_customer_vec_router.get();
       for (int i = 1; i <= 10; i++) {
         for (int j = 1; j <= 3000; j++) {
 
@@ -262,11 +262,11 @@ public:
       }
 
       // customerNameIdxInit
-      table_router = tbl_customer_name_idx_vec_router[router_coordinator].get();
+      table_router = tbl_customer_name_idx_vec_router.get();
       // todo
 
       // stockInit
-      table_router = tbl_stock_vec_router[router_coordinator].get();
+      table_router = tbl_stock_vec_router.get();
       for (int i = 1; i <= 100000; i++) {
         stock::key key;
         key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
@@ -280,7 +280,7 @@ public:
     for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
 
       int router_coordinator = int(c_id);
-      ITable *table = tbl_item_vec_router[router_coordinator].get();
+      ITable *table = tbl_item_vec_router.get();
 
       // 100,000 rows in the ITEM table
       for (int i = 1; i <= 100000; i++) {
@@ -295,53 +295,54 @@ public:
   }
   void allocate_router_table(const Context& context){
 
-    for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
+    // for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
+      size_t i = 0;
       auto warehouseTableID = warehouse::tableID;
-      tbl_warehouse_vec_router.push_back(
+      tbl_warehouse_vec_router =
           std::make_unique<Table<997, warehouse::key, warehouse::value>>(
-              warehouseTableID, i));
+              warehouseTableID, i);
       auto districtTableID = district::tableID;
-      tbl_district_vec_router.push_back(
+      tbl_district_vec_router = (
           std::make_unique<Table<997, district::key, district::value>>(
               districtTableID, i));
       auto customerTableID = customer::tableID;
-      tbl_customer_vec_router.push_back(
+      tbl_customer_vec_router = (
           std::make_unique<Table<997, customer::key, customer::value>>(
               customerTableID, i));
       auto customerNameIdxTableID = customer_name_idx::tableID;
-      tbl_customer_name_idx_vec_router.push_back(
+      tbl_customer_name_idx_vec_router = (
           std::make_unique<
               Table<997, customer_name_idx::key, customer_name_idx::value>>(
               customerNameIdxTableID, i));
       auto historyTableID = history::tableID;
-      tbl_history_vec_router.push_back(
+      tbl_history_vec_router = (
           std::make_unique<Table<997, history::key, history::value>>(
               historyTableID, i));
       auto newOrderTableID = new_order::tableID;
-      tbl_new_order_vec_router.push_back(
+      tbl_new_order_vec_router = (
           std::make_unique<Table<997, new_order::key, new_order::value>>(
               newOrderTableID, i));
       auto orderTableID = order::tableID;
-      tbl_order_vec_router.push_back(
+      tbl_order_vec_router = (
           std::make_unique<Table<997, order::key, order::value>>(
 
               orderTableID, i));
       auto orderLineTableID = order_line::tableID;
-      tbl_order_line_vec_router.push_back(
+      tbl_order_line_vec_router = (
           std::make_unique<Table<997, order_line::key, order_line::value>>(
               orderLineTableID, i));
       auto stockTableID = stock::tableID;
-      tbl_stock_vec_router.push_back(
+      tbl_stock_vec_router = (
 
           std::make_unique<Table<997, stock::key, stock::value>>(stockTableID,
                                                                  i));
 
       auto itemTableID = item::tableID;
-      tbl_item_vec_router.push_back(
+      tbl_item_vec_router = (
         std::make_unique<Table<997, item::key, item::value>>(itemTableID, i));
 
 
-    }    
+    // }    
   }
 
 
@@ -436,27 +437,38 @@ public:
       // quick look-up for certain-key on which node
       allocate_router_table(context);
       tbl_vecs_router.resize(10);
-      std::transform(tbl_warehouse_vec_router.begin(), tbl_warehouse_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[0]), tFunc);
-      std::transform(tbl_district_vec_router.begin(), tbl_district_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[1]), tFunc);
-      std::transform(tbl_customer_vec_router.begin(), tbl_customer_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[2]), tFunc);
-      std::transform(tbl_customer_name_idx_vec_router.begin(),
-                    tbl_customer_name_idx_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[3]), tFunc);
-      std::transform(tbl_history_vec_router.begin(), tbl_history_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[4]), tFunc);
-      std::transform(tbl_new_order_vec_router.begin(), tbl_new_order_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[5]), tFunc);
-      std::transform(tbl_order_vec_router.begin(), tbl_order_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[6]), tFunc);
-      std::transform(tbl_order_line_vec_router.begin(), tbl_order_line_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[7]), tFunc);
-      std::transform(tbl_item_vec_router.begin(), tbl_item_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[8]), tFunc);
-      std::transform(tbl_stock_vec_router.begin(), tbl_stock_vec_router.end(),
-                    std::back_inserter(tbl_vecs_router[9]), tFunc);
+      tbl_vecs_router[0] = tbl_warehouse_vec_router.get();
+      tbl_vecs_router[1] = tbl_district_vec_router.get();
+      tbl_vecs_router[2] = tbl_customer_vec_router.get();
+      tbl_vecs_router[3] = tbl_customer_name_idx_vec_router.get();
+      tbl_vecs_router[4] = tbl_history_vec_router.get();
+      tbl_vecs_router[5] = tbl_new_order_vec_router.get();
+      tbl_vecs_router[6] = tbl_order_vec_router.get();
+      tbl_vecs_router[7] = tbl_order_line_vec_router.get();
+      tbl_vecs_router[8] = tbl_item_vec_router.get();
+      tbl_vecs_router[9] = tbl_stock_vec_router.get();
+
+      // std::transform(.begin(), tbl_warehouse_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[0]), tFunc);
+      // std::transform(tbl_district_vec_router.begin(), tbl_district_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[1]), tFunc);
+      // std::transform(tbl_customer_vec_router.begin(), tbl_customer_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[2]), tFunc);
+      // std::transform(tbl_customer_name_idx_vec_router.begin(),
+      //               tbl_customer_name_idx_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[3]), tFunc);
+      // std::transform(tbl_history_vec_router.begin(), tbl_history_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[4]), tFunc);
+      // std::transform(tbl_new_order_vec_router.begin(), tbl_new_order_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[5]), tFunc);
+      // std::transform(tbl_order_vec_router.begin(), tbl_order_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[6]), tFunc);
+      // std::transform(tbl_order_line_vec_router.begin(), tbl_order_line_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[7]), tFunc);
+      // std::transform(tbl_item_vec_router.begin(), tbl_item_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[8]), tFunc);
+      // std::transform(tbl_stock_vec_router.begin(), tbl_stock_vec_router.end(),
+      //               std::back_inserter(tbl_vecs_router[9]), tFunc);
       if(context.protocol == "Lion" || context.protocol == "LionNS" || context.protocol == "Hermes"){
         init_router_table(context);
       } else if (context.protocol == "Star"){
@@ -526,16 +538,33 @@ public:
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
-    std::size_t ret = coordinator_num;
-    for(size_t i = 0 ; i < coordinator_num; i ++ ){
-      ITable* tab = find_router_table(table_id, i);
-      if(tab->contains(key)){
-        ret = i;
-        break;
-      }
-    } 
-    DCHECK(ret != coordinator_num);
-    return ret;
+    // std::size_t ret = coordinator_num;
+    // for(size_t i = 0 ; i < coordinator_num; i ++ ){
+    //   ITable* tab = find_router_table(table_id, i);
+    //   if(tab->contains(key)){
+    //     ret = i;
+    //     break;
+    //   }
+    // } 
+    // DCHECK(ret != coordinator_num);
+    // return ret;
+    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    auto pair = (std::pair<size_t, std::set<size_t>>*)(tab->search_value(key));
+    //   if(tab->contains(key)){
+    //     ret = i;
+    //     break;
+    //   }
+    // }
+    
+    // if(ret == coordinator_num){
+    //   for(size_t i = 0 ; i < coordinator_num; i ++ ){
+    //     ITable* tab = find_router_table(table_id, i);
+    //     LOG(INFO) << "fuck " << i << ": " << tab->table_record_num();
+    //   }
+    // }
+
+    // DCHECK(ret != coordinator_num) << " " << table_id << " " << *(int*)key;
+    return pair->first;
   }
 
   void apply_operation(const Operation &operation) {
@@ -1033,7 +1062,7 @@ private:
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;
-  std::vector<std::vector<ITable *>> tbl_vecs_router;
+  std::vector<ITable *> tbl_vecs_router;
 
   std::vector<std::unique_ptr<ITable>> tbl_warehouse_vec;
   std::vector<std::unique_ptr<ITable>> tbl_district_vec;
@@ -1047,16 +1076,16 @@ private:
   std::vector<std::unique_ptr<ITable>> tbl_stock_vec;
 
 
-  std::vector<std::unique_ptr<ITable>> tbl_warehouse_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_district_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_customer_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_customer_name_idx_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_history_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_new_order_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_order_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_order_line_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_item_vec_router;
-  std::vector<std::unique_ptr<ITable>> tbl_stock_vec_router;
+  std::unique_ptr<ITable> tbl_warehouse_vec_router;
+  std::unique_ptr<ITable> tbl_district_vec_router;
+  std::unique_ptr<ITable> tbl_customer_vec_router;
+  std::unique_ptr<ITable> tbl_customer_name_idx_vec_router;
+  std::unique_ptr<ITable> tbl_history_vec_router;
+  std::unique_ptr<ITable> tbl_new_order_vec_router;
+  std::unique_ptr<ITable> tbl_order_vec_router;
+  std::unique_ptr<ITable> tbl_order_line_vec_router;
+  std::unique_ptr<ITable> tbl_item_vec_router;
+  std::unique_ptr<ITable> tbl_stock_vec_router;
 
 };
 } // namespace tpcc

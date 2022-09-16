@@ -19,15 +19,20 @@
 namespace star {
 namespace group_commit {
 
-template <class Workload> class LionGenerator : public Worker {
+template <class Workload, class Protocol> class LionGenerator : public Worker {
 public:
   using WorkloadType = Workload;
+  using ProtocolType = Protocol;
   using DatabaseType = typename WorkloadType::DatabaseType;
   using TransactionType = typename WorkloadType::TransactionType;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
+  using MessageType = typename ProtocolType::MessageType;
+  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
+  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
 
   using StorageType = typename WorkloadType::StorageType;
+
 
   LionGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
@@ -52,11 +57,11 @@ public:
       init_message(async_messages[i].get(), i);
     }
 
-    // messageHandlers = MessageHandlerType::get_message_handlers();
+    messageHandlers = MessageHandlerType::get_message_handlers();
     controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
 
-    message_stats.resize(controlMessageHandlers.size(), 0);
-    message_sizes.resize(controlMessageHandlers.size(), 0);
+    message_stats.resize(messageHandlers.size(), 0);
+    message_sizes.resize(messageHandlers.size(), 0);
 
     router_transaction_done.store(0);
     router_transactions_send.store(0);
@@ -90,6 +95,8 @@ public:
       bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
       if(is_cross_txn_static){
         txn->is_distributed = true;
+      } else {
+        DCHECK(txn->is_distributed == false);
       }
       
       // transactions_queue.push_back(std::move(cur_transaction));
@@ -108,6 +115,51 @@ public:
     }
     router_transaction_done.store(0);//router_transaction_done.fetch_sub(router_transactions_send.load());
     router_transactions_send.store(0);
+  }
+
+
+     std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
+      std::unordered_map<int, int> from_nodes_id;
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto query_keys = t->keys;
+      int max_cnt = 0;
+
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        if(is_dynamic){
+          // look-up the dynamic router to find-out where
+          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+        } else {
+          // cal the partition to figure out the coordinator-id
+          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        }
+        if(!from_nodes_id.count(cur_c_id)){
+          from_nodes_id[cur_c_id] = 1;
+        } else {
+          from_nodes_id[cur_c_id] += 1;
+        }
+        if(from_nodes_id[cur_c_id] > max_cnt){
+          max_cnt = from_nodes_id[cur_c_id];
+          max_node = cur_c_id;
+        }
+      }
+     return from_nodes_id;
+   }
+
+  int select_best_node(simpleTransaction* t) {
+    
+    int max_node = -1;
+    if(t->is_distributed){
+      std::unordered_map<int, int> result;
+      result = txn_nodes_involved(t, max_node, true);
+    } else {
+      max_node = t->partition_id % context.coordinator_num;
+    }
+
+    DCHECK(max_node != -1);
+    return max_node;
   }
   void start() override {
 
@@ -198,7 +250,7 @@ public:
             // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
             if(txn->is_distributed){ // static-distribute
               // 
-              coordinator_id_dst = 0;
+              coordinator_id_dst = select_best_node(txn.get());
             } else {
               DCHECK(txn->is_distributed == 0);
             }
@@ -389,7 +441,7 @@ public:
 
         MessagePiece messagePiece = *it;
         auto type = messagePiece.get_message_type();
-        DCHECK(type < controlMessageHandlers.size());
+        DCHECK(type < messageHandlers.size());
         ITable *table = db.find_table(messagePiece.get_table_id(),
                                       messagePiece.get_partition_id());
 
@@ -401,7 +453,14 @@ public:
             &router_transactions_queue,
             &router_stop_queue
           );
-        } 
+        } else if(type < messageHandlers.size()){
+          // transaction from LionExecutor
+          messageHandlers[type](messagePiece,
+                                *sync_messages[message->get_source_node_id()], 
+                                db, context, partitioner.get(),
+                                transaction.get(), 
+                                &router_transactions_queue);
+        }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
       }
@@ -493,6 +552,11 @@ protected:
 
   std::deque<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
+
+  std::vector<std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &, Partitioner *, // add partitioner
+                                 TransactionType *, 
+                                 std::deque<simpleTransaction>*)>>
+      messageHandlers;
 
   std::vector<
     std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>

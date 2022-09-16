@@ -15,7 +15,7 @@
 #include <thread>
 #include <vector>
 
-#include "protocol/Hermes/HermesMessage.h"
+// #include "protocol/Hermes/HermesMessage.h"
 namespace star {
 class IncomingDispatcher {
 
@@ -95,10 +95,10 @@ public:
            static_cast<uint32_t>(ControlMessage::STATISTICS);
   }
 
-  bool is_transaction_message(Message *message) {
-    return (*(message->begin())).get_message_type() ==
-           static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST);
-  }
+  // bool is_transaction_message(Message *message) {
+  //   return (*(message->begin())).get_message_type() ==
+  //          static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST);
+  // }
 
   bool is_record_txn_message_for_recorder(Message *message) {
     // worker -> recorder 的 COUNT message
@@ -180,10 +180,10 @@ public:
     //   VLOG(DEBUG_V8) << "send TRANSFER_REQUEST";
     // }
   }
-  bool is_transaction_message(Message *message) {
-    return (*(message->begin())).get_message_type() ==
-           static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST);
-  }
+  // bool is_transaction_message(Message *message) {
+  //   return (*(message->begin())).get_message_type() ==
+  //          static_cast<uint32_t>(HermesMessage::TRANSFER_REQUEST);
+  // }
   // void dispatchMessage(const std::shared_ptr<Worker> &worker) {
   void dispatchMessage(const std::vector<std::shared_ptr<Worker>> &workers, size_t cur_id, size_t recorder_id) {
     /**

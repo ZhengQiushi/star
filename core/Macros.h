@@ -61,7 +61,7 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
   context.coordinator_id = FLAGS_id;                                           \
   context.worker_num = FLAGS_threads;                                          \
   context.io_thread_num = FLAGS_io;                                            \
-  context.partition_num = FLAGS_partition_num;                                 \
+  context.partition_num = context.coordinator_num * FLAGS_partition_num;       \
   context.partitioner = FLAGS_partitioner;                                     \
   context.sleep_on_retry = FLAGS_sleep_on_retry;                               \
   context.batch_size = FLAGS_batch_size;                                       \

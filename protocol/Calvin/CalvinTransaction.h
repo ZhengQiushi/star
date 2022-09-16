@@ -57,7 +57,8 @@ public:
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
-  virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+    virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+  virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
   virtual std::size_t get_partition_id() = 0;
 

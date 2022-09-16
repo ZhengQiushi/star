@@ -9,7 +9,9 @@
 #include "core/Defs.h"
 #include "core/Partitioner.h"
 #include "core/Table.h"
-#include "protocol/Silo/SiloRWKey.h"
+#include "protocol/Lion/LionRWKey.h"
+#include <limits.h>
+
 #include <chrono>
 #include <glog/logging.h>
 #include <vector>
@@ -59,23 +61,18 @@ public:
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
-  virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+    virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+  virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
   virtual std::size_t get_partition_id() = 0;
 
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,
                           const KeyType &key, ValueType &value) {
-    SiloRWKey readKey;
+    LionRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
-
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
 
     readKey.set_key(&key);
     readKey.set_value(&value);
@@ -93,16 +90,10 @@ public:
   void search_for_read(std::size_t table_id, std::size_t partition_id,
                        const KeyType &key, ValueType &value) {
 
-    SiloRWKey readKey;
+    LionRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
-
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
 
     readKey.set_key(&key);
     readKey.set_value(&value);
@@ -120,17 +111,11 @@ public:
   void search_for_update(std::size_t table_id, std::size_t partition_id,
                          const KeyType &key, ValueType &value) {
 
-    SiloRWKey readKey;
+    LionRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
     
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
-
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -147,17 +132,11 @@ public:
   template <class KeyType, class ValueType>
   void update(std::size_t table_id, std::size_t partition_id,
               const KeyType &key, const ValueType &value) {
-    SiloRWKey writeKey;
+    LionRWKey writeKey;
 
     writeKey.set_table_id(table_id);
     writeKey.set_partition_id(partition_id);
 
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // writeKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-    
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
-    
     writeKey.set_write_lock_bit();
 
     writeKey.set_key(&key);
@@ -181,7 +160,7 @@ public:
         break;
       }
 
-      const SiloRWKey &readKey = readSet[i];
+      const LionRWKey &readKey = readSet[i];
       auto tid =
           readRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
                              i, readKey.get_key(), readKey.get_value(),
@@ -223,7 +202,7 @@ public:
         break;
       }
 
-      const SiloRWKey &readKey = readSet[i];
+      const LionRWKey &readKey = readSet[i];
       auto tid =
           readOnlyRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
                              i, readKey.get_key(), readKey.get_value(),
@@ -256,7 +235,7 @@ public:
         break;
       }
 
-      const SiloRWKey &readKey = readSet[i];
+      const LionRWKey &readKey = readSet[i];
       auto tid =
           localReadRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
                              i, readKey.get_key(), readKey.get_value(),
@@ -274,7 +253,7 @@ public:
     return false;
   }
 
-  SiloRWKey *get_read_key(const void *key) {
+  LionRWKey *get_read_key(const void *key) {
 
     for (auto i = 0u; i < readSet.size(); i++) {
       if (readSet[i].get_key() == key) {
@@ -285,7 +264,7 @@ public:
     return nullptr;
   }
 
-  SiloRWKey *get_write_key(const void *key) {
+  LionRWKey *get_write_key(const void *key) {
 
     for (auto i = 0u; i < writeSet.size(); i++) {
       if (writeSet[i].get_key() == key) {
@@ -295,17 +274,17 @@ public:
     return nullptr;
   }
 
-  std::size_t add_to_read_set(const SiloRWKey &key) {
+  std::size_t add_to_read_set(const LionRWKey &key) {
     readSet.push_back(key);
     return readSet.size() - 1;
   }
 
-  std::size_t add_to_write_set(const SiloRWKey &key) {
+  std::size_t add_to_write_set(const LionRWKey &key) {
     writeSet.push_back(key);
     return writeSet.size() - 1;
   }
 
-  std::size_t add_to_router_set(const SiloRWKey &key) {
+  std::size_t add_to_router_set(const LionRWKey &key) {
     routerSet.push_back(key);
     return routerSet.size() - 1;
   }
@@ -347,7 +326,7 @@ public:
 
   Partitioner &partitioner;
   Operation operation;
-  std::vector<SiloRWKey> readSet, writeSet, routerSet;
+  std::vector<LionRWKey> readSet, writeSet, routerSet;
 };
 
 } // namespace star

@@ -695,6 +695,11 @@ public:
     return from_nodes_id;
   }
 
+  std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) override {
+    std::unordered_map<int, int> ret;
+    DCHECK(0 == 1);
+    return ret;
+  }
    bool check_cross_node_txn(bool is_dynamic) override{
     /**
      * @brief must be master and local 判断是不是跨节点事务
@@ -932,6 +937,10 @@ public:
 
   std::set<int> txn_nodes_involved(bool is_dynamic) override {
     std::set<int> ret;
+    return ret;
+  }
+  std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) override {
+    std::unordered_map<int, int> ret;
     return ret;
   }
    bool check_cross_node_txn(bool is_dynamic) override{

@@ -13,6 +13,7 @@
 #include <chrono>
 #include <glog/logging.h>
 #include <vector>
+#include <limits.h>
 
 namespace star {
 
@@ -64,7 +65,8 @@ public:
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
-  virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+    virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+  virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
   virtual std::size_t get_partition_id() = 0;
   
@@ -75,12 +77,6 @@ public:
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
-
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
 
     readKey.set_key(&key);
     readKey.set_value(&value);
@@ -103,12 +99,6 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
 
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
-
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -130,12 +120,6 @@ public:
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
     
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // readKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
-
     readKey.set_key(&key);
     readKey.set_value(&value);
 
@@ -156,14 +140,6 @@ public:
 
     writeKey.set_table_id(table_id);
     writeKey.set_partition_id(partition_id);
-
-    // auto dynamic_coordinator_id = partitioner.master_coordinator(table_id, partition_id, (void*) &key);
-    // writeKey.set_dynamic_coordinator_id(dynamic_coordinator_id);
-    
-    // auto dynamic_secondary_coordinator_id = partitioner.secondary_coordinator(table_id, partition_id, (void*) &key);
-    // writeKey.set_dynamic_secondary_coordinator_id(dynamic_secondary_coordinator_id);
-    
-    // writeKey.set_write_lock_bit();
 
     writeKey.set_key(&key);
     // the object pointed by value will not be updated

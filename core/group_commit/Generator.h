@@ -223,7 +223,7 @@ public:
         threads.emplace_back([&](int n) {
           
           size_t batch_size = (size_t)transactions_queue[n].size() < (size_t)context.batch_size ? (size_t)transactions_queue[n].size(): (size_t)context.batch_size;
-          for(size_t i = 0; i < batch_size; i ++ ){
+          for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
             std::unique_ptr<simpleTransaction> txn(transactions_queue[n].front());
             size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
             // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator

@@ -618,7 +618,7 @@ std::deque<simpleTransaction>* router_txn_queue
       }
 
     } else {
-      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tidd; // VLOG(DEBUG_V14)
+      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tidd; // 
       txn->abort_lock = true;
     }
 

@@ -374,7 +374,7 @@ private:
         }
       }
 
-      if(send_replica == false){
+      if(send_replica == false && context.coordinator_num > 1){
         DCHECK(false);
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);

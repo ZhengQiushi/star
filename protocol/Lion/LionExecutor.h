@@ -846,8 +846,7 @@ private:
         coordinator_secondaryIDs = tmp->secondary_coordinators(table_id, partition_id, key);
       }
 
-      if(coordinatorID == context.coordinator_num || 
-         coordinator_secondaryIDs.empty()){
+      if(coordinatorID == context.coordinator_num){
          // coordinator_secondaryID == context.coordinator_num || 
          // coordinatorID == coordinator_secondaryID){
         success = false;

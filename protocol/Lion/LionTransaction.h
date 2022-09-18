@@ -153,6 +153,8 @@ public:
      * @param i 
      */
     bool success = true;
+    // 
+    tids.resize(readSet.size(), nullptr);
     // cannot use unsigned type in reverse iteration
     for (int i = int(readSet.size()) - 1; i >= 0; i--) {
       // early return
@@ -297,6 +299,8 @@ public:
   std::size_t coordinator_id, partition_id;
   std::chrono::steady_clock::time_point startTime;
   std::size_t pendingResponses;
+  std::vector<std::atomic<uint64_t> *> tids;
+
   std::size_t network_size;
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;

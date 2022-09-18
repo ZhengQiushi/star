@@ -20,6 +20,7 @@
 #include "common/Time.h"
 #include "core/Partitioner.h"
 #include "core/Table.h"
+#include "core/RouterValue.h"
 #include <glog/logging.h>
 
 namespace star {
@@ -538,33 +539,9 @@ public:
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
-    // std::size_t ret = coordinator_num;
-    // for(size_t i = 0 ; i < coordinator_num; i ++ ){
-    //   ITable* tab = find_router_table(table_id, i);
-    //   if(tab->contains(key)){
-    //     ret = i;
-    //     break;
-    //   }
-    // } 
-    // DCHECK(ret != coordinator_num);
-    // return ret;
     ITable* tab = find_router_table(table_id); // , coordinator_id);
-    auto pair = (std::pair<size_t, std::set<size_t>>*)(tab->search_value(key));
-    //   if(tab->contains(key)){
-    //     ret = i;
-    //     break;
-    //   }
-    // }
-    
-    // if(ret == coordinator_num){
-    //   for(size_t i = 0 ; i < coordinator_num; i ++ ){
-    //     ITable* tab = find_router_table(table_id, i);
-    //     LOG(INFO) << "fuck " << i << ": " << tab->table_record_num();
-    //   }
-    // }
-
-    // DCHECK(ret != coordinator_num) << " " << table_id << " " << *(int*)key;
-    return pair->first;
+    auto router_val = (RouterValue*)(tab->search_value(key));
+    return router_val->get_dynamic_coordinator_id();
   }
 
   void apply_operation(const Operation &operation) {

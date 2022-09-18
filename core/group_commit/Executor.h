@@ -180,7 +180,7 @@ public:
     std::size_t becth_milli_window = 10; // milisecond
     
     for (;;) {
-
+      auto begin = std::chrono::steady_clock::now();
       ExecutorStatus status;
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
@@ -202,44 +202,47 @@ public:
 
       n_started_workers.fetch_add(1);
       
-      // auto startTime = std::chrono::steady_clock::now();
+      process_request();
 
-      // do {
+      auto now = std::chrono::steady_clock::now();
+
+      while(!is_router_stopped()){
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
 
-        while(!is_router_stopped()){
-          process_request();
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
+      unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
 
-        unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
+      VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size();
+      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
 
-        // double time_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        //          std::chrono::steady_clock::now() - startTime)
-        //          .count();
-        
-        // if(time_duration < becth_milli_window){
-        //   ; // pass
-        // } else {
-          // fullfill the batch
-          size_t r_size = r_transactions_queue.size();
-          run_transaction(context, partitioner.get(), r_transactions_queue); // 
-          for(size_t r = 0; r < r_size; r ++ ){
-            // 发回原地...
-            size_t generator_id = context.coordinator_num;
-            // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-            ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
-            flush_messages(async_messages);
-          }
-        //   break;
-        // }
+      size_t r_size = r_transactions_queue.size();
+      run_transaction(context, partitioner.get(), r_transactions_queue); // 
+      for(size_t r = 0; r < r_size; r ++ ){
+        // 发回原地...
+        size_t generator_id = context.coordinator_num;
+        // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+        ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
+        flush_messages(async_messages);
+      }
 
-        status = static_cast<ExecutorStatus>(worker_status.load());
-      // } while (status != ExecutorStatus::STOP);
+      status = static_cast<ExecutorStatus>(worker_status.load());
 
       flush_async_messages();
 
       n_complete_workers.fetch_add(1);
+
+
+      VLOG_IF(DEBUG_V, id==0) << "whole batch "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
 
       // once all workers are stop, we need to process the replication
       // requests

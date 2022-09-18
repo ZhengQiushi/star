@@ -10,6 +10,7 @@
 #include "common/Operation.h"
 #include "core/Partitioner.h"
 #include "core/Table.h"
+#include "core/RouterValue.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -45,25 +46,8 @@ public:
      * @brief from router table to find the coordinator
      * 
      */
-    // std::size_t ret = coordinator_num;
-    // for(size_t i = 0 ; i < coordinator_num; i ++ ){
     ITable* tab = find_router_table(table_id); // , coordinator_id);
-    auto pair = (std::pair<size_t, std::set<size_t>>*)(tab->search_value(key));
-    //   if(tab->contains(key)){
-    //     ret = i;
-    //     break;
-    //   }
-    // }
-    
-    // if(ret == coordinator_num){
-    //   for(size_t i = 0 ; i < coordinator_num; i ++ ){
-    //     ITable* tab = find_router_table(table_id, i);
-    //     LOG(INFO) << "fuck " << i << ": " << tab->table_record_num();
-    //   }
-    // }
-
-    // DCHECK(ret != coordinator_num) << " " << table_id << " " << *(int*)key;
-    return pair->first;
+    return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
   }
 
   void init_router_table(const Context& context){
@@ -96,11 +80,11 @@ public:
           size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
 
           ITable *table_router = tbl_vecs_router[0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
-          
-          std::set<size_t> s;
-          s.insert(router_coordinator);
-          s.insert(router_secondary_coordinator);
-          std::pair<size_t, std::set<size_t>> router = std::make_pair(router_coordinator, s);
+
+          RouterValue router;
+          router.set_dynamic_coordinator_id(router_coordinator);
+          router.set_secondary_coordinator_id(router_coordinator);
+          router.set_secondary_coordinator_id(router_secondary_coordinator);
           table_router->insert(&key, &router); // 
 
           // }
@@ -134,10 +118,10 @@ public:
           int router_coordinator = partitionID % context.coordinator_num;
           ITable *table_router = tbl_vecs_router[0];
 
-          std::set<size_t> s;
-          s.insert(0);
-          s.insert(router_coordinator);
-          std::pair<size_t, std::set<size_t>> router = std::make_pair(0, s);
+          RouterValue router;
+          router.set_dynamic_coordinator_id(0);
+          router.set_secondary_coordinator_id(0);
+          router.set_secondary_coordinator_id(router_coordinator);
           table_router->insert(&key, &router); // 
 
           // if(*(int*)(&key) == 7200034){
@@ -221,7 +205,7 @@ public:
     if(true){ // context.protocol == "Lion"
       // quick look-up for certain-key on which node, pre-allocate space
       // for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
-      tbl_ycsb_vec_router = (std::make_unique<Table<9973, ycsb::key, std::pair<size_t, std::set<size_t>>>>(ycsbTableID, 0));
+      tbl_ycsb_vec_router = (std::make_unique<Table<9973, ycsb::key, RouterValue>>(ycsbTableID, 0));
           // std::make_unique<Table<9973, ycsb::key, size_t>>(ycsbTableID, i)); // 
       // }
       tbl_vecs_router.resize(1);

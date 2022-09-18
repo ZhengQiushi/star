@@ -102,42 +102,16 @@ public:
     return (bitvec >> DYNAMIC_COORDINATOR_ID_OFFSET) & DYNAMIC_COORDINATOR_ID_MASK;
   }
 
-
-  // dynamic secondary coordinator id
-  void set_dynamic_secondary_coordinator_id(uint32_t dynamic_secondary_coordinator_id) {
-    dynamic_secondary_replicas.insert(dynamic_secondary_coordinator_id);
-    // DCHECK(dynamic_secondary_coordinator_id < (1 << 5));
-    // clear_dynamic_secondary_coordinator_id();
-    // bitvec |= dynamic_secondary_coordinator_id << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET;
+  // secondary coordinator id
+  void set_router_value(uint32_t dynamic_coordinator_id, uint64_t secondary_coordinator_id) {
+    router_val.set_dynamic_coordinator_id(dynamic_coordinator_id);
+    router_val.copy_secondary_coordinator_id(secondary_coordinator_id);
   }
 
-  // dynamic secondary coordinator id
-  void set_dynamic_secondary_coordinator_ids(std::set<size_t>& dynamic_secondary_coordinator_id) {
-    // dynamic_secondary_replicas.insert(dynamic_secondary_coordinator_id);
-    dynamic_secondary_replicas = std::move(dynamic_secondary_coordinator_id);
-    // DCHECK(dynamic_secondary_coordinator_id < (1 << 5));
-    // clear_dynamic_secondary_coordinator_id();
-    // bitvec |= dynamic_secondary_coordinator_id << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET;
+  const RouterValue* const get_router_value() const {
+    return &router_val;
   }
 
-  void clear_dynamic_secondary_coordinator_id() { 
-    dynamic_secondary_replicas.clear();
-    // bitvec &= ~(DYNAMIC_SECONDARY_COORDINATOR_ID_MASK << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET); 
-  }
-
-  std::set<size_t> get_dynamic_secondary_coordinator_id() const {
-    return dynamic_secondary_replicas;// (bitvec >> DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET) & DYNAMIC_SECONDARY_COORDINATOR_ID_MASK;
-  }
-
-  std::string get_dynamic_secondary_coordinator_id_printed() const {
-    std::string ret; 
-    ret += "[";
-    for(auto it: dynamic_secondary_replicas){
-      ret += std::to_string(it) + " ";
-    }
-    ret += "]";
-    return ret;// (bitvec >> DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET) & DYNAMIC_SECONDARY_COORDINATOR_ID_MASK;
-  }
   // partition id
 
   void set_partition_id(uint32_t partition_id) {
@@ -174,7 +148,7 @@ private:
    * A bitvec is a 32-bit word.
    *
    * [ table id (5) ] | partition id (8) | 
-   *   dynamic replica coordinator id (5) | dynamic secondary replica coordinator id(5) | unused bit (5) |
+   *   dynamic replica coordinator id (5) | secondary replica coordinator id(5 - unused) | unused bit (5) |
    *   read respond bit(1)
    *   write lock bit(1) | read request bit (1) | local index read (1)  ]
    *
@@ -184,8 +158,8 @@ private:
    *
    */
 
-  std::set<size_t> dynamic_secondary_replicas;
   uint32_t bitvec = 0;
+  RouterValue router_val;
   uint64_t tid = 0;
   const void *key = nullptr;
   void *value = nullptr;
@@ -200,8 +174,8 @@ public:
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_MASK = 0x1f;
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 14;
 
-  static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_MASK = 0x1f;
-  static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET = 9;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_MASK = 0x1f;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_OFFSET = 9;
 
   static constexpr uint32_t READ_RESPOND_BIT_MASK = 0x1;
   static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 3;

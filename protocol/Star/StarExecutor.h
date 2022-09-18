@@ -110,6 +110,9 @@ public:
       process_request();
       std::this_thread::yield();
     }
+    int a = async_message_num.load();
+    int b = async_message_respond_num.load();
+
     async_message_num.store(0);
     async_message_respond_num.store(0);
   }
@@ -143,23 +146,6 @@ public:
     }
   }
   
-  void router_transaction_to_coordinator(){
-    DCHECK(context.coordinator_id != 0); // context.coordinator_num
-    
-    size_t batch_size = c_transactions_queue.size();
-    for(size_t i = 0; i < batch_size; i ++ ){
-      TransactionType* txn = c_transactions_queue.front().get();
-      txn->network_size += MessageFactoryType::new_router_transaction_message(
-          *(this->async_messages[0]), ycsb::ycsb::tableID, txn, 
-          context.coordinator_id);
-      n_network_size.fetch_add(txn->network_size);
-      
-      router_transactions_send.fetch_add(1);
-      c_transactions_queue.pop_front();
-      flush_async_messages();
-    }
-    
-  }
   bool is_router_stopped(){
     bool ret = false;
     if(router_stop_queue.size() < context.coordinator_num){
@@ -213,12 +199,26 @@ public:
       StorageType storage;
       auto now = std::chrono::steady_clock::now();
 
+      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
       // 准备transaction
-      // prepare_transactions_to_run(c_workload, s_workload, storage);
       while(!is_router_stopped()){ //  && router_transactions_queue.size() < context.batch_size 
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
+
+      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+      now = std::chrono::steady_clock::now();
+
       unpack_route_transaction(c_workload, s_workload, storage); // 
 
       VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << s_transactions_queue.size();
@@ -254,12 +254,6 @@ public:
 
         VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to process_request";
 
-        // router_transaction_to_coordinator(); // c_txn send to coordinator
-        // auto router_num = router_transactions_send.load();
-
-        // VLOG_IF(DEBUG_V, id==0) << "C" << context.coordinator_id << " -> " << "C0 : " << router_num; 
-
-        // router_fence(); // wait for coordinator to response
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
                ExecutorStatus::C_PHASE) {
           process_request();
@@ -284,19 +278,6 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
         process_request(); 
-      //   unpack_route_transaction(c_workload, storage); // 
-      //   if(r_transactions_queue.size() > 0){
-      //     size_t r_size = r_transactions_queue.size();
-      //     run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue, async_message_num); // 
-      //     for(size_t r = 0; r < r_size; r ++ ){
-      //       // 发回原地...
-      //       size_t router_return_coordinator_id = r_source_coordinator_ids.front();
-      //       r_source_coordinator_ids.pop_front();
-      //       StarMessageFactory::router_transaction_response_message(*(this->async_messages[router_return_coordinator_id]));
-      //       flush_async_messages();
-      //     }
-          
-      //   }
       }
 
       replication_fence(ExecutorStatus::C_PHASE);
@@ -377,76 +358,6 @@ public:
 
   }
 
-  void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
-    /** 
-     * @brief 准备需要的txns
-     * @note add by truth 22-01-24
-     */
-    std::size_t query_num = 0;
-    // Partitioner *partitioner = nullptr;
-    ContextType phase_context; 
-
-    std::vector<ExecutorStatus> cur_status;
-    cur_status.push_back(ExecutorStatus::C_PHASE);
-    cur_status.push_back(ExecutorStatus::S_PHASE);
-
-    for(int round = 0; round < 2 ; round ++ ){
-      // 当前状态, 依次遍历两个phase
-      auto status = cur_status[round];
-
-      if (status == ExecutorStatus::C_PHASE) {
-        // partitioner = c_partitioner.get();
-        query_num =
-             StarQueryNum<ContextType>::get_c_phase_query_num(context, batch_size);
-        phase_context = context.get_cross_partition_context(); 
-        if(id == 0){
-          // // LOG(INFO) << "debug";
-        }
-      } else if (status == ExecutorStatus::S_PHASE) {
-        // partitioner = s_partitioner.get();
-        query_num =
-            StarQueryNum<ContextType>::get_s_phase_query_num(context, batch_size);
-        phase_context = context.get_single_partition_context(); 
-        if(id == 0){
-          // // LOG(INFO) << "debug";
-        }
-      } else {
-        CHECK(false);
-      }   
-
-      
-      // // LOG(INFO) << sizeof(storage);
-
-      uint64_t last_seed = 0;
-
-      for (auto i = 0u; i < query_num; i++) {
-        std::unique_ptr<TransactionType> cur_transaction;
-
-        std::size_t partition_id = get_partition_id(status);
-        if (status == ExecutorStatus::C_PHASE) {
-          cur_transaction = c_workload.next_transaction(c_context, partition_id, storage);
-        } else {
-          cur_transaction = s_workload.next_transaction(s_context, partition_id, storage);
-        }
-        // 甄别一下？
-        bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
-
-        if(is_cross_txn_static){ //cur_status == ExecutorStatus::C_PHASE){
-          // if (coordinator_id == 0 && status == ExecutorStatus::C_PHASE) {
-            // TODO: 暂时不考虑部分副本处理跨分区事务...
-          c_transactions_queue.push_back(std::move(cur_transaction));
-          // }
-        } else {
-          s_transactions_queue.push_back(std::move(cur_transaction));
-        }
-      } // END FOR
-    }
-    if(id == 0){
-      VLOG(DEBUG_V6) << "c_transactions_queue: " << c_transactions_queue.size() << " s_transactions_queue: " << s_transactions_queue.size();
-    }
-    return;
-  }
-
   void commit_transactions() {
     while (!q.empty()) {
       auto &ptr = q.front();
@@ -513,6 +424,11 @@ public:
     } else {
       CHECK(false);
     }
+    
+    int time1 = 0;
+    int time2 = 0;
+    int time3 = 0;
+    int time4 = 0;
 
     ProtocolType protocol(db, phase_context, *partitioner, id);
     WorkloadType workload(coordinator_id, db, random, *partitioner, start_time);
@@ -551,7 +467,38 @@ public:
         }
         // // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute" << i;
 
-        auto result = transaction->execute(id);
+        // auto result = transaction->execute(id);
+
+ auto now = std::chrono::steady_clock::now();
+
+          // auto result = transaction->execute(id);
+          transaction->prepare_read_execute(id);
+
+          time4 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+          
+
+          time1 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+          
+          auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
+          if(result != TransactionResult::READY_TO_COMMIT){
+            retry_transaction = false;
+            protocol.abort(*transaction);
+            n_abort_no_retry.fetch_add(1);
+            continue;
+          } else {
+            result = transaction->prepare_update_execute(id);
+          }
+          // auto result = transaction->execute(id);
+          time2 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
 
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
@@ -577,20 +524,30 @@ public:
         } else {
           n_abort_no_retry.fetch_add(1);
         }
+
+        time3 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+        now = std::chrono::steady_clock::now();
+
       } while (retry_transaction);
 
       cur_transactions_queue->pop_front();
 
+      flush_sync_messages();
+      
       if (i % phase_context.batch_flush == 0) {
         flush_async_messages(); 
-        flush_sync_messages();
         flush_record_messages();
-        
       }
     }
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
+
+    if(cur_queue_size > 0)
+      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time4 / cur_queue_size << "  execute: " << time2 / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+
   }
 
   void onExit() override {

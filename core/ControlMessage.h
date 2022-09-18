@@ -310,7 +310,7 @@ public:
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(ControlMessage::ROUTER_STOP));
     stop_queue->push_back(1);
-    VLOG(DEBUG_V12) << "GET ROUTER_STOP";
+    VLOG(DEBUG_V12) << "GET ROUTER_STOP " << stop_queue->size();
     return;
 
 }

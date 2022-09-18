@@ -12,14 +12,8 @@
 #include "core/Partitioner.h"
 #include "core/Table.h"
 #include "core/Worker.h"
-// #include "protocol/TwoPL/TwoPLHelper.h"
-// #include "protocol/TwoPL/TwoPLRWKey.h"
-// #include "protocol/TwoPL/TwoPLTransaction.h"
 
-// #include "protocol/Silo/SiloHelper.h"
 #include "protocol/Lion/LionRWKey.h"
-// #include "protocol/Silo/SiloTransaction.h"
-
 #include "protocol/Lion/LionTransaction.h"
 #include "protocol/Lion/LionManager.h"
 #include "protocol/Lion/LionMessage.h"
@@ -81,20 +75,48 @@ public:
       if (coordinatorID == context.coordinator_id) {
         std::atomic<uint64_t> &tid = table->search_metadata(key);
         if(readKey.get_write_lock_bit()){
-          TwoPLHelper::write_lock_release(tid);
           VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << tid.load();
+          TwoPLHelper::write_lock_release(tid);
         } else {
-          TwoPLHelper::read_lock_release(tid);
           VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " " << tid.load();
+          TwoPLHelper::read_lock_release(tid);
         }
       } else {
         DCHECK(false);
       }
     }
 
+    // for (auto i = 0u; i < readSet.size(); i++) {
+    //   auto &readKey = readSet[i];
+    //   if(!readKey.get_read_respond_bit()){
+    //     continue;
+    //   }
+    //   // only unlock locked records
+    //   auto tableId = readKey.get_table_id();
+    //   auto partitionId = readKey.get_partition_id();
+    //   auto table = db.find_table(tableId, partitionId);
+    //   auto key = readKey.get_key();
+
+    //   // remote
+    //   auto coordinatorID = readKey.get_dynamic_coordinator_id();
+
+    //   if (coordinatorID == context.coordinator_id) {
+    //     std::atomic<uint64_t> &tid = table->search_metadata(key);
+    //     if(readKey.get_write_lock_bit()){
+    //       TwoPLHelper::write_lock_release(tid);
+    //       VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << tid.load();
+    //     } else {
+    //       TwoPLHelper::read_lock_release(tid);
+    //       VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " " << tid.load();
+    //     }
+    //   } else {
+    //     DCHECK(false);
+    //   }
+    // }
+
     // unlock_all_read_locks(txn);
     
-    sync_messages(txn, false);
+    // sync_messages(txn, false);
   }
 
 
@@ -102,19 +124,9 @@ public:
               std::vector<std::unique_ptr<Message>> &messages,
               std::atomic<uint32_t> &async_message_num) {
 
-    // // lock write set
-    // if (lock_write_set(txn, messages)) {
-    //   abort(txn, messages);
-    //   return false;
-    // }
-
-    // // commit phase 2, read validation
-    // if (!validate_read_set(txn, messages)) {
-    //   abort(txn, messages);
-    //   return false;
-    // }
     if(txn.is_abort()){
       abort(txn, messages);
+      return false;
     }
 
     // generate tid
@@ -124,145 +136,32 @@ public:
     write_and_replicate(txn, commit_tid, messages, async_message_num);
 
     // release locks
-    release_lock(txn, commit_tid, messages);
+    auto &readSet = txn.readSet;
+    DCHECK(txn.tids.size() == readSet.size());
+
+    for (auto i = 0u; i < readSet.size(); i++) {
+      DCHECK(txn.tids[i] != nullptr);
+      auto &readKey = readSet[i];
+      auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
+      // write
+      if (coordinatorID == context.coordinator_id) {
+        auto key = readKey.get_key();
+        if(readKey.get_write_lock_bit()){
+          VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << *txn.tids[i] << " " << commit_tid;
+          TwoPLHelper::write_lock_release(*txn.tids[i], commit_tid);
+        } else {
+          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " "  << *txn.tids[i] <<  " " << commit_tid;
+          TwoPLHelper::read_lock_release(*txn.tids[i]);
+        }
+      } else {
+        DCHECK(false);
+      }
+    }
 
     return true;
   }
 
 private:
-  bool lock_write_set(TransactionType &txn,
-                      std::vector<std::unique_ptr<Message>> &messages) {
-
-    auto &readSet = txn.readSet;
-    auto &writeSet = txn.writeSet; // temporary for test ! 
-
-    for (auto i = 0u; i < writeSet.size(); i++) {
-      if(txn.is_abort()){
-        break;
-      }
-      auto &writeKey = writeSet[i];
-      auto tableId = writeKey.get_table_id();
-      auto partitionId = writeKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-      auto key = writeKey.get_key();
-
-      // 
-      auto coordinatorID = writeKey.get_dynamic_coordinator_id();// partitioner.master_coordinator(tableId, partitionId, key);
-
-      // lock local records
-      if (coordinatorID == context.coordinator_id) {
-        
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
-        bool success;
-        uint64_t latestTid = TwoPLHelper::write_lock(tid, success);
-
-        if (!success) {
-          txn.abort_lock = true;
-          VLOG(DEBUG_V14) << "failed to LOCK " << *(int*)key;
-          break;
-        }
-        VLOG(DEBUG_V14) << "LOCK " << *(int*)key;
-
-        writeKey.set_write_lock_bit();
-        writeKey.set_tid(latestTid);
-
-        auto readKeyPtr = txn.get_read_key(key);
-        // assume no blind write
-        DCHECK(readKeyPtr != nullptr);
-        uint64_t tidOnRead = readKeyPtr->get_tid();
-        if (latestTid != tidOnRead) {
-          txn.abort_lock = true;
-          break;
-        }
-
-      } else {
-        // remote reads
-        VLOG(DEBUG_V14) << "failed to LOCK " << *(int*)key;
-        txn.abort_lock = true;
-        break;
-      }
-    }
-    if(!txn.is_abort()){
-      sync_messages(txn);
-    }
-    
-    return txn.is_abort();
-  }
-
-
-  bool validate_read_set(TransactionType &txn,
-                         std::vector<std::unique_ptr<Message>> &messages) {
-
-    auto &readSet = txn.readSet;
-    auto &writeSet = txn.writeSet;
-
-    auto isKeyInWriteSet = [&writeSet](const void *key) {
-      for (auto &writeKey : writeSet) {
-        if (writeKey.get_key() == key) {
-          return true;
-        }
-      }
-      return false;
-    };
-
-    for (auto i = 0u; i < readSet.size(); i++) {
-      if(txn.is_abort()){
-        break;
-      }
-      auto &readKey = readSet[i];
-
-      if (readKey.get_local_index_read_bit()) {
-        continue; // read only index does not need to validate
-      }
-
-      bool in_write_set = isKeyInWriteSet(readKey.get_key());
-      if (in_write_set) {
-        continue; // already validated in lock write set
-      }
-
-      auto tableId = readKey.get_table_id();
-      auto partitionId = readKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-      auto key = readKey.get_key();
-      auto tid = readKey.get_tid();
-
-
-      // lock 
-      auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
-      if (coordinatorID == context.coordinator_id) {
-        // local read
-        bool is_success = table->contains(key);
-        if(is_success == false){
-          txn.abort_read_validation = true;
-          txn.abort_lock = true;
-          break; 
-        }
-        uint64_t latest_tid = table->search_metadata(key).load();
-        if (TwoPLHelper::remove_lock_bit(latest_tid) != tid) {
-          txn.abort_read_validation = true;
-          break;
-        }
-        if (TwoPLHelper::is_write_locked(latest_tid)) { // must be locked by others
-          txn.abort_read_validation = true;
-          break;
-        }
-      } else {
-        // remote 
-        DCHECK(false);
-      }
-    }
-
-    if (txn.pendingResponses == 0) {
-      txn.local_validated = true;
-    }
-    if(!txn.is_abort()){
-      sync_messages(txn);
-    }
-    
-
-    return !txn.is_abort(); //txn.abort_read_validation;
-  }
-
   uint64_t generate_tid(TransactionType &txn) {
 
     auto &readSet = txn.readSet;
@@ -320,18 +219,10 @@ private:
 
       // lock dynamic replica
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
-      auto secondary_coordinatorIDs = readKey.get_dynamic_secondary_coordinator_id();
-      // DCHECK(coordinatorID != secondary_coordinatorID);
-      // auto router_table = db.find_router_table(tableId, coordinatorID);
-      // std::atomic<uint64_t> &tid_ = router_table->search_metadata(key);
+      const RouterValue* const router_val = readKey.get_router_value();
 
-      // uint64_t last_tid_ = TwoPLHelper::lock(tid_);
-      // DCHECK(last_tid_ < commit_tid);
-      // LOG(INFO) << "LOCK " << *(int*)key;
-      
       // write
       if (coordinatorID == context.coordinator_id) {
-        
         auto value = readKey.get_value();
         table->update(key, value);
       } else {
@@ -347,7 +238,7 @@ private:
       for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
         
         // k does not have this partition
-        if (!secondary_coordinatorIDs.count(k) && k != coordinatorID) {
+        if (!router_val->count_secondary_coordinator_id(k) && k != coordinatorID) {
           continue;
         }
 
@@ -380,72 +271,9 @@ private:
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 
-    sync_messages(txn, false);
+    // sync_messages(txn, false);
   }
 
-  void release_lock(TransactionType &txn, uint64_t commit_tid,
-                    std::vector<std::unique_ptr<Message>> &messages) {
-
-    auto &readSet = txn.readSet;
-
-    for (auto i = 0u; i < readSet.size(); i++) {
-      auto &readKey = readSet[i];
-      auto tableId = readKey.get_table_id();
-      auto partitionId = readKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-      auto key = readKey.get_key();
-
-      auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
-      // write
-      if (coordinatorID == context.coordinator_id) {
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
-        if(readKey.get_write_lock_bit()){
-          TwoPLHelper::write_lock_release(tid, commit_tid);
-          VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << tid.load() << " " << commit_tid;
-        } else {
-          TwoPLHelper::read_lock_release(tid);
-          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " " << tid.load() << " " << commit_tid;
-        }
-
-      } else {
-        DCHECK(false);
-      }
-
-    }
-
-    // unlock_all_read_locks(txn);
-
-    sync_messages(txn, false);
-  }
-
-  // void unlock_all_read_locks(TransactionType &txn){
-  //   auto &readSet = txn.readSet;
-  //   // release local lock. All data item should be moved to the current node. 
-  //   for (auto i = 0u; i < readSet.size(); i++) {
-  //     auto &readKey = readSet[i];
-  //     auto tableId = readKey.get_table_id();
-  //     auto partitionId = readKey.get_partition_id();
-  //     auto table = db.find_table(tableId, partitionId);
-  //     auto key = readKey.get_key();
-          
-  //     // if(partitioner.is_dynamic()){
-  //     //   // unlock dynamic replica
-  //     //   auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
-
-  //     //   auto router_table = db.find_router_table(tableId, coordinatorID);
-  //     //   std::atomic<uint64_t> &tid = router_table->search_metadata(key);
-  //     //   TwoPLHelper::unlock_if_locked(tid);
-  //     // }
-  //   }
-  // }
-  void sync_messages(TransactionType &txn, bool wait_response = true) {
-    txn.message_flusher();
-    if (wait_response) {
-      while (txn.pendingResponses > 0) {
-        txn.remote_request_handler();
-      }
-    }
-  }
 
 
 private:

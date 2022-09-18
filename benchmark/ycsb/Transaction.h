@@ -27,6 +27,7 @@ public:
   using StorageType = Storage;
 
   static constexpr std::size_t keys_num = 10;
+  
 
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
                   DatabaseType &db, const ContextType &context,
@@ -35,7 +36,12 @@ public:
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db, cur_timestamp)) {}
+        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db, cur_timestamp)) {
+          /**
+           * @brief 
+           * 
+           */
+        }
 
 
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
@@ -45,6 +51,10 @@ public:
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id) {
+          /**
+           * @brief convert from the generated txns
+           * 
+           */
           size_t size_ = simple_txn.keys.size();
           for(size_t i = 0 ; i < size_; i ++ ){
 //             LOG(INFO) << "get " << simple_txn.update[i] << " " << simple_txn.keys[i];

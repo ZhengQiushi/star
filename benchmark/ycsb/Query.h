@@ -24,8 +24,10 @@ public:
                                       //  0.001 = 200  
   const int period_duration = 5;
 
+  // const int hot_area_size = 6;
+
   using DatabaseType = Database;
-  YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,
+  YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,// uint32_t hot_area_size,
                           Random &random, DatabaseType &db, double cur_timestamp) const {
     // 
     DCHECK(context.partition_num > partitionID);
@@ -89,9 +91,12 @@ public:
           // 跨分区
           int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition); // 分区内偏移
           int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition); // 分区偏移
+          
+          // never involve partitions in the same node
+          int32_t cross_partition_id_offset = workload_type % (context.coordinator_num - 1) + 1; // - context.coordinator_id
 
           // 对应的几类偏移
-          key = (key_partition_num + workload_type) * static_cast<int32_t>(context.keysPerPartition) + key_num * N + i; 
+          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * N + i; 
           key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
         } else {
           // 单分区
@@ -129,6 +134,11 @@ public:
   }
   
   int which_workload_(int which_type_workload, int cur_timestamp) const {
+    /**
+     * @brief given random `which_type_workload` and 4 kinds of workloads
+     *        select the most used one as current workload 
+     * @return [1, 5]
+     */
 
     int x1 = (int)cur_timestamp % (period_duration / 2) - period_duration / 4; // (period_duration / 2) s for a circle
     int x2 = (int)cur_timestamp % period_duration - period_duration / 2;       // (period_duration) s for a circle 

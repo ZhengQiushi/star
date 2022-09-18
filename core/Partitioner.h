@@ -9,7 +9,7 @@
 #include <numeric>
 #include <string>
 #include "core/Defs.h"
-
+#include "core/RouterValue.h"
 #include "Table.h"
 namespace star {
 
@@ -439,13 +439,6 @@ public:
   bool is_dynamic() const override { return false; };
 
 
-  virtual std::set<size_t> secondary_coordinators(int table_id, int partition_id, const void* key){
-    DCHECK(false);
-    // auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-    std::set<size_t> ret;
-    return ret;
-  }
-
 };
 
 
@@ -476,36 +469,12 @@ public:
      * @brief dynamic mastership. master piece will be moved to other coordinators!
      * 
      */
-    // if(secondary_coordinator(partition_id) != coordinator_id){
-    //   // not static replica, always master!
-    //   return coordinator_id;
-    // } else {
-    // static replica, check if is re-mastered
-    
-    // auto table_router = db.find_router_table(table_id, partition_id);
-    // size_t* master_coordinator = (size_t*)table_router->search_value(key);
-    //  == coordinator_id;
     return db.get_dynamic_coordinator_id(coordinator_num, table_id, key);// *master_coordinator;
-    // if(std::get<1>(ret->dynamic_dst) == 1){
-    //   //
-    //   return std::get<0>(ret->dynamic_dst);
-    // } else {
-    //   return std::get<0>(ret->static_dst);
-    // }
-    // }
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
-    return secondary_coordinator(partition_id);
-    // auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-    // auto static_coordinator_id = secondary_coordinator(partition_id);
-
-    // if(master_coordinator_id != static_coordinator_id){
-    //   return static_coordinator_id;
-    // } else {
-    //   auto router_table = db.find_router_table(table_id, master_coordinator_id);
-    //   size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
-    //   return secondary_coordinator_id;
-    // }
+    auto router_table = db.find_router_table(table_id);// , master_coordinator_id);
+    auto router_val = static_cast<RouterValue*>(router_table->search_value(key));
+    return router_val->get_secondary_coordinator_id();
   }
 
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
@@ -516,30 +485,9 @@ public:
       }
       // db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
       auto router_table = db.find_router_table(table_id);//, master_coordinator_id);
-      auto all_replicas = (std::pair<size_t, std::set<size_t>>*)(router_table->search_value(key));
-      return all_replicas->second.count(coordinator_id);
-      // static replica
-      // auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-      // if(master_coordinator_id == coordinator_id){
-      //   return true;
-      // } else {
-       
-      //   size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
-
-      //   return secondary_coordinator_id == coordinator_id;
-      // }
-    //  master_coordinator(table_id, partition_id, key);
-    // } else {
-    //   // 
-    //   // auto table_router = db.find_router_table(table_id, partition_id);
-    //   // RTable* ret = (RTable*)table_router->search_value(key);
-    //   // return std::get<0>(ret->dynamic_dst) == coordinator_id || 
-    //   //       std::get<0>(ret->static_dst) == coordinator_id ;
-
-    //   auto table_router = db.find_router_table(table_id, partition_id);
-    //   size_t* master_coordinator = (size_t*)table_router->search_value(key);
-    //   return (*master_coordinator) == coordinator_id;
-    // }
+      auto router_val = (RouterValue*)(router_table->search_value(key));
+      uint64_t secondary_coordinator_ids = router_val->get_secondary_coordinator_id(); 
+      return ((secondary_coordinator_ids >> coordinator_id) & 1);// all_replicas->second.count(coordinator_id);
   }
 
 
@@ -569,12 +517,7 @@ public:
 
   bool is_dynamic() const override { return true; };
 
-  std::set<size_t> secondary_coordinators(int table_id, int partition_id, const void* key){
-    // auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-    auto router_table = db.find_router_table(table_id);// , master_coordinator_id);
-    auto pairs = static_cast<std::pair<size_t, std::set<size_t>>*>(router_table->search_value(key));
-    return pairs->second;
-  }
+
 private:
   DatabaseType& db;
 };
@@ -606,74 +549,23 @@ public:
     return (partition_id) % coordinator_num;
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
-    DCHECK(false);
-    auto static_coordinator_id = master_coordinator(table_id, partition_id, key);
-    auto master_dynamic_coordinator_id = db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
-
-    if(master_dynamic_coordinator_id != static_coordinator_id){
-      // 
-      return master_dynamic_coordinator_id;
-    } else {
-      // 动态主副本和静态副本一致
-      auto router_table = db.find_router_table(table_id); // , master_dynamic_coordinator_id);
-      size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
-
-      return secondary_coordinator_id;
-    }
+    auto router_table = db.find_router_table(table_id);// , master_coordinator_id);
+    auto router_val = static_cast<RouterValue*>(router_table->search_value(key));
+    return router_val->get_secondary_coordinator_id();
   }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     // check if has dynamic replica on coordinator
-
     DCHECK(coordinator_id <= coordinator_num);
-    if(coordinator_num == 1){
-      return true;
-    }
-    // db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
-    auto router_table = db.find_router_table(table_id);//, master_coordinator_id);
-    auto all_replicas = (std::pair<size_t, std::set<size_t>>*)(router_table->search_value(key));
-    return all_replicas->second.count(coordinator_id);
-
-    // size_t i = ;
-    
-    // first should on the same-node 
-  
-    // then should 
-
-    // DCHECK(coordinator_id <= coordinator_num);
-    // if(has_master_partition(table_id, partition_id, key) == true){
-    //   return true;
-    // }
-    // auto table_router = db.find_router_table(table_id, partition_id);
-    // size_t* master_coordinator = (size_t*)table_router->search_value(key);
-    // return (*master_coordinator) == coordinator_id;
-
-    // auto table_router = db.find_router_table(table_id, partition_id);
-    // RTable* ret = (RTable*)table_router->search_value(key);
-    // return std::get<0>(ret->dynamic_dst) == coordinator_id ; // || 
-           // std::get<0>(ret->static_dst) == coordinator_id ;
-
-    // if(coordinator_num == 1){
-    //   return true;
-    // }
-    // auto static_coordinator_id = master_coordinator(table_id, partition_id, key);
-
-    // if(static_coordinator_id == coordinator_id){
-    //   return true;
-    // } else {
-    //   // 
-    //   auto master_dynamic_coordinator_id = db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
-    //   if(master_dynamic_coordinator_id != static_coordinator_id){
-    //     // 
-    //     return master_dynamic_coordinator_id == coordinator_id;
-    //   } else {
-    //     // 动态主副本和静态副本一致
-    //     auto router_table = db.find_router_table(table_id, master_dynamic_coordinator_id);
-    //     size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
-
-    //     return secondary_coordinator_id == coordinator_id;
-    //   }
-    // }
+      if(coordinator_num == 1){
+        return true;
+      }
+      // db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
+      auto router_table = db.find_router_table(table_id);//, master_coordinator_id);
+      auto router_val = (RouterValue*)(router_table->search_value(key));
+      uint64_t secondary_coordinator_ids = router_val->get_secondary_coordinator_id(); 
+      
+      return ((secondary_coordinator_ids >> coordinator_id) & 1);
   }
 
 
@@ -704,12 +596,6 @@ public:
 
   bool is_dynamic() const override { return false; };
 
-  std::set<size_t> secondary_coordinators(int table_id, int partition_id, const void* key){
-    // auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-    auto router_table = db.find_router_table(table_id);// , master_coordinator_id);
-    auto pairs = (std::pair<size_t, std::set<size_t>>*)router_table->search_value(key);
-    return pairs->second;
-  }
 private:
   DatabaseType& db;
 };

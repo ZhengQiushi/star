@@ -102,17 +102,17 @@ public:
   }
 
 
-  // dynamic secondary coordinator id
-  void set_dynamic_secondary_coordinator_id(uint32_t dynamic_secondary_coordinator_id) {
+  // secondary coordinator id
+  void set_secondary_coordinator_id(uint32_t dynamic_secondary_coordinator_id) {
     DCHECK(dynamic_secondary_coordinator_id < (1 << 5));
-    clear_dynamic_secondary_coordinator_id();
-    bitvec |= dynamic_secondary_coordinator_id << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET;
+    clear_secondary_coordinator_id();
+    bitvec |= dynamic_secondary_coordinator_id << SECONDARY_COORDINATOR_ID_BIT_OFFSET;
   }
 
-  void clear_dynamic_secondary_coordinator_id() { bitvec &= ~(DYNAMIC_SECONDARY_COORDINATOR_ID_MASK << DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET); }
+  void clear_secondary_coordinator_id() { bitvec &= ~(SECONDARY_COORDINATOR_ID_BIT_MASK << SECONDARY_COORDINATOR_ID_BIT_OFFSET); }
 
-  uint32_t get_dynamic_secondary_coordinator_id() const {
-    return (bitvec >> DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET) & DYNAMIC_SECONDARY_COORDINATOR_ID_MASK;
+  uint32_t get_secondary_coordinator_id() const {
+    return (bitvec >> SECONDARY_COORDINATOR_ID_BIT_OFFSET) & SECONDARY_COORDINATOR_ID_BIT_MASK;
   }
 
   // partition id
@@ -176,8 +176,8 @@ public:
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_MASK = 0x1f;
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 14;
 
-  static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_MASK = 0x1f;
-  static constexpr uint32_t DYNAMIC_SECONDARY_COORDINATOR_ID_OFFSET = 9;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_MASK = 0x1f;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_OFFSET = 9;
 
   static constexpr uint32_t READ_RESPOND_BIT_MASK = 0x1;
   static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 3;

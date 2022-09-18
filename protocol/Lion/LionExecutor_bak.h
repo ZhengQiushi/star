@@ -2003,7 +2003,7 @@ protected:
       }
 
       readKey.set_dynamic_coordinator_id(coordinatorID);
-      readKey.set_dynamic_secondary_coordinator_id(coordinator_secondaryID);
+      readKey.set_secondary_coordinator_id(coordinator_secondaryID);
 
       bool remaster = false;
 
@@ -2016,10 +2016,10 @@ protected:
         // 赶快本地lock
         if(readKey.get_write_lock_bit()){
           TwoPLHelper::write_lock(tid, success);
-          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id();
+          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_secondary_coordinator_id();
         } else {
           TwoPLHelper::read_lock(tid, success);
-          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_dynamic_secondary_coordinator_id();
+          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_secondary_coordinator_id();
         }
         if(success){
           readKey.set_read_respond_bit();

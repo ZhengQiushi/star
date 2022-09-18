@@ -44,12 +44,12 @@ public:
     return SiloHelper::read(row, value, value_bytes);
   }
 
-  void abort(TransactionType &txn, const size_t& cur_ptr) {
+  void abort(TransactionType &txn) {
     auto &writeSet = txn.writeSet;
     // unlock locked records
-    size_t limits = writeSet.size(); // min(size, cur_ptr) 防止把别人刚刚锁上的内容给解锁了....
-    if(cur_ptr < limits){
-      limits = cur_ptr;
+    size_t limits = writeSet.size(); // min(size, lock_ptr) 防止把别人刚刚锁上的内容给解锁了....
+    if(lock_ptr < limits){
+      limits = lock_ptr;
     }
 
     for (auto i = 0u; i < limits; i++) {
@@ -73,10 +73,10 @@ public:
               ) {
     // lock write set
     // LOG(INFO) << "StarExecutor: "<< id << " " << "lock_write_set";
-    size_t cur_ptr = 0;
+    lock_ptr = 0;
 
-    if (lock_write_set(txn, cur_ptr)) {
-      abort(txn, cur_ptr);
+    if (lock_write_set(txn)) {
+      abort(txn);
       return false;
     }
 
@@ -84,7 +84,7 @@ public:
 
     // commit phase 2, read validation
     if (!validate_read_set(txn)) {
-      abort(txn, cur_ptr);
+      abort(txn);
       return false;
     }
 
@@ -108,12 +108,12 @@ public:
   }
 
 private:
-  bool lock_write_set(TransactionType &txn, size_t& cur_ptr) {
+  bool lock_write_set(TransactionType &txn) {
 
     auto &readSet = txn.readSet;
     auto &writeSet = txn.writeSet;
     // 正常退出，cur_ptr == 本身
-    cur_ptr = writeSet.size();
+    lock_ptr = writeSet.size();
 
     for (auto i = 0u; i < writeSet.size(); i++) {
       // 发现后面的被其他人锁了咋办？
@@ -130,7 +130,7 @@ private:
 
       if (!success) {
         txn.abort_lock = true;
-        cur_ptr = i;
+        lock_ptr = i;
         break;
       }
 
@@ -364,6 +364,7 @@ private:
 
 public:
   size_t id;
+  size_t lock_ptr;
 
 };
 

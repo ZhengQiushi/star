@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.2)
 project(star)
 
 set(CMAKE_CXX_COMPILER "/usr/bin/g++")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -O0  -g -ggdb3 -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-address-of-packed-member -Wno-variadic-macros -pedantic -std=c++14") #
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall -O0  -g -ggdb3 -pthread -Wall -Wno-long-long -Wno-unused-variable -Wno-address-of-packed-member -Wno-variadic-macros -pedantic -std=c++14 -Wno-unknown-pragmas") #
 
 set(CMAKE_CXX_STANDARD 14)
 
@@ -43,10 +43,8 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
     set(TFlowC_FRAMEWORK_LIBRARIES "/usr/local/lib/libtensorflow_framework.so")
     set(GMOCK_LIBRARIES "/usr/local/lib/libgmock.a")
     set(GTEST_LIBRARIES "/usr/local/lib/libgtest.a")
+    set(METIS_LIBRARIES "/usr/local/lib/libmetis.a")
 
-    target_link_libraries(common ${jemalloc_lib} ${glog} ${gflags} 
-                                 ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
-                                 ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES}) # absl::flat_hash_map  -static)
     # target_link_libraries(common libgflags.a)
     # --[ Eigen3
     find_package(Eigen3 REQUIRED)
@@ -59,7 +57,11 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
 # target_link_libraries(bench_tpcc common)
 
 add_executable(zqs_laji bench_ycsb.cpp)
-target_link_libraries(zqs_laji common) # -static
+target_link_libraries(zqs_laji common 
+                    ${jemalloc_lib} ${glog} ${gflags} 
+                    ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+                    ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
+                    ${METIS_LIBRARIES}) # -static
 
 # 
 add_subdirectory(test)

@@ -81,12 +81,6 @@ test/forcast_workload_test: test/CMakeFiles/forcast_workload_test.dir/brain/forc
 test/forcast_workload_test: test/CMakeFiles/forcast_workload_test.dir/build.make
 test/forcast_workload_test: libcommon.a
 test/forcast_workload_test: test/libpeloton-test-common.a
-test/forcast_workload_test: /usr/local/lib/libglog.a
-test/forcast_workload_test: /usr/local/lib/libgflags.so
-test/forcast_workload_test: /usr/local/lib/libtensorflow.so
-test/forcast_workload_test: /usr/local/lib/libtensorflow_framework.so
-test/forcast_workload_test: /usr/local/lib/libgmock.a
-test/forcast_workload_test: /usr/local/lib/libgtest.a
 test/forcast_workload_test: test/CMakeFiles/forcast_workload_test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/star/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable forcast_workload_test"
 	cd /home/star/test && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/forcast_workload_test.dir/link.txt --verbose=$(VERBOSE)

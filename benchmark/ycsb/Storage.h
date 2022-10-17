@@ -14,8 +14,8 @@ struct Storage {
     memset(ycsb_keys, 0, sizeof(ycsb_keys));
     memset(ycsb_values, 0, sizeof(ycsb_values));
   }
-  ycsb::key ycsb_keys[YCSB_FIELD_SIZE];
-  ycsb::value ycsb_values[YCSB_FIELD_SIZE];
+  ycsb::key ycsb_keys[YCSB_TRANSMIT_FIELD_SIZE];
+  ycsb::value ycsb_values[YCSB_TRANSMIT_FIELD_SIZE];
 };
 
 } // namespace ycsb

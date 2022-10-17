@@ -27,6 +27,8 @@ public:
   using StorageType = Storage;
 
   static constexpr std::size_t keys_num = 10;
+
+  // static constexpr std::size_t transmit_keys_num = 120;
   
 
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
@@ -36,7 +38,7 @@ public:
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeYCSBQuery<keys_num>()(context, partition_id, random, db, cur_timestamp)) {
+        query(makeYCSBQuery()(context, partition_id, random, db, cur_timestamp, keys_num)) {
           /**
            * @brief 
            * 
@@ -50,28 +52,25 @@ public:
                   Storage &storage, simpleTransaction& simple_txn)
       : Transaction(coordinator_id, partition_id, partitioner), db(db),
         context(context), random(random), storage(storage),
-        partition_id(partition_id) {
+        partition_id(partition_id),
+        query(makeYCSBQuery()(simple_txn.keys, simple_txn.update)) {
           /**
            * @brief convert from the generated txns
            * 
            */
-          size_t size_ = simple_txn.keys.size();
-          for(size_t i = 0 ; i < size_; i ++ ){
-//             LOG(INFO) << "get " << simple_txn.update[i] << " " << simple_txn.keys[i];
-            query.UPDATE[i] = simple_txn.update[i];
-            query.Y_KEY[i] = simple_txn.keys[i];
-          }
+          is_transmit_request = simple_txn.is_transmit_request;          
         }
 
   virtual ~ReadModifyWrite() override = default;
-
+  bool is_transmit_requests() override {
+    return is_transmit_request;
+  }
   TransactionResult execute(std::size_t worker_id) override {
 
-    DCHECK(context.keysPerTransaction == keys_num);
-
     int ycsbTableID = ycsb::tableID;
+    size_t keys_num_ = query.Y_KEY.size();
 
-    for (auto i = 0u; i < keys_num; i++) {
+    for (auto i = 0u; i < keys_num_; i++) {
       auto key = query.Y_KEY[i];
       storage.ycsb_keys[i].Y_KEY = key;
 
@@ -94,9 +93,18 @@ public:
 
     if (this->process_requests(worker_id)) {
       return TransactionResult::ABORT;
+    } 
+    
+    if(is_transmit_request == true){
+      // std::string str = "";
+      // for(size_t i = 0 ; i < keys_num_ ; i ++ ){
+      //   str += std::to_string(int(storage.ycsb_keys[i].Y_KEY)) + " ";
+      // }
+      // LOG(INFO) << " @@ TRANSMIT_REQUEST @@ " << str;
+      return TransactionResult::TRANSMIT_REQUEST;
     }
 
-    for (auto i = 0u; i < keys_num; i++) {
+    for (auto i = 0u; i < keys_num_; i++) {
       auto key = query.Y_KEY[i];
       if (query.UPDATE[i]) {
 
@@ -146,11 +154,11 @@ public:
   }
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     
-    DCHECK(context.keysPerTransaction == keys_num);
+    size_t keys_num_ = query.Y_KEY.size();
 
     int ycsbTableID = ycsb::tableID;
 
-    for (auto i = 0u; i < keys_num; i++) {
+    for (auto i = 0u; i < keys_num_; i++) {
       auto key = query.Y_KEY[i];
       storage.ycsb_keys[i].Y_KEY = key;
 
@@ -200,8 +208,9 @@ public:
   };
   TransactionResult prepare_update_execute(std::size_t worker_id) override {
     int ycsbTableID = ycsb::tableID;
+    size_t keys_num_ = query.Y_KEY.size();
 
-    for (auto i = 0u; i < keys_num; i++) {
+    for (auto i = 0u; i < keys_num_; i++) {
       auto key = query.Y_KEY[i];
       if (query.UPDATE[i]) {
 
@@ -254,15 +263,15 @@ public:
 
 
   void reset_query() override {
-    query = makeYCSBQuery<keys_num>()(context, partition_id, random, db, 0);
+    query = makeYCSBQuery()(context, partition_id, random, db, 0, 0);
   }
   
   const std::vector<u_int64_t> get_query() override{
     using T = u_int64_t;
 
     std::vector<T> record_keys;
-
-    for (auto i = 0u; i < keys_num; i++) {
+    size_t keys_num_ = query.Y_KEY.size();
+    for (auto i = 0u; i < keys_num_; i++) {
       auto key = static_cast<T>(query.Y_KEY[i]);
       record_keys.push_back(key);
     }
@@ -271,7 +280,8 @@ public:
   
    const std::vector<bool> get_query_update(){
      std::vector<bool> ret;
-     for(auto i = 0u; i < keys_num; i ++ ){
+     size_t keys_num_ = query.Y_KEY.size();
+     for(auto i = 0u; i < keys_num_; i ++ ){
        auto update = query.UPDATE[i];
        ret.push_back(update);
      }
@@ -347,7 +357,8 @@ private:
   RandomType &random;
   Storage &storage;
   std::size_t partition_id;
-  YCSBQuery<keys_num> query;
+  YCSBQuery query;
+  bool is_transmit_request;
 };
 } // namespace ycsb
 

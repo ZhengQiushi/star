@@ -14,6 +14,7 @@ namespace star {
 namespace ycsb {
 static constexpr auto __BASE_COUNTER__ = __COUNTER__ + 1;
 static constexpr auto YCSB_FIELD_SIZE = 10;
+static constexpr auto YCSB_TRANSMIT_FIELD_SIZE = 120;
 } // namespace ycsb
 } // namespace star
 

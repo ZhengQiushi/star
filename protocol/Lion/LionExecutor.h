@@ -39,8 +39,8 @@ public:
                const ContextType &context, uint32_t &batch_size,
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
-               std::atomic<uint32_t> &n_started_workers,
-               HashMap<9916, std::string, int> &data_pack_map)
+               std::atomic<uint32_t> &n_started_workers) // ,
+               // HashMap<9916, std::string, int> &data_pack_map)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
         l_partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
@@ -50,7 +50,7 @@ public:
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        data_pack_map(data_pack_map),
+        // data_pack_map(data_pack_map),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -132,8 +132,8 @@ public:
     router_transactions_send.store(0);
   }
 
-  void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
-    while(!router_transactions_queue.empty()){
+  void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage, int router_recv_txn_num){
+    while(!router_transactions_queue.empty() && router_recv_txn_num > 0){
       simpleTransaction simple_txn = router_transactions_queue.front();
       router_transactions_queue.pop_front();
       
@@ -155,11 +155,11 @@ public:
         s_transactions_queue.push_back(std::move(p));
         s_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
       }
-
+      router_recv_txn_num -- ;
     }
   }
   
-  bool is_router_stopped(){
+  bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
     if(router_stop_queue.size() < context.coordinator_num){
       ret = false;
@@ -169,12 +169,16 @@ public:
       while(i > 0){
         i --;
         DCHECK(router_stop_queue.size() > 0);
+        int recv_txn_num = router_stop_queue.front();
         router_stop_queue.pop_front();
+        router_recv_txn_num += recv_txn_num;
+        LOG(INFO) << " RECV : " << recv_txn_num;
       }
       ret = true;
     }
     return ret;
   }
+
      std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
       size_t ycsbTableID = ycsb::ycsb::tableID;
@@ -247,8 +251,9 @@ public:
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
+      int router_recv_txn_num = 0;
       // 准备transaction
-      while(!is_router_stopped()){ //  && router_transactions_queue.size() < context.batch_size 
+      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
@@ -260,7 +265,7 @@ public:
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-      unpack_route_transaction(c_workload, s_workload, storage); // 
+      unpack_route_transaction(c_workload, s_workload, storage, router_recv_txn_num); // 
 
       VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
@@ -831,7 +836,7 @@ private:
   std::deque<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
-  HashMap<9916, std::string, int> &data_pack_map;
+  // HashMap<9916, std::string, int> &data_pack_map;
 
   std::vector<
       std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>

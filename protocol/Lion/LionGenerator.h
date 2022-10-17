@@ -114,7 +114,7 @@ public:
   }
 
 
-     std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
+  std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
@@ -157,6 +157,7 @@ public:
     DCHECK(max_node != -1);
     return max_node;
   }
+  
   void start() override {
 
     LOG(INFO) << "LionGenerator " << id << " starts.";
@@ -238,7 +239,7 @@ public:
       std::vector<std::thread> threads;
       for (auto n = 0u; n < context.coordinator_num; n++) {
         threads.emplace_back([&](int n) {
-          
+          std::vector<int> router_send_txn(context.coordinator_num, 0);
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
           for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
 
@@ -254,6 +255,7 @@ public:
             } else {
               DCHECK(txn->is_distributed == 0);
             }
+            router_send_txn[coordinator_id_dst] ++ ;
             // 
             // std::string print = "";
             // for(int i = 0 ; i < 10; i ++ ){
@@ -281,7 +283,7 @@ public:
             
             // LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
             messages_mutex[l]->lock();
-            ControlMessageFactory::router_stop_message(*async_messages[l].get());
+            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn[l]);
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }

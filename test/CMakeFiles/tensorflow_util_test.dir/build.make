@@ -81,12 +81,6 @@ test/tensorflow_util_test: test/CMakeFiles/tensorflow_util_test.dir/brain/tensor
 test/tensorflow_util_test: test/CMakeFiles/tensorflow_util_test.dir/build.make
 test/tensorflow_util_test: libcommon.a
 test/tensorflow_util_test: test/libpeloton-test-common.a
-test/tensorflow_util_test: /usr/local/lib/libglog.a
-test/tensorflow_util_test: /usr/local/lib/libgflags.so
-test/tensorflow_util_test: /usr/local/lib/libtensorflow.so
-test/tensorflow_util_test: /usr/local/lib/libtensorflow_framework.so
-test/tensorflow_util_test: /usr/local/lib/libgmock.a
-test/tensorflow_util_test: /usr/local/lib/libgtest.a
 test/tensorflow_util_test: test/CMakeFiles/tensorflow_util_test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/star/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable tensorflow_util_test"
 	cd /home/star/test && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/tensorflow_util_test.dir/link.txt --verbose=$(VERBOSE)

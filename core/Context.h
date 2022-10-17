@@ -48,6 +48,7 @@ public:
   bool tcp_quick_ack = false;
   bool enable_data_transfer = false;
   bool lion_no_switch = false;
+  bool lion_with_metis_init = false;
 
   bool cpu_affinity = true;
 

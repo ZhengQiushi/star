@@ -42,6 +42,7 @@ public:
     readSet.clear();
     writeSet.clear();
   }
+  virtual bool is_transmit_requests() = 0;
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
   virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
@@ -56,7 +57,7 @@ public:
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
-    virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+  virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
   virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
   virtual std::size_t get_partition_id() = 0;
@@ -222,6 +223,8 @@ public:
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;
   bool execution_phase;
+  // bool is_transmit_request;
+
 
   // table id, partition id, key, value, local_index_read?, write_lock?,
   // success?, remote?

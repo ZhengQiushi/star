@@ -250,15 +250,15 @@ public:
 
     switch (message_type) {
     case ControlMessage::SIGNAL:
-      VLOG(DEBUG_V3) << "SIGNAL " << id; 
+      VLOG(DEBUG_V14) << "SIGNAL " << id; 
       signal_in_queue.push(message);
       break;
     case ControlMessage::ACK:
-      VLOG(DEBUG_V3) << "ACK " << id; 
+      VLOG(DEBUG_V14) << "ACK " << id; 
       ack_in_queue.push(message);
       break;
     case ControlMessage::STOP:
-      VLOG(DEBUG_V3) << "STOP " << id << " " << stop_in_queue.size(); 
+      VLOG(DEBUG_V14) << "STOP " << id << " " << message->get_source_node_id() << " -> " << message->get_dest_node_id() << " " << stop_in_queue.size(); 
       stop_in_queue.push(message);
       break;
     default:

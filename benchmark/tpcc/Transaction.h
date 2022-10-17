@@ -68,11 +68,13 @@ public:
             query.INFO[i].OL_SUPPLY_W_ID = w_id;
             query.INFO[i].OL_QUANTITY = 5;// random.uniform_dist(1, 10);
           }
-
+          is_transmit_request = simple_txn.is_transmit_request;
         }
 
   virtual ~NewOrder() override = default;
-
+  bool is_transmit_requests() override {
+    return is_transmit_request;
+  }
   TransactionResult execute(std::size_t worker_id) override {
 
     int32_t W_ID = this->partition_id + 1;
@@ -150,7 +152,9 @@ public:
     if (this->process_requests(worker_id)) {
       return TransactionResult::ABORT;
     }
-
+    if(is_transmit_request == true){
+      return TransactionResult::TRANSMIT_REQUEST;
+    }
     float W_TAX = storage.warehouse_value.W_YTD;
 
     float D_TAX = storage.district_value.D_TAX;
@@ -732,6 +736,7 @@ private:
   Storage &storage;
   std::size_t partition_id;
   NewOrderQuery query;
+  bool is_transmit_request;
 };
 
 template <class Transaction> class Payment : public Transaction {
@@ -750,7 +755,9 @@ public:
         query(makePaymentQuery()(context, partition_id + 1, random)) {}
 
   virtual ~Payment() override = default;
-
+  bool is_transmit_requests() override {
+    return is_transmit_request;
+  }
   TransactionResult execute(std::size_t worker_id) override {
 
     int32_t W_ID = this->partition_id + 1;
@@ -806,6 +813,9 @@ public:
 
     if (this->process_requests(worker_id)) {
       return TransactionResult::ABORT;
+    }
+    if(is_transmit_request == true){
+      return TransactionResult::TRANSMIT_REQUEST;
     }
 
     // the warehouse's year-to-date balance, is increased by H_ AMOUNT.
@@ -962,6 +972,7 @@ private:
   Storage &storage;
   std::size_t partition_id;
   PaymentQuery query;
+  bool is_transmit_request;
 };
 
 } // namespace tpcc

@@ -31,11 +31,17 @@
 #include "protocol/Star/StarManager.h"
 #include "protocol/Star/StarGenerator.h"
 
+
+#include "protocol/MyClay/MyClay.h"
+#include "protocol/MyClay/MyClayExecutor.h"
+// #include "protocol/MyClay/MyClayManager.h"
+#include "protocol/MyClay/MyClayGenerator.h"
+
 #include "protocol/Lion/Lion.h"
 #include "protocol/Lion/LionExecutor.h"
 #include "protocol/Lion/LionManager.h"
 #include "protocol/Lion/LionTransaction.h"
-#include "protocol/Lion/LionRecorder.h"
+// #include "protocol/Lion/LionRecorder.h"
 #include "protocol/Lion/LionGenerator.h"
 
 // #include "protocol/LionNS/LionNSExecutor.h"
@@ -103,7 +109,7 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion", "LionNS", "Hermes"};
+                                                 "Lion", "LionNS", "Hermes", "MyClay"};
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -187,16 +193,16 @@ public:
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
-      auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-          coordinator_id, context.worker_num + 1, context, stop_flag, db,
-          manager->recorder_status, manager->transmit_status, 
-          manager->n_completed_workers, manager->n_started_workers);
+      // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
+      //     manager->recorder_status, manager->transmit_status, 
+      //     manager->n_completed_workers, manager->n_started_workers);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<LionExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->batch_size,
             manager->worker_status, manager->n_completed_workers,
-            manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
+            manager->n_started_workers)); // , manager->recorder_status // recorder->data_pack_map
       }
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -215,16 +221,16 @@ public:
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
-      auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-          coordinator_id, context.worker_num + 1, context, stop_flag, db,
-          manager->recorder_status, manager->transmit_status, 
-          manager->n_completed_workers, manager->n_started_workers);
+      // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
+      //     manager->recorder_status, manager->transmit_status, 
+      //     manager->n_completed_workers, manager->n_started_workers);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<LionExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->batch_size,
             manager->worker_status, manager->n_completed_workers, 
-            manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
+            manager->n_started_workers)); // , manager->recorder_status , recorder->data_pack_map
       }
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -359,7 +365,26 @@ public:
     //         ->set_all_executors(all_executors);
     //   }
     // }
+    else if (context.protocol == "MyClay") {
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In MyClay, each partition is managed by only one thread.";
 
+      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+
+      auto manager = std::make_shared<group_commit::Manager>(
+          coordinator_id, context.worker_num, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<MyClayExecutor<WorkloadType>>(
+            coordinator_id, i, db, context, manager->worker_status,
+            manager->n_completed_workers, manager->n_started_workers));
+      }
+      workers.push_back(manager);
+    } 
 
     return workers;
   }
@@ -436,7 +461,29 @@ public:
       }
       workers.push_back(manager);
       // workers.push_back(recorder);  
-    } 
+    } else if (context.protocol == "MyClay") {
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In MyClay, each partition is managed by only one thread.";
+
+      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      auto manager = std::make_shared<group_commit::Manager>(
+          coordinator_id, context.worker_num, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<group_commit::MyClayGenerator<WorkloadType, Silo<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      }
+      workers.push_back(manager);
+
+    }
     // else if (context.protocol == "LionWithBrain") {
 
     //   CHECK(context.partition_num %

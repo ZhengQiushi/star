@@ -373,24 +373,24 @@ public:
 
     DCHECK(dec.size() == 0);
 
-    SiloRWKey &writeKey = txn->writeSet[key_offset];
-
+    // SiloRWKey &writeKey = txn->writeSet[key_offset];
+    SiloRWKey &readKey = txn->readSet[key_offset];
     bool tid_changed = false;
 
     if (success) {
 
-      SiloRWKey *readKey = txn->get_read_key(writeKey.get_key());
+      // SiloRWKey *readKey = txn->get_read_key(writeKey.get_key());
 
-      DCHECK(readKey != nullptr);
+      // DCHECK(readKey != nullptr);
 
-      uint64_t tid_on_read = readKey->get_tid();
+      uint64_t tid_on_read = readKey.get_tid();
 
       if (latest_tid != tid_on_read) {
         tid_changed = true;
       }
 
-      writeKey.set_tid(latest_tid);
-      writeKey.set_write_lock_bit();
+      readKey.set_tid(latest_tid);
+      readKey.set_write_lock_bit();
     }
 
     txn->pendingResponses--;

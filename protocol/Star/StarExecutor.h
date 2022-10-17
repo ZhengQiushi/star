@@ -126,8 +126,9 @@ public:
     router_transactions_send.store(0);
   }
 
-  void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage){
-    while(!router_transactions_queue.empty()){
+  void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, 
+                                StorageType& storage, int router_recv_txn_num){
+    while(!router_transactions_queue.empty() && router_recv_txn_num > 0){
       simpleTransaction simple_txn = router_transactions_queue.front();
       router_transactions_queue.pop_front();
       
@@ -142,11 +143,11 @@ public:
         s_transactions_queue.push_back(std::move(p));
         s_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
       }
-
+      router_recv_txn_num -- ;
     }
   }
   
-  bool is_router_stopped(){
+  bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
     if(router_stop_queue.size() < context.coordinator_num){
       ret = false;
@@ -156,12 +157,16 @@ public:
       while(i > 0){
         i --;
         DCHECK(router_stop_queue.size() > 0);
+        int recv_txn_num = router_stop_queue.front();
         router_stop_queue.pop_front();
+        router_recv_txn_num += recv_txn_num;
+        LOG(INFO) << " RECV : " << recv_txn_num;
       }
       ret = true;
     }
     return ret;
   }
+
 
   void start() override {
 
@@ -205,9 +210,9 @@ public:
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
-
+      int router_recv_txn_num = 0;
       // 准备transaction
-      while(!is_router_stopped()){ //  && router_transactions_queue.size() < context.batch_size 
+      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
@@ -219,7 +224,7 @@ public:
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-      unpack_route_transaction(c_workload, s_workload, storage); // 
+      unpack_route_transaction(c_workload, s_workload, storage, router_recv_txn_num); // 
 
       VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "

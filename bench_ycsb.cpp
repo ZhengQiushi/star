@@ -16,8 +16,36 @@ DEFINE_int64(n_nop, 0, "total number of nop");
 
 
 
-int main(int argc, char *argv[]) {
+// test 
+#include "common/MyMove.h"
+#include "core/Defs.h"
+#include <vector>
+#include <metis.h>
 
+template <class Context> class InferType {};
+
+template <> class InferType<star::tpcc::Context> {
+public:
+  template <class Transaction>
+  using WorkloadType = star::tpcc::Workload<Transaction>;
+
+  // using KeyType = tpcc::tpcc::key;
+  // using ValueType = tpcc::tpcc::value;
+  // using KeyType = ycsb::ycsb::key;
+  // using ValueType = ycsb::ycsb::value;
+};
+
+template <> class InferType<star::ycsb::Context> {
+public:
+  template <class Transaction>
+  using WorkloadType = star::ycsb::Workload<Transaction>;
+
+  // using KeyType = ycsb::ycsb::key;
+  // using ValueType = ycsb::ycsb::value;
+};
+
+
+int main(int argc, char *argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler(); 
   google::ParseCommandLineFlags(&argc, &argv, true);
@@ -43,10 +71,24 @@ int main(int argc, char *argv[]) {
   DCHECK(context.peers.size() >= 2) << " The size of ip peers must gt 2.(At least one generator, one worker)";
   star::ycsb::Database db;
   db.initialize(context);
+  // star::Coordinator c(FLAGS_id, db, context);
+  // c.connectToPeers();
+  // c.start();
 
-  star::Coordinator c(FLAGS_id, db, context);
-  c.connectToPeers();
-  c.start();
+  // test 
+  using TransactionType = star::SiloTransaction;
+  using WorkloadType =
+          typename InferType<star::ycsb::Context>::template WorkloadType<TransactionType>;
+  std::atomic<uint32_t> worker_status;
+  std::unique_ptr<star::Clay<WorkloadType>> my_clay = std::make_unique<star::Clay<WorkloadType>>(context, db, worker_status);
+  
+
+  std::vector<idx_t> parts;
+  my_clay->init_with_history("/home/star/data/result_test.xls");
+  my_clay->metis_partition_graph(parts);
+
+  // test done 
+
 
   google::ShutdownGoogleLogging();
 

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <atomic>
 #include <thread>
-#include <set>
 
 #include <glog/logging.h>
 
@@ -45,6 +44,20 @@ public:
     return (bitvec >> READ_RESPOND_BIT_OFFSET) & READ_RESPOND_BIT_MASK;
   }
 
+  // write request bit
+
+  void set_write_request_bit() {
+    clear_write_request_bit();
+    bitvec |= WRITE_REQUEST_BIT_MASK << WRITE_REQUEST_BIT_OFFSET;
+  }
+
+  void clear_write_request_bit() {
+    bitvec &= ~(WRITE_REQUEST_BIT_MASK << WRITE_REQUEST_BIT_OFFSET);
+  }
+
+  uint32_t get_write_request_bit() const {
+    return (bitvec >> WRITE_REQUEST_BIT_OFFSET) & WRITE_REQUEST_BIT_MASK;
+  }
 
   // read request bit
 
@@ -166,25 +179,28 @@ private:
 
 public:
   static constexpr uint32_t TABLE_ID_MASK = 0x1f;
-  static constexpr uint32_t TABLE_ID_OFFSET = 27;
+  static constexpr uint32_t TABLE_ID_OFFSET = 28;
 
   static constexpr uint32_t PARTITION_ID_MASK = 0xff;
-  static constexpr uint32_t PARTITION_ID_OFFSET = 19;
+  static constexpr uint32_t PARTITION_ID_OFFSET = 20;
 
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_MASK = 0x1f;
-  static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 14;
+  static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 15;
 
   static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_MASK = 0x1f;
-  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_OFFSET = 9;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_OFFSET = 10;
 
   static constexpr uint32_t READ_RESPOND_BIT_MASK = 0x1;
-  static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 3;
+  static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 4;
 
   static constexpr uint32_t WRITE_LOCK_BIT_MASK = 0x1;
-  static constexpr uint32_t WRITE_LOCK_BIT_OFFSET = 2;
+  static constexpr uint32_t WRITE_LOCK_BIT_OFFSET = 3;
 
   static constexpr uint32_t READ_REQUEST_BIT_MASK = 0x1;
-  static constexpr uint32_t READ_REQUEST_BIT_OFFSET = 1;
+  static constexpr uint32_t READ_REQUEST_BIT_OFFSET = 2;
+
+  static constexpr uint32_t WRITE_REQUEST_BIT_MASK = 0x1;
+  static constexpr uint32_t WRITE_REQUEST_BIT_OFFSET = 1;
 
   static constexpr uint32_t LOCAL_INDEX_READ_BIT_MASK = 0x1;
   static constexpr uint32_t LOCAL_INDEX_READ_BIT_OFFSET = 0;

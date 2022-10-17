@@ -8,16 +8,21 @@
 #include "benchmark/ycsb/Random.h"
 #include "common/Zipf.h"
 #include "benchmark/ycsb/Database.h"
+#include <vector>
 
 namespace star {
 namespace ycsb {
 
-template <std::size_t N> struct YCSBQuery {
-  int32_t Y_KEY[N];
-  bool UPDATE[N];
+struct YCSBQuery {
+  std::vector<size_t> Y_KEY;
+  std::vector<bool> UPDATE;
+  YCSBQuery(size_t query_size){
+    Y_KEY.resize(query_size, 0);
+    UPDATE.resize(query_size, false);
+  }
 };
 
-template <std::size_t N> class makeYCSBQuery {
+class makeYCSBQuery {
 public:
 // need to reconsider
   const double my_threshold = 0.001; // 20 0000 
@@ -27,12 +32,12 @@ public:
   // const int hot_area_size = 6;
 
   using DatabaseType = Database;
-  YCSBQuery<N> operator()(const Context &context, uint32_t partitionID,// uint32_t hot_area_size,
-                          Random &random, DatabaseType &db, double cur_timestamp) const {
+  YCSBQuery operator()(const Context &context, uint32_t partitionID,// uint32_t hot_area_size,
+                          Random &random, DatabaseType &db, double cur_timestamp, size_t query_size) const {
     // 
     DCHECK(context.partition_num > partitionID);
 
-    YCSBQuery<N> query;
+    YCSBQuery query(query_size);
     int readOnly = random.uniform_dist(1, 100);
     int crossPartition = random.uniform_dist(1, 100);
     
@@ -63,7 +68,7 @@ public:
                 random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
     // }
 
-    for (auto i = 0u; i < N; i++) {
+    for (auto i = 0u; i < query_size; i++) {
       // read or write
       if (readOnly <= context.readOnlyTransaction) {
         query.UPDATE[i] = false;
@@ -96,7 +101,7 @@ public:
           int32_t cross_partition_id_offset = workload_type % (context.coordinator_num - 1) + 1; // - context.coordinator_id
 
           // 对应的几类偏移
-          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * N + i; 
+          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size + i; 
           key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
         } else {
           // 单分区
@@ -123,10 +128,9 @@ public:
     return query;
   }
 
-  YCSBQuery<N> operator()(const int32_t Y_KEY[N], bool UPDATE[N]) const {
-    YCSBQuery<N> query;
-    std::vector<int> hh;
-    for(size_t i = 0 ; i < N; i ++ ){
+  YCSBQuery operator()(const std::vector<size_t>& Y_KEY, const std::vector<bool>& UPDATE) const {
+    YCSBQuery query(Y_KEY.size());
+    for(size_t i = 0 ; i < Y_KEY.size(); i ++ ){
       query.Y_KEY[i] = Y_KEY[i];
       query.UPDATE[i] = UPDATE[i];
     }

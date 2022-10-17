@@ -12,34 +12,35 @@
 #include "core/Worker.h"
 #include "glog/logging.h"
 
+#include "protocol/MyClay/MyClayMessage.h"
+
 #include <chrono>
 
 namespace star {
-namespace group_commit {
-
-template <class Workload, class Protocol> class Executor : public Worker {
+template <class Workload> class MyClayExecutor : public Worker {
 public:
   using WorkloadType = Workload;
-  using ProtocolType = Protocol;
   using DatabaseType = typename WorkloadType::DatabaseType;
-  using TransactionType = typename WorkloadType::TransactionType;
+  using StorageType = typename WorkloadType::StorageType;
+  using TransactionType = SiloTransaction;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
-  using MessageType = typename ProtocolType::MessageType;
-  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
-  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
 
-  using StorageType = typename WorkloadType::StorageType;
+  using ProtocolType = MyClay<DatabaseType>;
 
-  Executor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  using MessageType = MyClayMessage;
+  using MessageFactoryType = MyClayMessageFactory;
+  using MessageHandlerType = MyClayMessageHandler<DatabaseType>;
+
+  MyClayExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        partitioner(PartitionerFactory::create_partitioner(
-            context.partitioner, coordinator_id, context.coordinator_num)),
+        partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
+            coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
         protocol(db, context, *partitioner),
         workload(coordinator_id, db, random, *partitioner, start_time),
@@ -54,6 +55,8 @@ public:
       init_message(async_messages[i].get(), i);
     }
 
+    // partitioner_ptr = partitioner.get();
+
     messageHandlers = MessageHandlerType::get_message_handlers();
     controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
 
@@ -64,17 +67,22 @@ public:
 
   void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
                                 std::deque<simpleTransaction>& router_transactions_queue_,
-                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_,
+                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_, 
+                                std::deque<std::unique_ptr<TransactionType>>& t_transactions_queue_,
                                 int router_recv_txn_num){
-
+    
     while(!router_transactions_queue_.empty() && router_recv_txn_num > 0){
       simpleTransaction simple_txn = router_transactions_queue_.front();
       router_transactions_queue_.pop_front();
       
       n_network_size.fetch_add(simple_txn.size);
-
       auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
-      r_transactions_queue_.push_back(std::move(p));
+
+      if(simple_txn.is_transmit_request){
+        t_transactions_queue_.push_back(std::move(p));
+      } else {
+        r_transactions_queue_.push_back(std::move(p));
+      }
       router_recv_txn_num -- ;
     }
   }
@@ -91,6 +99,9 @@ public:
     WorkloadType workload(coordinator_id, db, random, *partitioner, start_time);
 
     uint64_t last_seed = 0;
+
+    int single_txn_num = 0;
+    int cross_txn_num = 0;
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue.size();    
@@ -111,11 +122,15 @@ public:
         if (retry_transaction) {
           transaction->reset();
         } else {
-          std::size_t partition_id = transaction->get_partition_id();
+          // std::size_t partition_id = transaction->get_partition_id();
           setupHandlers(*transaction);
         }
         auto result = transaction->execute(id);
-
+        if(transaction->distributed_transaction && !transaction->is_transmit_requests()){
+          cross_txn_num ++ ;
+        } else {
+          single_txn_num ++ ;
+        }
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
 
@@ -134,6 +149,8 @@ public:
             random.set_seed(last_seed);
             retry_transaction = true;
           }
+        } else if(result == TransactionResult::TRANSMIT_REQUEST){
+          // pass
         } else {
           protocol.abort(*transaction, sync_messages, async_messages);
           n_abort_no_retry.fetch_add(1);
@@ -149,6 +166,9 @@ public:
     }
     flush_async_messages();
     flush_sync_messages();
+
+
+    LOG(INFO) << "single_txn_num: " << single_txn_num << " " << " cross_txn_num: " << cross_txn_num;
   }
 
   bool is_router_stopped(int& router_recv_txn_num){
@@ -164,7 +184,7 @@ public:
         int recv_txn_num = router_stop_queue.front();
         router_stop_queue.pop_front();
         router_recv_txn_num += recv_txn_num;
-        LOG(INFO) << " RECV : " << recv_txn_num;
+        VLOG(DEBUG_V14) << " RECV : " << recv_txn_num << " cur total : " << router_recv_txn_num;
       }
       ret = true;
     }
@@ -217,18 +237,24 @@ public:
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
-      unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue, router_recv_txn_num); // 
+      unpack_route_transaction(workload, storage, router_transactions_queue, 
+                               r_transactions_queue, t_transactions_queue, router_recv_txn_num); // 
 
-      VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size();
+      size_t r_size = r_transactions_queue.size() + t_transactions_queue.size();
+
+      VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size() << " " << t_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
-
-      size_t r_size = r_transactions_queue.size();
+      
       run_transaction(context, partitioner.get(), r_transactions_queue); // 
+      run_transaction(context, partitioner.get(), t_transactions_queue); // 
+      // while(!t_transactions_queue.empty()){
+      //   t_transactions_queue.pop_front();
+      // }
       for(size_t r = 0; r < r_size; r ++ ){
         // 发回原地...
         size_t generator_id = context.coordinator_num;
@@ -357,12 +383,10 @@ public:
           );
         } else {
           messageHandlers[type](messagePiece,
-                              *async_messages[message->get_source_node_id()], *table,
+                              *async_messages[message->get_source_node_id()], 
+                              db, context, partitioner.get(),
                               transaction.get());
         }
-        // messageHandlers[type](messagePiece,
-        //                       *sync_messages[message->get_source_node_id()],
-        //                       *table, transaction.get());
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
       }
@@ -373,7 +397,72 @@ public:
     return size;
   }
 
-  virtual void setupHandlers(TransactionType &txn) = 0;
+  void setupHandlers(TransactionType &txn) {
+
+    txn.readRequestHandler =
+        [this, &txn](std::size_t table_id, std::size_t partition_id,
+                     uint32_t key_offset, const void *key, void *value,
+                     bool local_index_read) -> uint64_t {
+      bool local_read = false;
+      auto &readKey = txn.readSet[key_offset];
+      ITable *table = this->db.find_table(table_id, partition_id);
+      size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
+
+      if(readKey.get_write_request_bit()){
+        // write key, the find all its replica
+        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner.get());
+        coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
+      }
+      // sec keys replicas
+      readKey.set_dynamic_coordinator_id(coordinatorID);
+      readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
+
+      bool remaster = false;
+      if (coordinatorID == context.coordinator_id ||
+          (this->context.read_on_replica && 
+           this->partitioner->is_partition_replicated_on(partition_id, this->coordinator_id)
+           )) {
+        local_read = true;
+      } else {
+        remaster = table->contains(key); // current coordniator
+        VLOG(DEBUG_V14) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+      }
+
+      if (local_index_read || local_read) {
+        return this->protocol.search(table_id, partition_id, key, value);
+      } else {
+        
+        for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+          // also send to generator to update the router-table
+          if(i == coordinator_id){
+            continue; // local
+          }
+          if(i == coordinatorID){
+            // target
+            if(txn.is_transmit_requests()){
+              VLOG(DEBUG_V14) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
+              txn.network_size += MessageFactoryType::new_transmit_message(
+                  *(this->sync_messages[coordinatorID]), *table, key, key_offset, remaster);
+            } else {
+              txn.network_size += MessageFactoryType::new_search_message(
+                  *(this->sync_messages[coordinatorID]), *table, key, key_offset);
+            }
+          } else {
+            // others, only change the router
+            txn.network_size += MessageFactoryType::new_transmit_router_only_message(
+                *(this->sync_messages[i]), *table, key, key_offset);
+          }            
+          txn.pendingResponses++;
+        }
+        txn.distributed_transaction = true;
+        return 0;
+      }
+    };
+
+    txn.remote_request_handler = [this]() { return this->process_request(); };
+    txn.message_flusher = [this]() { this->flush_sync_messages(); };
+  };
 
 protected:
   void flush_messages(std::vector<std::unique_ptr<Message>> &messages) {
@@ -410,6 +499,8 @@ protected:
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;
+  // Partitioner* partitioner_ptr;
+  
   RandomType random;
   ProtocolType protocol;
   WorkloadType workload;
@@ -419,7 +510,7 @@ protected:
   std::unique_ptr<TransactionType> transaction;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, messages;
   std::vector<
-      std::function<void(MessagePiece, Message &, ITable &, TransactionType *)>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
       messageHandlers;
 
   std::vector<
@@ -428,11 +519,9 @@ protected:
 
   std::deque<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
-  std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
+  std::deque<std::unique_ptr<TransactionType>> r_transactions_queue, t_transactions_queue; // to transaction
 
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *> in_queue, out_queue;
 };
-} // namespace group_commit
-
 } // namespace star

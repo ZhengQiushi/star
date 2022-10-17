@@ -50,6 +50,7 @@ public:
 
     // routerSet.clear(); // add by truth 22-03-25
   }
+  virtual bool is_transmit_requests() = 0;
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
   virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
@@ -86,7 +87,7 @@ public:
 
     add_to_read_set(readKey);
     // add by truth 22-03-25
-    add_to_router_set(readKey);
+    // add_to_router_set(readKey);
     
   }
 
@@ -107,7 +108,7 @@ public:
     add_to_read_set(readKey);
     
     // add by truth 22-03-25
-    add_to_router_set(readKey);
+    // add_to_router_set(readKey);
 
   }
 
@@ -124,12 +125,12 @@ public:
     readKey.set_value(&value);
 
     readKey.set_read_request_bit();
-    // readKey.set_write_lock_bit();
+    readKey.set_write_request_bit();
 
     add_to_read_set(readKey);
 
     // add by truth 22-03-25
-    add_to_router_set(readKey);
+    // add_to_router_set(readKey);
 
   }
 
@@ -246,7 +247,7 @@ public:
         return true;
       } 
       
-      routerSet[i].set_write_lock_bit();
+      // routerSet[i].set_write_lock_bit();
 
       readSet[i].clear_read_request_bit();
       readSet[i].set_tid(tid);
@@ -286,10 +287,10 @@ public:
     return writeSet.size() - 1;
   }
 
-  std::size_t add_to_router_set(const SiloRWKey &key) {
-    routerSet.push_back(key);
-    return routerSet.size() - 1;
-  }
+  // std::size_t add_to_router_set(const SiloRWKey &key) {
+  //   routerSet.push_back(key);
+  //   return routerSet.size() - 1;
+  // }
 
   bool is_abort(){
     return abort_lock || abort_read_validation;
@@ -303,6 +304,7 @@ public:
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;
   bool execution_phase;
+  // bool is_transmit_request;
   // table_id, partition_id, key_offset
   // key, value, 
   // local_index_read
@@ -328,7 +330,7 @@ public:
 
   Partitioner &partitioner;
   Operation operation;
-  std::vector<SiloRWKey> readSet, writeSet, routerSet;
+  std::vector<SiloRWKey> readSet, writeSet; //, routerSet;
 
   int prepare, fetch, commit;
 };

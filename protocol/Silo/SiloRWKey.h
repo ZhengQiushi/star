@@ -44,6 +44,20 @@ public:
     return (bitvec >> READ_RESPOND_BIT_OFFSET) & READ_RESPOND_BIT_MASK;
   }
 
+  // write request bit
+
+  void set_write_request_bit() {
+    clear_write_request_bit();
+    bitvec |= WRITE_REQUEST_BIT_MASK << WRITE_REQUEST_BIT_OFFSET;
+  }
+
+  void clear_write_request_bit() {
+    bitvec &= ~(WRITE_REQUEST_BIT_MASK << WRITE_REQUEST_BIT_OFFSET);
+  }
+
+  uint32_t get_write_request_bit() const {
+    return (bitvec >> WRITE_REQUEST_BIT_OFFSET) & WRITE_REQUEST_BIT_MASK;
+  }
 
   // read request bit
 
@@ -101,18 +115,14 @@ public:
     return (bitvec >> DYNAMIC_COORDINATOR_ID_OFFSET) & DYNAMIC_COORDINATOR_ID_MASK;
   }
 
-
   // secondary coordinator id
-  void set_secondary_coordinator_id(uint32_t dynamic_secondary_coordinator_id) {
-    DCHECK(dynamic_secondary_coordinator_id < (1 << 5));
-    clear_secondary_coordinator_id();
-    bitvec |= dynamic_secondary_coordinator_id << SECONDARY_COORDINATOR_ID_BIT_OFFSET;
+  void set_router_value(uint32_t dynamic_coordinator_id, uint64_t secondary_coordinator_id) {
+    router_val.set_dynamic_coordinator_id(dynamic_coordinator_id);
+    router_val.copy_secondary_coordinator_id(secondary_coordinator_id);
   }
 
-  void clear_secondary_coordinator_id() { bitvec &= ~(SECONDARY_COORDINATOR_ID_BIT_MASK << SECONDARY_COORDINATOR_ID_BIT_OFFSET); }
-
-  uint32_t get_secondary_coordinator_id() const {
-    return (bitvec >> SECONDARY_COORDINATOR_ID_BIT_OFFSET) & SECONDARY_COORDINATOR_ID_BIT_MASK;
+  const RouterValue* const get_router_value() const {
+    return &router_val;
   }
 
   // partition id
@@ -151,7 +161,7 @@ private:
    * A bitvec is a 32-bit word.
    *
    * [ table id (5) ] | partition id (8) | 
-   *   dynamic replica coordinator id (5) | dynamic secondary replica coordinator id(5) | unused bit (5) |
+   *   dynamic replica coordinator id (5) | secondary replica coordinator id(5) | unused bit (5) |
    *   read respond bit(1)
    *   write lock bit(1) | read request bit (1) | local index read (1)  ]
    *
@@ -162,31 +172,35 @@ private:
    */
 
   uint32_t bitvec = 0;
+  RouterValue router_val;
   uint64_t tid = 0;
   const void *key = nullptr;
   void *value = nullptr;
 
 public:
   static constexpr uint32_t TABLE_ID_MASK = 0x1f;
-  static constexpr uint32_t TABLE_ID_OFFSET = 27;
+  static constexpr uint32_t TABLE_ID_OFFSET = 28;
 
   static constexpr uint32_t PARTITION_ID_MASK = 0xff;
-  static constexpr uint32_t PARTITION_ID_OFFSET = 19;
+  static constexpr uint32_t PARTITION_ID_OFFSET = 20;
 
   static constexpr uint32_t DYNAMIC_COORDINATOR_ID_MASK = 0x1f;
-  static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 14;
+  static constexpr uint32_t DYNAMIC_COORDINATOR_ID_OFFSET = 15;
 
   static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_MASK = 0x1f;
-  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_OFFSET = 9;
+  static constexpr uint32_t SECONDARY_COORDINATOR_ID_BIT_OFFSET = 10;
 
   static constexpr uint32_t READ_RESPOND_BIT_MASK = 0x1;
-  static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 3;
+  static constexpr uint32_t READ_RESPOND_BIT_OFFSET = 4;
 
   static constexpr uint32_t WRITE_LOCK_BIT_MASK = 0x1;
-  static constexpr uint32_t WRITE_LOCK_BIT_OFFSET = 2;
+  static constexpr uint32_t WRITE_LOCK_BIT_OFFSET = 3;
 
   static constexpr uint32_t READ_REQUEST_BIT_MASK = 0x1;
-  static constexpr uint32_t READ_REQUEST_BIT_OFFSET = 1;
+  static constexpr uint32_t READ_REQUEST_BIT_OFFSET = 2;
+
+  static constexpr uint32_t WRITE_REQUEST_BIT_MASK = 0x1;
+  static constexpr uint32_t WRITE_REQUEST_BIT_OFFSET = 1;
 
   static constexpr uint32_t LOCAL_INDEX_READ_BIT_MASK = 0x1;
   static constexpr uint32_t LOCAL_INDEX_READ_BIT_OFFSET = 0;

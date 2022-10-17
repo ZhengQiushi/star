@@ -81,12 +81,6 @@ test/workload_cluster_test: test/CMakeFiles/workload_cluster_test.dir/brain/work
 test/workload_cluster_test: test/CMakeFiles/workload_cluster_test.dir/build.make
 test/workload_cluster_test: libcommon.a
 test/workload_cluster_test: test/libpeloton-test-common.a
-test/workload_cluster_test: /usr/local/lib/libglog.a
-test/workload_cluster_test: /usr/local/lib/libgflags.so
-test/workload_cluster_test: /usr/local/lib/libtensorflow.so
-test/workload_cluster_test: /usr/local/lib/libtensorflow_framework.so
-test/workload_cluster_test: /usr/local/lib/libgmock.a
-test/workload_cluster_test: /usr/local/lib/libgtest.a
 test/workload_cluster_test: test/CMakeFiles/workload_cluster_test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/star/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable workload_cluster_test"
 	cd /home/star/test && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/workload_cluster_test.dir/link.txt --verbose=$(VERBOSE)

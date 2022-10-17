@@ -42,7 +42,7 @@ enum myTestSet {
   TPCC
 };
 
-enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY, NOT_LOCAL_NORETRY };
+enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY, NOT_LOCAL_NORETRY, TRANSMIT_REQUEST };
 
 enum class ReadMethods {
   REMOTE_READ_WITH_TRANSFER,
@@ -77,8 +77,9 @@ struct simpleTransaction {
   std::vector<bool> update;
   RouterTxnOps op;
   uint64_t size;
-  uint64_t partition_id;
+  uint64_t partition_id;    // for clay, it means the destination coordinator_id
   bool is_distributed;
+  bool is_transmit_request; // only for clay
 };
 
 struct ExecutionStep {

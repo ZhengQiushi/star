@@ -45,8 +45,8 @@ public:
                const ContextType &context, uint32_t &batch_size,
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
-               std::atomic<uint32_t> &n_started_workers,
-               HashMap<9916, std::string, int> &data_pack_map)
+               std::atomic<uint32_t> &n_started_workers) // ,
+              //  HashMap<9916, std::string, int> &data_pack_map)
                // std::unordered_map<std::string, int> &data_pack_map)
                // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue)
       : Worker(coordinator_id, id), db(db), context(context),
@@ -58,7 +58,7 @@ public:
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        data_pack_map(data_pack_map),
+        // data_pack_map(data_pack_map),
         // data_pack_queue(data_pack_queue),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
@@ -366,11 +366,11 @@ public:
     for(auto it = partition_.begin(); it != partition_.end(); it ++ ){
       template_name += "_" + std::to_string(*it);
     }
-    if(!data_pack_map.contains(template_name)){
-      data_pack_map.insert(template_name, 1);
-    } else {
-      data_pack_map[template_name] ++;
-    }
+    // if(!data_pack_map.contains(template_name)){
+    //   data_pack_map.insert(template_name, 1);
+    // } else {
+    //   data_pack_map[template_name] ++;
+    // }
   }
   void prepare_transactions_to_run(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage, 
     bool is_lion_king){
@@ -2161,7 +2161,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   // LockfreeQueueMulti<data_pack*, 8064 > &data_pack_queue;
 
-  HashMap<9916, std::string, int> &data_pack_map;
+  // HashMap<9916, std::string, int> &data_pack_map;
   // std::unordered_map<std::string, int> &data_pack_map;
   
 

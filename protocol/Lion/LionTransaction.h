@@ -46,6 +46,7 @@ public:
 
     routerSet.clear(); // add by truth 22-03-25
   }
+  virtual bool is_transmit_requests() = 0;
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
   virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
@@ -120,7 +121,7 @@ public:
     readKey.set_value(&value);
 
     readKey.set_read_request_bit();
-    readKey.set_write_lock_bit();
+    readKey.set_write_request_bit();
 
     add_to_read_set(readKey);
 
@@ -305,6 +306,8 @@ public:
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;
   bool execution_phase;
+  // bool is_transmit_request;
+
   // table_id, partition_id, key_offset
   // key, value, 
   // local_index_read

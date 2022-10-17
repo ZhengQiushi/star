@@ -44,6 +44,7 @@ public:
     readSet.clear();
     writeSet.clear();
   }
+  virtual bool is_transmit_requests() = 0;
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
   virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
@@ -294,6 +295,7 @@ public:
   bool abort_lock, abort_no_retry, abort_read_validation;
   bool distributed_transaction;
   bool execution_phase;
+  // bool is_transmit_request;
 
   std::function<bool(std::size_t)> process_requests;
 

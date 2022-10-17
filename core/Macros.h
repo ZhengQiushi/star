@@ -47,7 +47,7 @@ DEFINE_bool(cpu_affinity, true, "pinning each thread to a separate core");
 DEFINE_bool(enable_data_transfer, false, "enable data transfer or not");
 
 DEFINE_bool(lion_no_switch, false, "");
-
+DEFINE_bool(lion_with_metis_init, false, "use metis to initialize");
 
 DEFINE_int32(data_transform_interval, 5, "");
 
@@ -91,5 +91,6 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
   context.time_to_run = FLAGS_time_to_run;                                     \
   context.data_transform_interval = FLAGS_data_transform_interval;             \
   context.lion_no_switch = FLAGS_lion_no_switch;                               \
+  context.lion_with_metis_init = FLAGS_lion_with_metis_init;                   \
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
   context.set_star_partitioner();

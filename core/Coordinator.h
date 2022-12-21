@@ -21,6 +21,7 @@
 
 #include <thread>
 #include <vector>
+#include <sstream>
 
 namespace star {
 
@@ -96,6 +97,12 @@ public:
       }
     }
 
+    if(context.lion_with_metis_init){
+      LOG(INFO) << "wait initialization done ... ";
+      std::this_thread::sleep_for(std::chrono::seconds(20));
+      LOG(INFO) << "lion with metis initialization done ... ";
+    }
+
     // run timeToRun seconds
     uint64_t timeToRun = context.time_to_run;
     uint64_t warmup = 10, cooldown = 5;
@@ -108,8 +115,15 @@ public:
     for(auto i = 0u ; i < workers.size(); i ++ ){
       workers[i]->start_time = startTime;
     }
+
+    std::ofstream outfile_excel;
+    char output[256];
+    sprintf(output, "/home/star/data/commits_%d.xls", id);
+    outfile_excel.open(output, std::ios::trunc); // ios::trunc
+
     do {
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+      LOG(INFO) << "SLEEP : " << std::to_string(context.sample_time_interval);
+      std::this_thread::sleep_for(std::chrono::milliseconds(context.sample_time_interval * 1000));
 
       uint64_t n_commit = 0, n_abort_no_retry = 0, n_abort_lock = 0,
                n_abort_read_validation = 0, n_local = 0,
@@ -118,7 +132,7 @@ public:
       // switch type in every 10 second;
       int cur_workload_type = std::chrono::duration_cast<std::chrono::seconds>(
                  std::chrono::steady_clock::now() - startTime)
-                 .count() / 10 % 6;
+                 .count() / 20 % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
 
@@ -145,7 +159,7 @@ public:
 
         workers[i]->workload_type = cur_workload_type;
       }
-
+      outfile_excel << n_commit << "\n";
       LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit << " abort: "
                 << n_abort_no_retry + n_abort_lock + n_abort_read_validation
                 << " (" << n_abort_no_retry << "/" << n_abort_lock << "/"
@@ -187,6 +201,7 @@ public:
               << 100.0 * total_si_in_serializable / total_commit << " %"
               << ", local: " << 100.0 * total_local / total_commit << " %";
 
+    outfile_excel.close();
     workerStopFlag.store(true);
 
     for (auto i = 0u; i < threads.size(); i++) {
@@ -211,8 +226,8 @@ public:
     }
 
     close_sockets();
-
-    LOG(INFO) << "Coordinator exits.";
+    
+    LOG(INFO) << "Coordinator exits." << output; 
   }
 
   void connectToPeers() {

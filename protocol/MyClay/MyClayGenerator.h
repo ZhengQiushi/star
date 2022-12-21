@@ -334,6 +334,7 @@ public:
           std::vector<int> router_send_txn(context.coordinator_num, 0);
 
           auto router_request = [&](size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
+            // router transaction to coordinators
             messages_mutex[coordinator_id_dst]->lock();
             size_t router_size = ControlMessageFactory::new_router_transaction_message(
                 *async_messages[coordinator_id_dst].get(), 0, *txn, 
@@ -345,8 +346,12 @@ public:
             n_network_size.fetch_add(router_size);
             router_transactions_send.fetch_add(1);
           };
+
+          // debug
           int cnt1 = 0;
           int cnt2 = 0;
+
+          // real transactions
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
           for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
             bool success = false;

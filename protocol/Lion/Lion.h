@@ -144,8 +144,8 @@ public:
       auto &readKey = readSet[i];
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       // write
+      auto key = readKey.get_key();
       if (coordinatorID == context.coordinator_id) {
-        auto key = readKey.get_key();
         if(readKey.get_write_lock_bit()){
           VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << *txn.tids[i] << " " << commit_tid;
           TwoPLHelper::write_lock_release(*txn.tids[i], commit_tid);
@@ -154,7 +154,12 @@ public:
           TwoPLHelper::read_lock_release(*txn.tids[i]);
         }
       } else {
-        DCHECK(false);
+        if(readKey.get_write_lock_bit()){
+          DCHECK(false);
+        } else {
+          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " "  << *txn.tids[i] <<  " " << commit_tid;
+          TwoPLHelper::read_lock_release(*txn.tids[i]);
+        }
       }
     }
 

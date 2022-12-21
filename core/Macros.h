@@ -21,6 +21,10 @@ DEFINE_int32(batch_flush, 50, "batch flush");
 DEFINE_int32(sleep_time, 1000, "retry sleep time");
 DEFINE_string(protocol, "Scar", "transaction protocol");
 DEFINE_string(replica_group, "1,3", "calvin replica group"); 
+
+DEFINE_int32(nop_prob, 0, "prob of transactions having nop, out of 10000");
+DEFINE_int64(n_nop, 2000, "total number of nop");
+
 // 哪几个coordinator组成一个replica group
 // sum() = coordinator_num
 // e.g. 2,1  => C0,C1 属于一个replica group, C2单独属于一个
@@ -47,11 +51,18 @@ DEFINE_bool(cpu_affinity, true, "pinning each thread to a separate core");
 DEFINE_bool(enable_data_transfer, false, "enable data transfer or not");
 
 DEFINE_bool(lion_no_switch, false, "");
-DEFINE_bool(lion_with_metis_init, false, "use metis to initialize");
+DEFINE_int32(lion_with_metis_init, 0, "use metis to initialize");
+DEFINE_int32(migration_only, 0, "migrate only");
+DEFINE_int32(random_router, 0, "random transfer");
+DEFINE_bool(lion_with_trace_log, false, "use metis to initialize");
 
 DEFINE_int32(data_transform_interval, 5, "");
 
-DEFINE_int32(time_to_run, 25, "running time");
+DEFINE_int32(time_to_run, 60, "running time");
+DEFINE_int32(workload_time, 30, "workload switch");
+DEFINE_int32(init_time, 0, "running time");
+DEFINE_int32(sample_time_interval, 1, "running time");
+
 DEFINE_int32(cpu_core_id, 0, "cpu core id");
 
 #define SETUP_CONTEXT(context)                                                 \
@@ -88,9 +99,17 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
   context.tcp_quick_ack = FLAGS_tcp_quick_ack;                                 \
   context.cpu_affinity = FLAGS_cpu_affinity;                                   \
   context.enable_data_transfer = FLAGS_enable_data_transfer;                   \
+  context.migration_only = FLAGS_migration_only;                               \
+  context.nop_prob = FLAGS_nop_prob;                                           \
+  context.n_nop = FLAGS_n_nop;                                                 \
   context.time_to_run = FLAGS_time_to_run;                                     \
+  context.workload_time = FLAGS_workload_time;                                 \
+  context.init_time = FLAGS_init_time;                                         \
+  context.sample_time_interval = FLAGS_sample_time_interval;                   \
   context.data_transform_interval = FLAGS_data_transform_interval;             \
   context.lion_no_switch = FLAGS_lion_no_switch;                               \
   context.lion_with_metis_init = FLAGS_lion_with_metis_init;                   \
+  context.random_router = FLAGS_random_router;                                 \
+  context.lion_with_trace_log = FLAGS_lion_with_trace_log;                     \
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
   context.set_star_partitioner();

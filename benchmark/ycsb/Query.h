@@ -25,7 +25,7 @@ struct YCSBQuery {
 class makeYCSBQuery {
 public:
 // need to reconsider
-  const double my_threshold = 0.001; // 20 0000 
+  const double my_threshold = 0.05; // 20 0000 
                                       //  0.001 = 200  
   const int period_duration = 5;
 
@@ -47,8 +47,22 @@ public:
     // 
     int32_t key_range = partitionID;
 
-    int workload_type = which_workload_(crossPartition, (int)cur_timestamp);
+    int workload_type_num = 2;
 
+    int workload_type = (int)cur_timestamp / context.workload_time % workload_type_num;// which_workload_(crossPartition, (int)cur_timestamp);
+    
+    int cross_partition_probalility = context.crossPartitionProbability ; // cur_timestamp / 2;
+    
+    int is_init = true;
+    if(cur_timestamp < context.init_time / 5){
+      cross_partition_probalility = 0;
+    } else if(cur_timestamp < context.init_time) {
+      cross_partition_probalility = (cur_timestamp - context.init_time / 5) * 1.0 / context.init_time * context.crossPartitionProbability;
+    } else {
+      is_init = false;
+    }
+
+    
     // generate a key in a partition
     // if (crossPartition <= context.crossPartitionProbability &&
     //       context.partition_num > 1) {
@@ -91,7 +105,7 @@ public:
       bool retry;
       do {
         retry = false;
-        if (crossPartition <= context.crossPartitionProbability &&
+        if (crossPartition <= cross_partition_probalility &&
             context.partition_num > 1) {
           // 跨分区
           int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition); // 分区内偏移
@@ -99,9 +113,11 @@ public:
           
           // never involve partitions in the same node
           int32_t cross_partition_id_offset = workload_type % (context.coordinator_num - 1) + 1; // - context.coordinator_id
-
+          if(is_init){
+            cross_partition_id_offset = workload_type_num + 1;
+          }
           // 对应的几类偏移
-          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size + i; 
+          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size / 2 + i; 
           key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
         } else {
           // 单分区

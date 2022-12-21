@@ -68,12 +68,15 @@ public:
                                                  partitioner, storage, simple_txn);
     return p;
   }
+
+  std::chrono::steady_clock::time_point start_time;
+  
 private:
   std::size_t coordinator_id;
   DatabaseType &db;
   RandomType &random;
   Partitioner &partitioner;
-  std::chrono::steady_clock::time_point start_time;
+  
 };
 template <class Transaction>
 myTestSet Workload<Transaction>::which_workload = myTestSet::TPCC;

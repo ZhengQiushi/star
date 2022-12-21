@@ -166,6 +166,7 @@ namespace star
 
         std::vector<MoveRecord<WorkloadType>> records;
         int32_t dest_coordinator_id;
+        int32_t metis_dest_coordinator_id; // only for metis
 
         myMove(){
             reset(); 
@@ -392,6 +393,7 @@ namespace star
                     if(move_plans.size() > 0){
                         movable_flag.store(true);
                     }
+                    transactions_queue.clear();
                 }
 
                 
@@ -402,8 +404,8 @@ namespace star
             return transactions_queue.push_no_wait(txn);
         }
 
-        void init_with_history(const std::string& workload_path){
-            int num_samples = 25000;
+        void init_with_history(const std::string& workload_path, int start_timestamp, int end_timestamp){
+            // int num_samples = 250000;
             // std::string input_path = "/home/star/data/result_test.xls";
             // std::string output_path = "/home/star/data/my_graph";
 
@@ -416,29 +418,40 @@ namespace star
                 std::stringstream ss(_line);
                 std::string _sub;
                 std::vector<uint64_t> keys;
+                
+                bool is_in_range_ = false;
                 if(row_cnt != 0){
                     //按照逗号分隔
                     int index_num = 0;
                     while (getline(ss, _sub, '\t')){
-                    if(index_num != 0){
-                        int64_t key_ = atoi(_sub.c_str());
-                        keys.push_back(key_);
+                        if(index_num != 0){
+                            int64_t key_ = atoi(_sub.c_str());
+                            keys.push_back(key_);
+                        } else {
+                            int64_t ts_ = atof(_sub.c_str());
+                            if(ts_ < start_timestamp || ts_ > end_timestamp){
+                                is_in_range_ = false;
+                                break;
+                            } 
+                            is_in_range_ = true;
+                        }
+                        index_num ++ ;
                     }
-                    index_num ++ ;
+                    if(is_in_range_){
+                        update_record_degree_set(keys);
                     }
-                    update_record_degree_set(keys);
                 } else {
                     // getline(ss, _sub);
                 }
 
                 row_cnt ++ ;
-                if(row_cnt >= num_samples){
-                    break;
-                }
+                // if(row_cnt >= num_samples){
+                //     break;
+                // }
             }
         }
 
-        void metis_partition_graph(std::vector<idx_t>& parts){
+        void metis_partition_graph(){
             int vexnum = get_vertex_num();
             int edgenum = get_edge_num();
 
@@ -446,8 +459,11 @@ namespace star
             std::vector<idx_t> adjncy(0); // 压缩图表示
             std::vector<idx_t> adjwgt(0); // 边权重
             std::vector<idx_t> vwgt(0);   // 点权重
+            
 
-            for(int i = 0 ; i < hottest_tuple_index_seq.size(); i ++ ){                
+            std::unordered_map<int64_t, int32_t> key_coordinator_cache;
+
+            for(size_t i = 0 ; i < hottest_tuple_index_seq.size(); i ++ ){                
                 int64_t key = hottest_tuple_index_seq[i];
 
                 xadj.push_back(adjncy.size()); // 
@@ -458,16 +474,20 @@ namespace star
                 for(auto edge: *it){
                     adjncy.push_back(hottest_tuple_index_[edge.first]); // 节点id从0开始
                     adjwgt.push_back(edge.second.degree);
+
+                    // cache coordinator
+                    key_coordinator_cache[edge.second.from] = edge.second.from_c_id;
+                    key_coordinator_cache[edge.second.to] = edge.second.to_c_id;
                 }
             }
             xadj.push_back(adjncy.size());
 
             idx_t nVertices = xadj.size() - 1;      // 节点数
             idx_t nWeights = 1;                     // 节点权重维数
-            idx_t nParts = context.coordinator_num;   // 子图个数≥2
+            idx_t nParts = context.coordinator_num * 100;   // 子图个数≥2
             idx_t objval;                           // 目标函数值
-            
-            parts.resize(nVertices, 0); // 划分结果
+            std::vector<idx_t> parts(nVertices, 0); // 划分结果
+
             int ret = METIS_PartGraphKway(&nVertices, &nWeights, xadj.data(), adjncy.data(),
                 vwgt.data(), NULL, adjwgt.data(), &nParts, NULL,
                 NULL, NULL, &objval, parts.data());
@@ -475,19 +495,194 @@ namespace star
             if (ret != rstatus_et::METIS_OK) { 
                 std::cout << "METIS_ERROR" << std::endl; 
             }
+
+            // print for logs
             std::cout << "METIS_OK" << std::endl;
             std::cout << "objval: " << objval << std::endl;
             
-            // for (unsigned part_i = 0; part_i < part.size(); part_i++) {
-            //     std::cout << part_i + 1 << " " << part[part_i] << std::endl;
-            // }
-
             std::ofstream outpartition("/home/star/data/partition_result.xls");
-            for (int i = 0; i < parts.size(); i++) { 
-                outpartition << hottest_tuple_index_seq[i] << "\t" << parts[i] << "\n"; 
+            for (size_t i = 0; i < parts.size(); i++) { 
+                int64_t key_ = hottest_tuple_index_seq[i];
+                outpartition << key_ << "\t" << key_coordinator_cache[key_] << "\t" << parts[i] << "\n"; 
             }
             outpartition.close();
+            
+            // generate move plans
+            // myMove [source][destination]
+            std::vector<std::vector<std::shared_ptr<myMove<WorkloadType>>>> myMoves(context.coordinator_num, 
+                        std::vector<std::shared_ptr<myMove<WorkloadType>>>(context.coordinator_num));
+
+
+
+            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
+            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
+            //         myMoves[i][j] = std::make_shared<myMove<WorkloadType>>();
+            //         myMoves[i][j]->dest_coordinator_id = j;
+            //     }
+            // }
+
+            std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move;
+            for(size_t j = 0; j < metis_move.size(); j ++ ){
+                metis_move[j] = std::make_shared<myMove<WorkloadType>>();
+                metis_move[j]->metis_dest_coordinator_id = j;
+            }
+
+            for(size_t i = 0 ; i < parts.size(); i ++ ){
+                int64_t key_ = hottest_tuple_index_seq[i];
+                int32_t source_c_id = key_coordinator_cache[key_];
+                int32_t dest_c_id = parts[i];
+
+                // if(source_c_id == dest_c_id){
+                //     continue;
+                // }
+
+                MoveRecord<WorkloadType> new_move_rec;
+                new_move_rec.set_real_key(key_);
+                // new_move_rec.src_coordinator_id = source_c_id;
+                
+                // myMoves[source_c_id][dest_c_id]->records.push_back(new_move_rec);
+                metis_move[dest_c_id]->records.push_back(new_move_rec);
+            }
+
+
+            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
+            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
+            //         if(myMoves[i][j]->records.size() > 0){
+            //             move_plans.push_no_wait(myMoves[i][j]);
+            //         }
+            //     }
+            // }
+
+            for(size_t j = 0; j < metis_move.size(); j ++ ){
+                if(metis_move[j]->records.size() > 0){
+                    move_plans.push_no_wait(metis_move[j]);
+                }
+            }
+
+            movable_flag.store(false);
         }
+        
+
+        void metis_partiion_read_from_file(){
+            // generate move plans
+            // myMove [source][destination]
+            std::vector<std::vector<std::shared_ptr<myMove<WorkloadType>>>> myMoves(context.coordinator_num, 
+                        std::vector<std::shared_ptr<myMove<WorkloadType>>>(context.coordinator_num));
+
+            for(size_t i = 0 ; i < myMoves.size(); i ++ ){
+                for(size_t j = 0; j < myMoves[i].size(); j ++ ){
+                    myMoves[i][j] = std::make_shared<myMove<WorkloadType>>();
+                    myMoves[i][j]->dest_coordinator_id = j;
+                }
+            }
+
+            char *line=NULL, fmtstr[256], *curstr, *newstr;
+            size_t lnlen=0;
+            FILE *fpin;
+            std::string filename = "/home/star/data/partition_result.xls";
+
+            FILE *in= fopen(filename.c_str(), "r");
+            
+            char buf[1024];
+            // outpartition << key_ << "\t" << key_coordinator_cache[key_] << "\t" << parts[i] << "\n"; 
+            while (fgets(buf, sizeof(buf), in) != NULL){
+                int64_t key_;
+                int64_t source_c_id;
+                int64_t dest_c_id;
+                sscanf(buf, "%ld\t%ld\t%ld", &key_, &source_c_id, &dest_c_id);
+                
+                if(source_c_id == dest_c_id){
+                    continue;
+                }
+
+                MoveRecord<WorkloadType> new_move_rec;
+                new_move_rec.set_real_key(key_);
+                new_move_rec.src_coordinator_id = source_c_id;
+                
+                myMoves[source_c_id][dest_c_id]->records.push_back(new_move_rec);
+            }
+        
+            fclose(in);
+            
+            for(size_t i = 0 ; i < myMoves.size(); i ++ ){
+                for(size_t j = 0; j < myMoves[i].size(); j ++ ){
+                    if(myMoves[i][j]->records.size() > 0){
+                        move_plans.push_no_wait(myMoves[i][j]);
+                    }
+                }
+            }
+
+            movable_flag.store(false);
+
+            return;
+            // fpin = gk_fopen((, "r", "ReadGRaph: Graph");
+            // do {
+            //     if (gk_getline(&line, &lnlen, fpin) == -1) 
+            //         errexit("Premature end of input file while reading vertex %"PRIDX".\n", i+1);
+            // } while (line[0] == '%');
+
+            // curstr = line;
+            // newstr = NULL;
+
+            // /* Read vertex sizes */
+            // if (readvs) {
+            // vsize[i] = strtoidx(curstr, &newstr, 10);
+            // if (newstr == curstr)
+            //     errexit("The line for vertex %"PRIDX" does not have vsize information\n", i+1);
+            // if (vsize[i] < 0)
+            //     errexit("The size for vertex %"PRIDX" must be >= 0\n", i+1);
+            // curstr = newstr;
+            // }
+            // ;
+            // for (size_t i = 0; i < parts.size(); i++) { 
+            //     outpartition << hottest_tuple_index_seq[i] << "\t" << parts[i] << "\n"; 
+            // }
+            // outpartition.close();
+
+
+
+            
+            // // generate move plans
+            // // myMove [source][destination]
+            // std::vector<std::vector<std::shared_ptr<myMove<WorkloadType>>>> myMoves(context.coordinator_num, 
+            //             std::vector<std::shared_ptr<myMove<WorkloadType>>>(context.coordinator_num));
+
+            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
+            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
+            //         myMoves[i][j] = std::make_shared<myMove<WorkloadType>>();
+            //         myMoves[i][j]->dest_coordinator_id = j;
+            //     }
+            // }
+
+            // for(size_t i = 0 ; i < parts.size(); i ++ ){
+            //     int64_t key_ = hottest_tuple_index_seq[i];
+            //     int32_t source_c_id = key_coordinator_cache[key_];
+            //     int32_t dest_c_id = parts[i];
+
+            //     if(source_c_id == dest_c_id){
+            //         continue;
+            //     }
+
+            //     MoveRecord<WorkloadType> new_move_rec;
+            //     new_move_rec.set_real_key(key_);
+            //     new_move_rec.src_coordinator_id = source_c_id;
+                
+            //     myMoves[source_c_id][dest_c_id]->records.push_back(new_move_rec);
+            // }
+
+
+            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
+            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
+            //         if(myMoves[i][j]->records.size() > 0){
+            //             move_plans.push_no_wait(myMoves[i][j]);
+            //         }
+            //     }
+            // }
+
+            // movable_flag.store(false);
+        }
+        
+        
         void trace_graph(const std::string& path){
 
             std::ofstream outfile_excel_index;

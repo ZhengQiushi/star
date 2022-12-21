@@ -122,6 +122,7 @@ public:
 
     readKey.set_read_request_bit();
     readKey.set_write_request_bit();
+    readKey.set_write_lock_bit();
 
     add_to_read_set(readKey);
 

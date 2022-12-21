@@ -42,13 +42,25 @@ public:
   std::string cdf_path;
   std::size_t cpu_core_id = 0;
   std::size_t time_to_run = 25;
+  std::size_t workload_time = 30;
+  std::size_t init_time = 10;
+  std::size_t sample_time_interval = 2;
+                
   std::size_t data_transform_interval = 5;
   
+  std::size_t lion_with_metis_init = 0;
+  std::size_t random_router = 0;
+  std::size_t migration_only = 0;
+
+  std::size_t nop_prob = 0; // out of 10000
+  std::size_t n_nop = 0;
+
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;
   bool enable_data_transfer = false;
   bool lion_no_switch = false;
-  bool lion_with_metis_init = false;
+  
+  bool lion_with_trace_log = false;
 
   bool cpu_affinity = true;
 

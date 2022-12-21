@@ -8,8 +8,7 @@ DEFINE_int32(cross_ratio, 30, "cross partition transaction ratio");
 DEFINE_int32(keys, 200000, "keys in a partition.");
 DEFINE_double(zipf, 0, "skew factor");
 
-DEFINE_int32(nop_prob, 0, "prob of transactions having nop, out of 10000");
-DEFINE_int64(n_nop, 0, "total number of nop");
+
 
 // ./main --logtostderr=1 --id=1 --servers="127.0.0.1:10010;127.0.0.1:10011"
 // cmake -DCMAKE_BUILD_TYPE=Release 
@@ -61,9 +60,6 @@ int main(int argc, char *argv[]) {
   context.crossPartitionProbability = FLAGS_cross_ratio;
   context.keysPerPartition = FLAGS_keys;
 
-  context.nop_prob = FLAGS_nop_prob;
-  context.n_nop = FLAGS_n_nop;
-
   if (FLAGS_zipf > 0) {
     context.isUniform = false;
     star::Zipf::globalZipf().init(context.keysPerPartition, FLAGS_zipf);
@@ -71,21 +67,20 @@ int main(int argc, char *argv[]) {
   DCHECK(context.peers.size() >= 2) << " The size of ip peers must gt 2.(At least one generator, one worker)";
   star::ycsb::Database db;
   db.initialize(context);
-  // star::Coordinator c(FLAGS_id, db, context);
-  // c.connectToPeers();
-  // c.start();
+  star::Coordinator c(FLAGS_id, db, context);
+  c.connectToPeers();
+  c.start();
 
   // test 
-  using TransactionType = star::SiloTransaction;
-  using WorkloadType =
-          typename InferType<star::ycsb::Context>::template WorkloadType<TransactionType>;
-  std::atomic<uint32_t> worker_status;
-  std::unique_ptr<star::Clay<WorkloadType>> my_clay = std::make_unique<star::Clay<WorkloadType>>(context, db, worker_status);
+  // using TransactionType = star::SiloTransaction;
+  // using WorkloadType =
+  //         typename InferType<star::ycsb::Context>::template WorkloadType<TransactionType>;
+  // std::atomic<uint32_t> worker_status;
+  // std::unique_ptr<star::Clay<WorkloadType>> my_clay = std::make_unique<star::Clay<WorkloadType>>(context, db, worker_status);
   
 
-  std::vector<idx_t> parts;
-  my_clay->init_with_history("/home/star/data/result_test.xls");
-  my_clay->metis_partition_graph(parts);
+  // my_clay->init_with_history("/home/star/data/result_test.xls");
+  // my_clay->metis_partition_graph();
 
   // test done 
 

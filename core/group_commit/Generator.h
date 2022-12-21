@@ -117,7 +117,9 @@ public:
   void start() override {
 
     LOG(INFO) << "Generator " << id << " starts.";
-
+    start_time = std::chrono::steady_clock::now();
+    workload.start_time = start_time;
+    
     StorageType storage;
     uint64_t last_seed = 0;
 
@@ -466,7 +468,7 @@ protected:
   }
 
 protected:
-  ShareQueue<simpleTransaction*, 4096> transactions_queue;// [20];
+  ShareQueue<simpleTransaction*, 14096> transactions_queue;// [20];
   size_t generator_num;
   std::atomic<uint32_t> is_full_signal;// [20];
 

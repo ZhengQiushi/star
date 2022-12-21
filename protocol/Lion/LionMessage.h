@@ -34,6 +34,9 @@ enum class LionMessage {
   SEARCH_RESPONSE_READ_ONLY,
   ROUTER_TRANSACTION,
   IGNORE,
+  METIS_MIGRATION_TRANSACTION_REQUEST,
+  METIS_MIGRATION_TRANSACTION_RESPONSE,
+
   NFIELDS
 };
 
@@ -192,6 +195,54 @@ public:
     message.flush();
     return message_size;
   }
+
+    static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
+                                                    simpleTransaction& txn, uint64_t op){
+    // 
+    // op = src_coordinator_id
+    auto& update_ = txn.update; // txn->get_query_update();
+    auto& key_ = txn.keys; // txn->get_query();
+    uint64_t txn_size = (uint64_t)key_.size();
+    auto key_size = sizeof(uint64_t);
+    uint64_t is_distributed = txn.is_distributed;
+    uint64_t is_transmit_request = txn.is_transmit_request;
+
+    auto message_size =
+        MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(is_transmit_request) + 
+                      sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_REQUEST), message_size,
+        table_id, 0);
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder << op << is_distributed << is_transmit_request << txn_size;
+    for(size_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key = key_[i];
+      bool update = update_[i];
+      encoder.write_n_bytes((void*) &key, key_size);
+      encoder.write_n_bytes((void*) &update, sizeof(bool));
+//      LOG(INFO) <<  key_[i] << " " << update_[i];
+    }
+    message.flush();
+    VLOG(DEBUG_V14) << " SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
+    return message_size;
+  }
+
+  static std::size_t metis_migration_transaction_response_message(Message &message){
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_RESPONSE), message_size,
+        0, 0);
+    star::Encoder encoder(message.data);
+    encoder << message_piece_header;
+    message.flush();
+    return message_size;
+  }
+
+
+
 };
 
 template <class Database> class LionMessageHandler {
@@ -202,7 +253,8 @@ public:
   static void search_request_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-                                     std::deque<simpleTransaction>* router_txn_queue
+                                     std::deque<simpleTransaction>* router_txn_queue,
+                                     std::deque<simpleTransaction>* migration_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -250,6 +302,15 @@ public:
       // remaster, not transfer
       value_size = 0;
     }
+
+    // WorkloadType::which_workload == myTestSet::TPCC
+    if(remaster == false || (remaster == true && context.migration_only > 0)) {
+      // simulate cost of transmit data
+      for (auto i = 0u; i < context.n_nop; i++) {
+        asm("nop");
+      }
+    }
+    //TODO: add transmit length with longer transaction
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
@@ -357,7 +418,8 @@ public:
   static void search_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
     /**
      * @brief 
@@ -423,6 +485,14 @@ std::deque<simpleTransaction>* router_txn_queue
           table.insert(key, value, (void*)& tid);
         }
 
+        // simulate migrations with receiver 
+        if(remaster == false || (remaster == true && context.migration_only > 0)) {
+          // simulate cost of transmit data
+          for (auto i = 0u; i < context.n_nop; i++) {
+            asm("nop");
+          }
+        } 
+
         // lock the respond tid and key
         std::atomic<uint64_t> &tid_ = table.search_metadata(key);
         bool success = false;
@@ -477,7 +547,8 @@ std::deque<simpleTransaction>* router_txn_queue
                                           Message &responseMessage,
                                           Database &db, const Context &context,  Partitioner *partitioner, 
                                           Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -547,7 +618,8 @@ std::deque<simpleTransaction>* router_txn_queue
                                            Message &responseMessage,
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -579,7 +651,8 @@ std::deque<simpleTransaction>* router_txn_queue
   static void search_request_router_only_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -677,7 +750,8 @@ std::deque<simpleTransaction>* router_txn_queue
   static void search_response_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_ROUTER_ONLY));
@@ -691,7 +765,8 @@ std::deque<simpleTransaction>* router_txn_queue
   static void search_request_original_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -754,7 +829,8 @@ std::deque<simpleTransaction>* router_txn_queue
   static void search_response_original_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue
+                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      std::deque<simpleTransaction>* migration_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_READ_ONLY));
@@ -795,7 +871,8 @@ std::deque<simpleTransaction>* router_txn_queue
   static void router_transaction_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue
+                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      std::deque<simpleTransaction>* migration_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION));
@@ -840,7 +917,8 @@ std::deque<simpleTransaction>* router_txn_queue
                                            Message &responseMessage,
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -861,15 +939,87 @@ std::deque<simpleTransaction>* router_txn_queue
     // txn->network_size += inputPiece.get_message_length();
   }
 
+  static void metis_migration_transaction_handler(MessagePiece inputPiece,
+                                           Message &responseMessage,
+                                           Database &db, const Context &context,  Partitioner *partitioner,
+                                           Transaction *txn,
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_REQUEST));
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint64_t txn_size, op, is_distributed, is_transmit_request;
+    simpleTransaction new_router_txn;
+
+    // get op
+    op = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(op));
+
+    // 
+    is_distributed = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(is_distributed));
+
+    is_transmit_request = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(is_transmit_request));
+
+    // get key_size
+    txn_size = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(txn_size));
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(is_transmit_request) + sizeof(txn_size) + 
+           (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
+
+    star::Decoder dec(stringPiece);
+    for(uint64_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key;
+      bool update;
+
+      key = *(uint64_t*)stringPiece.data();
+      stringPiece.remove_prefix(sizeof(key));
+
+      update = *(bool*)stringPiece.data();
+      stringPiece.remove_prefix(sizeof(update));
+
+      new_router_txn.keys.push_back(key);
+      new_router_txn.update.push_back(update);
+    }
+
+    new_router_txn.op = static_cast<RouterTxnOps>(op);
+    new_router_txn.size = inputPiece.get_message_length();
+    new_router_txn.is_distributed = is_distributed;
+    new_router_txn.is_transmit_request = is_transmit_request;
+    VLOG(DEBUG_V14) << " GET ROUTER " << is_transmit_request << " " << is_distributed << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
+    migration_txn_queue->push_back(new_router_txn);
+  }
+  
+  static void metis_migration_transaction_response_handler(MessagePiece inputPiece,
+                                           Message &responseMessage,
+                                           Database &db, const Context &context,  Partitioner *partitioner,
+                                           Transaction *txn,
+std::deque<simpleTransaction>* router_txn_queue,
+std::deque<simpleTransaction>* migration_txn_queue
+) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_RESPONSE));
+    return;
+
+}
+
+
   static std::vector<
       std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, 
                          Transaction *, 
+                         std::deque<simpleTransaction>*,
                          std::deque<simpleTransaction>* )>>
   get_message_handlers() {
 
     std::vector<
         std::function<void(MessagePiece, Message &,  Database &, const Context &, Partitioner *, 
                            Transaction *,
+                           std::deque<simpleTransaction>*,
                            std::deque<simpleTransaction>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
@@ -883,6 +1033,10 @@ std::deque<simpleTransaction>* router_txn_queue
     v.push_back(search_response_original_handler); // SEARCH_RESPONSE_READ_ONLY
     v.push_back(router_transaction_handler); // ROUTER_TRANSACTION
     v.push_back(ignore_handler); // IGNORE
+    // 
+    v.push_back(metis_migration_transaction_handler);
+    v.push_back(metis_migration_transaction_response_handler);
+
     return v;
   }
 };

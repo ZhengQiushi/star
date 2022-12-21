@@ -46,6 +46,14 @@ template <class T, std::size_t N = 4096> class ShareQueue {
       }
       return ret;
     }
+    void clear(){
+      std::lock_guard<std::mutex> l(lock);
+
+      while(!queue.empty()){
+        queue.pop();
+      }
+
+    }
   private:
     std::mutex lock;
     std::queue<T> queue;

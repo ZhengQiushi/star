@@ -83,6 +83,9 @@ public:
     s_protocol = new ProtocolType(db, s_context, *s_partitioner, id);
     c_protocol = new ProtocolType(db, c_context, *l_partitioner, id);
 
+    c_workload = new WorkloadType (coordinator_id, db, random, *l_partitioner.get(), start_time);
+    s_workload = new WorkloadType (coordinator_id, db, random, *s_partitioner.get(), start_time);
+
     partitioner = l_partitioner.get(); // nullptr;
     // sync responds that need to be received 
     async_message_num.store(0);
@@ -136,24 +139,23 @@ public:
     while(!router_transactions_queue.empty() && router_recv_txn_num > 0){
       simpleTransaction simple_txn = router_transactions_queue.front();
       router_transactions_queue.pop_front();
-      
       n_network_size.fetch_add(simple_txn.size);
 
-      if(simple_txn.is_distributed){
-        int max_node = -1;
-        auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
-        if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
-          c_transactions_queue.push_back(std::move(p));
-          c_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
-        } else {
-          r_transactions_queue.push_back(std::move(p));
-          r_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
-        }
-
-      } else {
+      if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
         auto p = s_workload.unpack_transaction(context, 0, storage, simple_txn);
         s_transactions_queue.push_back(std::move(p));
-        s_source_coordinator_ids.push_back(static_cast<uint64_t>(simple_txn.op));
+      } else {
+        auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
+        if(simple_txn.is_transmit_request){
+          t_transactions_queue.push_back(std::move(p));
+        } else {
+          int max_node = -1;
+          if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
+            c_transactions_queue.push_back(std::move(p));
+          } else {
+            r_transactions_queue.push_back(std::move(p));
+          }
+        }
       }
       router_recv_txn_num -- ;
     }
@@ -179,7 +181,7 @@ public:
     return ret;
   }
 
-     std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
+  std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
@@ -208,6 +210,20 @@ public:
       }
      return from_nodes_id;
    }
+
+  void handle_transmit_transactions(){
+    size_t r_size = t_transactions_queue.size();
+    run_transaction(ExecutorStatus::C_PHASE, &t_transactions_queue ,async_message_num);
+    for(size_t r = 0; r < r_size; r ++ ){
+      // 发回原地...
+      size_t generator_id = context.coordinator_num;
+      // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+      ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
+      flush_messages(async_messages);
+    }
+  }
+
+  
   void start() override {
 
     LOG(INFO) << "Executor " << id << " starts.";
@@ -215,11 +231,25 @@ public:
     // C-Phase to S-Phase, to C-phase ...
 
     int times = 0;
+    ExecutorStatus status;
+
+    if(context.lion_with_metis_init){
+      // do transmit 
+      status = static_cast<ExecutorStatus>(worker_status.load());
+      process_request();
+      // begin 
+      int router_recv_txn_num = 0;
+      // 准备transaction
+      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
+        process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
+      unpack_route_transaction(*c_workload, *s_workload, storage, router_recv_txn_num);
+      handle_transmit_transactions();
+    }
 
     for (;;) {
       auto begin = std::chrono::steady_clock::now();
-
-      ExecutorStatus status;
       times ++ ;
 
       do {
@@ -238,12 +268,7 @@ public:
       commit_transactions();
 
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " prepare_transactions_to_run";
-
-      WorkloadType c_workload = WorkloadType (coordinator_id, db, random, *l_partitioner.get(), start_time);
-      WorkloadType s_workload = WorkloadType (coordinator_id, db, random, *s_partitioner.get(), start_time);
-      StorageType storage;
       auto now = std::chrono::steady_clock::now();
-
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
@@ -265,7 +290,7 @@ public:
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-      unpack_route_transaction(c_workload, s_workload, storage, router_recv_txn_num); // 
+      unpack_route_transaction(*c_workload, *s_workload, storage, router_recv_txn_num); // 
 
       VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
@@ -659,7 +684,8 @@ private:
                                 *sync_messages[message->get_source_node_id()], 
                                 db, context, partitioner,
                                 transaction.get(), 
-                                &router_transactions_queue);
+                                &router_transactions_queue,
+                                &metis_router_transactions_queue);
         }
 
         if (logger) {
@@ -730,7 +756,17 @@ private:
         // master not at local, but has a secondary one. need to be remastered
         // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
         remaster = table->contains(key); // current coordniator
-        VLOG(DEBUG_V8) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+        if(remaster && context.read_on_replica && !readKey.get_write_lock_bit()){
+          VLOG(DEBUG_V8) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+          
+          std::atomic<uint64_t> &tid = table->search_metadata(key, success);
+          TwoPLHelper::read_lock(tid, success);
+          
+          txn.tids[key_offset] = &tid;
+          readKey.set_read_respond_bit();
+          
+          local_read = true;
+        }
       }
 
       if (local_index_read || local_read) {
@@ -828,12 +864,15 @@ private:
   //     messageHandlers;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &, Partitioner *, // add partitioner
                                  TransactionType *, 
+                                 std::deque<simpleTransaction>*,
                                  std::deque<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *, 10086> in_queue, out_queue, 
                            sync_queue; // for value sync when phase switching occurs
 
   std::deque<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> metis_router_transactions_queue;
+
   std::deque<int> router_stop_queue;
 
   // HashMap<9916, std::string, int> &data_pack_map;
@@ -845,9 +884,13 @@ private:
 
   ContextType s_context, c_context;
   ProtocolType* s_protocol, *c_protocol;
+  WorkloadType* c_workload;
+  WorkloadType* s_workload;
+  StorageType storage;   
+
 
   std::deque<std::unique_ptr<TransactionType>> s_transactions_queue, c_transactions_queue, 
-                                               r_transactions_queue;
+                                               r_transactions_queue, t_transactions_queue;
   std::deque<uint64_t> s_source_coordinator_ids, c_source_coordinator_ids, r_source_coordinator_ids;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx

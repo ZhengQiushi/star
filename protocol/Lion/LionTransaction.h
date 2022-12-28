@@ -60,6 +60,7 @@ public:
   virtual void reset_query() = 0;
 
   virtual const std::vector<u_int64_t> get_query() = 0;
+  virtual const std::string get_query_printed() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
     virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
@@ -150,13 +151,23 @@ public:
 
   bool process_requests(std::size_t worker_id) {
     /**
-     * @brief get content for read set？
+     * @brief calling functions inited by handle
      * 
      * @param i 
      */
     bool success = true;
     // 
     tids.resize(readSet.size(), nullptr);
+    // std::string debug = "";
+    // for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+    //   // early return
+    //   // if (!readSet[i].get_read_request_bit()) {
+    //   //   break;
+    //   // }
+    //   debug += " " + std::to_string(*(int*)readSet[i].get_key()) + "(" + std::to_string(readSet[i].get_write_lock_bit()) + " " + std::to_string(readSet[i].get_read_respond_bit()) + ")";
+    // }
+    // VLOG(DEBUG_V14) << "DEBUG TXN READ SET " << debug;
+
     // cannot use unsigned type in reverse iteration
     for (int i = int(readSet.size()) - 1; i >= 0; i--) {
       // early return
@@ -180,6 +191,12 @@ public:
       message_flusher();
       while (pendingResponses > 0) {
         remote_request_handler();
+        // 
+        if(status == ExecutorStatus::EXIT){
+          LOG(INFO) << "TRANSMITER SHOULD BE STOPPED";
+          success = false;
+          break;
+        }
       }
     }
     if(is_abort()){
@@ -335,6 +352,8 @@ public:
   Partitioner &partitioner;
   Operation operation;
   std::vector<LionRWKey> readSet, writeSet, routerSet;
+
+  ExecutorStatus status;
 };
 
 } // namespace star

@@ -10,7 +10,7 @@
 namespace star {
 namespace group_commit {
 
-template <class T, std::size_t N = 4096> class ShareQueue {
+template <class T, std::size_t N = 40960> class ShareQueue {
   public:
     size_t size(){
       return queue.size();

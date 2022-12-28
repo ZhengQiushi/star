@@ -57,6 +57,17 @@ public:
              std::vector<std::unique_ptr<Message>> &messages) {
 
     auto &readSet = txn.readSet;
+
+    // std::string debug = "";
+    // for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+    //   // early return
+    //   // if (!readSet[i].get_read_request_bit()) {
+    //   //   break;
+    //   // }
+    //   debug += " " + std::to_string(*(int*)readSet[i].get_key()) + "(" + std::to_string(readSet[i].get_write_lock_bit()) + "_" + std::to_string(readSet[i].get_read_respond_bit()) + ")";
+    // }
+    // VLOG(DEBUG_V14) << "ABORT DEBUG TXN READ SET " << debug;
+
     // unlock locked records
     for (auto i = 0u; i < readSet.size(); i++) {
       auto &readKey = readSet[i];
@@ -122,7 +133,7 @@ public:
 
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &messages,
-              std::atomic<uint32_t> &async_message_num) {
+              std::atomic<uint32_t> &async_message_num, bool is_metis) {
 
     if(txn.is_abort()){
       abort(txn, messages);
@@ -133,31 +144,34 @@ public:
     uint64_t commit_tid = generate_tid(txn);
 
     // write and replicate
-    write_and_replicate(txn, commit_tid, messages, async_message_num);
+    if(!is_metis){
+      write_and_replicate(txn, commit_tid, messages, async_message_num);
+    }
 
     // release locks
     auto &readSet = txn.readSet;
     DCHECK(txn.tids.size() == readSet.size());
 
     for (auto i = 0u; i < readSet.size(); i++) {
-      DCHECK(txn.tids[i] != nullptr);
       auto &readKey = readSet[i];
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       // write
       auto key = readKey.get_key();
+
+      DCHECK(txn.tids[i] != nullptr && readKey.get_read_respond_bit());
       if (coordinatorID == context.coordinator_id) {
         if(readKey.get_write_lock_bit()){
-          VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << *txn.tids[i] << " " << commit_tid;
+          VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << *txn.tids[i] << " " << commit_tid << " " << is_metis;
           TwoPLHelper::write_lock_release(*txn.tids[i], commit_tid);
         } else {
-          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " "  << *txn.tids[i] <<  " " << commit_tid;
+          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " "  << *txn.tids[i] <<  " " << commit_tid << " " << is_metis;
           TwoPLHelper::read_lock_release(*txn.tids[i]);
         }
       } else {
         if(readKey.get_write_lock_bit()){
           DCHECK(false);
         } else {
-          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " "  << *txn.tids[i] <<  " " << commit_tid;
+          VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " "  << *txn.tids[i] <<  " " << commit_tid << " " << is_metis;
           TwoPLHelper::read_lock_release(*txn.tids[i]);
         }
       }
@@ -263,9 +277,9 @@ private:
               *messages[coordinatorID], *table, readKey.get_key(),
               readKey.get_value(), commit_tid);
           
-          VLOG(DEBUG_V14) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
           DCHECK(strlen((char*)readKey.get_value()) > 0);
-          async_message_num.fetch_add(1);
+          // async_message_num.fetch_add(1);
+          VLOG(DEBUG_V8) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
           send_replica = true;
         }
       }

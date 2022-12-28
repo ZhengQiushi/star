@@ -97,11 +97,11 @@ public:
       }
     }
 
-    if(context.lion_with_metis_init){
-      LOG(INFO) << "wait initialization done ... ";
-      std::this_thread::sleep_for(std::chrono::seconds(20));
-      LOG(INFO) << "lion with metis initialization done ... ";
-    }
+    // if(context.lion_with_metis_init){
+    //   LOG(INFO) << "wait initialization done ... ";
+    //   std::this_thread::sleep_for(std::chrono::seconds(20));
+    //   LOG(INFO) << "lion with metis initialization done ... ";
+    // }
 
     // run timeToRun seconds
     uint64_t timeToRun = context.time_to_run;
@@ -132,7 +132,7 @@ public:
       // switch type in every 10 second;
       int cur_workload_type = std::chrono::duration_cast<std::chrono::seconds>(
                  std::chrono::steady_clock::now() - startTime)
-                 .count() / 20 % 6;
+                 .count() / context.workload_time % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
 

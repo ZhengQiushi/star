@@ -126,11 +126,19 @@ public:
           setupHandlers(*transaction);
         }
         auto result = transaction->execute(id);
-        if(transaction->distributed_transaction && !transaction->is_transmit_requests()){
-          cross_txn_num ++ ;
+        if(!transaction->is_transmit_requests()){
+          if(transaction->distributed_transaction){
+            cross_txn_num ++ ;
+          } else {
+            single_txn_num ++ ;
+
+            // debug
+            // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
+          }
         } else {
-          single_txn_num ++ ;
+          LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
         }
+
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
 
@@ -444,16 +452,22 @@ public:
               VLOG(DEBUG_V14) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
               txn.network_size += MessageFactoryType::new_transmit_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset, remaster);
+              txn.pendingResponses++;
             } else {
+              VLOG(DEBUG_V14) << "Remote Read : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
               txn.network_size += MessageFactoryType::new_search_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset);
+              txn.pendingResponses++;
             }
           } else {
-            // others, only change the router
-            txn.network_size += MessageFactoryType::new_transmit_router_only_message(
-                *(this->sync_messages[i]), *table, key, key_offset);
+            if(txn.is_transmit_requests()){
+              // others, only change the router
+              txn.network_size += MessageFactoryType::new_transmit_router_only_message(
+                  *(this->sync_messages[i]), *table, key, key_offset);
+              txn.pendingResponses++;
+            }
           }            
-          txn.pendingResponses++;
+          
         }
         txn.distributed_transaction = true;
         return 0;

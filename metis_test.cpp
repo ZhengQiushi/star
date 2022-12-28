@@ -78,9 +78,59 @@ int main(int argc, char *argv[]) {
   std::atomic<uint32_t> worker_status;
   std::unique_ptr<star::Clay<WorkloadType>> my_clay = std::make_unique<star::Clay<WorkloadType>>(context, db, worker_status);
   
+  LOG(INFO) << "start";
+  my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
+  LOG(INFO) << "history init done";
+  my_clay->metis_partition_graph("/home/star/data/resultss_partition_0_30.xls");
+  LOG(INFO) << "done";
 
-  my_clay->init_with_history("/home/star/data/result_test.xls", 0, 20);
-  my_clay->metis_partition_graph();
+
+  my_clay->clear_graph();
+
+  LOG(INFO) << "start";
+  my_clay->init_with_history("/home/star/data/resultss.xls", 30, 60 - 1);
+  LOG(INFO) << "history init done";
+  my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
+  LOG(INFO) << "done";
+
+
+  my_clay->clear_graph();
+
+  LOG(INFO) << "start";
+  my_clay->init_with_history("/home/star/data/resultss.xls", 60, 90 - 1);
+  LOG(INFO) << "history init done";
+  my_clay->metis_partition_graph("/home/star/data/resultss_partition_60_90.xls");
+  LOG(INFO) << "done";
+
+
+    my_clay->clear_graph();
+
+  LOG(INFO) << "start";
+  my_clay->init_with_history("/home/star/data/resultss.xls", 90, 120 - 1);
+  LOG(INFO) << "history init done";
+  my_clay->metis_partition_graph("/home/star/data/resultss_partition_90_120.xls");
+  LOG(INFO) << "done";
+
+
+  // my_clay->clear_graph();
+
+  // LOG(INFO) << "start";
+  // my_clay->init_with_history("/home/star/data/resultss.xls", 40, 60 - 1);
+  // LOG(INFO) << "history init done";
+  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_40_60.xls");
+  // LOG(INFO) << "done";
+
+  // LOG(INFO) << "start read from file";
+  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_20_40.xls");
+  // LOG(INFO) << "read from file done";
+
+  // LOG(INFO) << "start read from file";
+  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_40_60.xls");
+  // LOG(INFO) << "read from file done";
+
+  // LOG(INFO) << "start read from file";
+  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_0_20.xls");
+  // LOG(INFO) << "read from file done";
 
   // test done 
 

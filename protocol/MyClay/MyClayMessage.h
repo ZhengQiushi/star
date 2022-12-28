@@ -262,18 +262,22 @@ public:
 
     // get row and offset
     const void *key = stringPiece.data();
-    auto row = table.search(key);
-
-    VLOG(DEBUG_V14) << "request handler : " << *(int*)key << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
-
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
     dec >> key_offset;
 
     DCHECK(dec.size() == 0);
 
+    bool success = true;
+    uint64_t tid = 0;
+
+    if(!table.contains(key)){
+      success = false;
+    }
+    VLOG(DEBUG_V14) << "request handler : " << *(int*)key << "success = " << success << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + value_size +
+                        sizeof(success) +
                         sizeof(uint64_t) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(MyClayMessage::SEARCH_RESPONSE), message_size,
@@ -284,12 +288,15 @@ public:
 
     // reserve size for read
     responseMessage.data.append(value_size, 0);
-    void *dest =
-        &responseMessage.data[0] + responseMessage.data.size() - value_size;
-    // read to message buffer
-    auto tid = SiloHelper::read(row, dest, value_size);
+    if(success){
+      auto row = table.search(key);
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      // read to message buffer
+      tid = SiloHelper::read(row, dest, value_size);
+    }
 
-    encoder << tid << key_offset;
+    encoder << success << tid << key_offset;
     responseMessage.flush();
 
   }
@@ -313,23 +320,31 @@ public:
 
     uint64_t tid;
     uint32_t key_offset;
+    bool success;
 
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  value_size + sizeof(tid) +
+                                                  value_size + sizeof(success) + sizeof(tid) +
                                                   sizeof(key_offset));
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     stringPiece.remove_prefix(value_size);
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset;
+    dec >> success >> tid >> key_offset;
 
     SiloRWKey &readKey = txn->readSet[key_offset];
-    dec = Decoder(inputPiece.toStringPiece());
-    dec.read_n_bytes(readKey.get_value(), value_size);
-    readKey.set_tid(tid);
+    if(success){
+      dec = Decoder(inputPiece.toStringPiece());
+      dec.read_n_bytes(readKey.get_value(), value_size);
+      readKey.set_tid(tid);
+    }
+    VLOG(DEBUG_V14) << "response handler : " << *(int*)readKey.get_key() << " success = " << success << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
+
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
-    VLOG(DEBUG_V14) << "response handler : " << *(int*)readKey.get_key() << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
+    
+    if(!success){
+      txn->abort_lock = true;
+    }
   }
 
   // 

@@ -50,6 +50,8 @@ public:
   virtual std::size_t table_record_num() = 0;
 
   virtual bool contains(const void *key) = 0;
+
+  virtual void clear() = 0;
 };
 
 template <std::size_t N, class KeyType, class ValueType>
@@ -121,10 +123,12 @@ public:
     const auto &m = *static_cast<const MetaDataType *>(meta_value);
 
     bool ok = map_.contains(k);
-    DCHECK(ok == false);
-    auto &row = map_[k];
-    std::get<0>(row).store(m);
-    std::get<1>(row) = v;
+    // DCHECK(ok == false);
+    if(ok == false) {
+      auto &row = map_[k];
+      std::get<0>(row).store(m);
+      std::get<1>(row) = v;
+    }
   }
 
   void update(const void *key, const void *value) override {
@@ -182,6 +186,9 @@ public:
   }
   std::size_t table_record_num() override {
     return map_.size();
+  }
+  void clear() override {
+    map_.clear();
   }
 private:
   HashMap<N, KeyType, std::tuple<MetaDataType, ValueType>> map_;

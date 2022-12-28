@@ -431,9 +431,9 @@ public:
     }
     
     int time1 = 0;
-    int time2 = 0;
+    int time_read_remote = 0;
     int time3 = 0;
-    int time4 = 0;
+    int time_prepare_read = 0;
 
     ProtocolType protocol(db, phase_context, *partitioner, id);
     WorkloadType workload(coordinator_id, db, random, *partitioner, start_time);
@@ -479,7 +479,7 @@ public:
           // auto result = transaction->execute(id);
           transaction->prepare_read_execute(id);
 
-          time4 += std::chrono::duration_cast<std::chrono::microseconds>(
+          time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - now)
               .count();
           now = std::chrono::steady_clock::now();
@@ -500,7 +500,7 @@ public:
             result = transaction->prepare_update_execute(id);
           }
           // auto result = transaction->execute(id);
-          time2 += std::chrono::duration_cast<std::chrono::microseconds>(
+          time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - now)
               .count();
           now = std::chrono::steady_clock::now();
@@ -551,7 +551,7 @@ public:
     flush_sync_messages();
 
     if(cur_queue_size > 0)
-      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time4 / cur_queue_size << "  execute: " << time2 / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
 
   }
 

@@ -212,7 +212,7 @@ public:
       std::vector<std::thread> threads;
       for (auto n = 0u; n < context.coordinator_num; n++) {
         threads.emplace_back([&](int n) {
-          std::vector<int> router_send_txn(context.coordinator_num, 0);
+          std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
           for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
             bool success = false;
@@ -220,7 +220,7 @@ public:
             DCHECK(success == true);
             size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
             // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
-            router_send_txn[coordinator_id_dst] ++ ;
+            router_send_txn_cnt[coordinator_id_dst] ++ ;
             messages_mutex[coordinator_id_dst]->lock();
             size_t router_size = ControlMessageFactory::new_router_transaction_message(
                 *async_messages[coordinator_id_dst].get(), 0, *txn, 
@@ -240,7 +240,7 @@ public:
             }
             // LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
             messages_mutex[l]->lock();
-            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn[l]);
+            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }

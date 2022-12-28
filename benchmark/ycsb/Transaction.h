@@ -277,6 +277,15 @@ public:
     }
     return record_keys;
   }
+
+
+  const std::string get_query_printed() override {
+    std::string print_ = "";
+    for(auto i : get_query()){
+      print_ += " " + std::to_string(i);
+    }
+    return print_;
+  }
   
    const std::vector<bool> get_query_update(){
      std::vector<bool> ret;

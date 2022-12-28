@@ -208,9 +208,14 @@ public:
     return move_size;
   }
 
+  int pin_thread_id_ = 3;
+
   void start() override {
 
     LOG(INFO) << "MyClayGenerator " << id << " starts.";
+
+    start_time = std::chrono::steady_clock::now();
+    workload.start_time = start_time;
 
     StorageType storage;
     uint64_t last_seed = 0;
@@ -242,7 +247,8 @@ public:
       }, n);
 
       if (context.cpu_affinity) {
-        generator_core_id[n] = ControlMessageFactory::pin_thread_to_core(context, generators[n]);
+        ControlMessageFactory::pin_thread_to_core(context, generators[n], pin_thread_id_);
+        generator_core_id[n] = pin_thread_id_ ++ ;
       }
     }
     // wait 
@@ -254,6 +260,11 @@ public:
     std::vector<std::thread> clay;
     my_clay = std::make_unique<Clay<WorkloadType>>(context, db, worker_status);
     clay.emplace_back(&Clay<WorkloadType>::start, my_clay.get());
+    ControlMessageFactory::pin_thread_to_core(context, clay[0], pin_thread_id_);
+    pin_thread_id_ ++ ;
+
+    static int cur_workload_type = 0;
+
 
     // transmiter: do the transfer for the clay and whole system
     std::vector<std::thread> transmiter;
@@ -274,11 +285,24 @@ public:
           LOG(INFO) << "router transmit request " << num; 
         }
         my_clay->movable_flag.store(false);
+        
+        double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - start_time)
+                    .count() * 1.0 / 1000 / 1000;
+
+        if(cur_workload_type != cur_timestamp / context.workload_time){
+          cur_workload_type = cur_timestamp / context.workload_time;
+          my_clay->clear_graph();
+          LOG(INFO) << " workload type changed to [" << cur_workload_type << "]. Clear Graph.";
+        }
+        
         status = static_cast<ExecutorStatus>(worker_status.load());
       }
       LOG(INFO) << "transmiter " << " exits.";
     });
-
+    ControlMessageFactory::pin_thread_to_core(context, transmiter[0], pin_thread_id_);
+    pin_thread_id_ ++ ;
+    
 
     // main loop
     for (;;) {
@@ -331,7 +355,7 @@ public:
       for (auto n = 0u; n < context.coordinator_num; n++) {
         threads.emplace_back([&](int n) {
           // 
-          std::vector<int> router_send_txn(context.coordinator_num, 0);
+          std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
 
           auto router_request = [&](size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
             // router transaction to coordinators
@@ -342,7 +366,7 @@ public:
             flush_message(async_messages, coordinator_id_dst);
             messages_mutex[coordinator_id_dst]->unlock();
 
-            router_send_txn[coordinator_id_dst]++;
+            router_send_txn_cnt[coordinator_id_dst]++;
             n_network_size.fetch_add(router_size);
             router_transactions_send.fetch_add(1);
           };
@@ -382,7 +406,7 @@ public:
             router_request(coordinator_id_dst, txn);
           }
           is_full_signal.store(0);
-          VLOG(DEBUG_V14) << "Generator " << n << " send router " << router_send_txn[0] << " " << router_send_txn[1];
+          VLOG(DEBUG_V14) << "Generator " << n << " send router " << router_send_txn_cnt[0] << " " << router_send_txn_cnt[1];
           // after router all txns, send the stop-SIGNAL
           for (auto l = 0u; l < context.coordinator_num; l++){
             if(l == context.coordinator_id){
@@ -390,14 +414,15 @@ public:
             }
             VLOG(DEBUG_V14) << "SEND ROUTER_STOP " << n << " -> " << l;
             messages_mutex[l]->lock();
-            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn[l]);
+            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }
         }, n);
 
         if (context.cpu_affinity) {
-          ControlMessageFactory::pin_thread_to_core(context, threads[n], generator_core_id[n]);
+          ControlMessageFactory::pin_thread_to_core(context, threads[n], pin_thread_id_); // , generator_core_id[n]);
+          pin_thread_id_ ++;
         }
       }
 

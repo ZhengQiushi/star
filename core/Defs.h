@@ -19,6 +19,7 @@ namespace star {
 #define DEBUG_V11 11 // router_only
 #define DEBUG_V12 12  //
 #define DEBUG_V14 14  // lock and unlock
+#define DEBUG_V16 16  // lock and unlock
 
 
 enum class ExecutorStatus {
@@ -73,6 +74,7 @@ enum class RouterTxnOps {
 
 
 struct simpleTransaction {
+  size_t idx_;
   std::vector<uint64_t> keys;
   std::vector<bool> update;
   RouterTxnOps op;

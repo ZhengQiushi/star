@@ -598,6 +598,8 @@ public:
     return ret; 
   };
 
+
+
   const std::vector<u_int64_t> get_query() override{
     /**
      * @brief for generate the COUNT message for Recorder!
@@ -654,6 +656,13 @@ public:
     return record_keys;
   }
 
+  const std::string get_query_printed() override {
+    std::string print_ = "";
+    for(auto i : get_query()){
+      print_ += " " + std::to_string(i);
+    }
+    return print_;
+  }
 
   std::set<int> txn_nodes_involved(bool is_dynamic) override {
     std::set<int> from_nodes_id;
@@ -937,6 +946,15 @@ public:
     DCHECK(false);
     return record_keys;
   }
+
+  const std::string get_query_printed() override {
+    std::string print_ = "";
+    for(auto i : get_query()){
+      print_ += " " + std::to_string(i);
+    }
+    return print_;
+  }
+  
   const std::vector<bool> get_query_update() override {
     std::vector<bool> ret;
     for(size_t i = 0; i < 1; i ++ ){

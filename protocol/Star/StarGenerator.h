@@ -111,6 +111,7 @@ public:
     router_transaction_done.store(0);//router_transaction_done.fetch_sub(router_transactions_send.load());
     router_transactions_send.store(0);
   }
+  int pin_thread_id_ = 3;
   void start() override {
 
     LOG(INFO) << "StarGenerator " << id << " starts.";
@@ -147,7 +148,8 @@ public:
       }, n);
 
       if (context.cpu_affinity) {
-        generator_core_id[n] = ControlMessageFactory::pin_thread_to_core(context, generators[n]);
+        ControlMessageFactory::pin_thread_to_core(context, generators[n], pin_thread_id_);
+        generator_core_id[n] = pin_thread_id_ ++;
       }
     }
 
@@ -194,7 +196,7 @@ public:
       std::vector<std::thread> threads;
       for (auto n = 0u; n < context.coordinator_num; n++) {
         threads.emplace_back([&](int n) {
-          std::vector<int> router_send_txn(context.coordinator_num, 0);
+          std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
 
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
           for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
@@ -210,7 +212,7 @@ public:
               DCHECK(txn->is_distributed == 0);
             }
             // 
-            router_send_txn[coordinator_id_dst] ++ ;
+            router_send_txn_cnt[coordinator_id_dst] ++ ;
             messages_mutex[coordinator_id_dst]->lock();
             size_t router_size = ControlMessageFactory::new_router_transaction_message(
                 *async_messages[coordinator_id_dst].get(), 0, *txn, 
@@ -231,14 +233,15 @@ public:
             }
             // LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
             messages_mutex[l]->lock();
-            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn[l]);
+            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }
         }, n);
 
         if (context.cpu_affinity) {
-          ControlMessageFactory::pin_thread_to_core(context, threads[n], generator_core_id[n]);
+          ControlMessageFactory::pin_thread_to_core(context, threads[n], pin_thread_id_); // generator_core_id[n]
+          pin_thread_id_ ++ ;
         }
       }
 

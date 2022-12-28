@@ -11,7 +11,16 @@
 #include "common/skiplist/skip_list.h"
 #include <unordered_set>
 #include <fstream>
-
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <cstring>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <metis.h>
 #include <map>
 
@@ -404,54 +413,128 @@ namespace star
             return transactions_queue.push_no_wait(txn);
         }
 
+        size_t get_file_size(const char* file_name) {
+            struct stat st;
+            stat(file_name, &st);
+            return st.st_size;
+        }
+
+        // /*使用mmap进行文件映射*/
+        size_t read_file_from_mmap(const char* file_name, char** mem_data) {
+            size_t file_size = get_file_size(file_name);
+            LOG(INFO) << "READ FILE SIZE : " << file_size;
+            //Open file
+            int fd = open(file_name, O_RDONLY, 0);
+            if (fd == -1){
+                LOG(INFO) << "Error open file for read";
+                return file_size;
+            }
+            //Execute mmap
+            void* mmapped_data = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
+            if (mmapped_data == MAP_FAILED) {
+                close(fd);
+                LOG(INFO) << "Error mmapping the file";
+                return file_size;
+            }
+
+            //Write the mmapped data buffer
+            /*将其内容拷贝到内存缓冲区*/
+            *mem_data = new char[file_size];
+            // metis_file_read_ptr_ = init_metis_file_;
+
+            memcpy(*mem_data, mmapped_data, file_size);
+            
+            //Cleanup
+            int rc = munmap(mmapped_data, file_size);
+            if (rc != 0) {
+                close(fd);
+                LOG(INFO) << "Error un-mmapping the file";
+                return file_size;
+            }
+        //    cout << ret << endl;
+            close(fd);
+
+            LOG(INFO) << "READ FILE DONE ";
+            
+            return file_size;
+        }
+        
         void init_with_history(const std::string& workload_path, int start_timestamp, int end_timestamp){
             // int num_samples = 250000;
             // std::string input_path = "/home/star/data/result_test.xls";
             // std::string output_path = "/home/star/data/my_graph";
+            if(init_metis_file_ == nullptr){
+                file_size_ = read_file_from_mmap(workload_path.c_str(), &init_metis_file_);
+                metis_file_read_ptr_ = init_metis_file_;
+                if(metis_file_read_ptr_ == nullptr) {
+                    return;
+                }
+            }
+            LOG(INFO) << "START READ INTO GRAPH";
 
-            std::ifstream ifs(workload_path.c_str(), std::ios::in);
-            int row_cnt = 0;
             std::string _line = "";
+            std::vector<uint64_t> keys;
 
-            while (getline(ifs, _line)){
+            int cur_row_cnt = 0;
+            while (metis_file_read_ptr_ != nullptr && metis_file_read_ptr_ - init_metis_file_ < file_size_){
                 //解析每行的数据
-                std::stringstream ss(_line);
-                std::string _sub;
-                std::vector<uint64_t> keys;
-                
-                bool is_in_range_ = false;
-                if(row_cnt != 0){
-                    //按照逗号分隔
-                    int index_num = 0;
-                    while (getline(ss, _sub, '\t')){
-                        if(index_num != 0){
-                            int64_t key_ = atoi(_sub.c_str());
-                            keys.push_back(key_);
-                        } else {
-                            int64_t ts_ = atof(_sub.c_str());
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(metis_file_read_ptr_, '\n');
+                if(line_end_ == nullptr){
+                    break;
+                }
+                if(file_row_cnt_ > 0){
+                    keys.clear();
+                    int col_cnt_ = 0;
+                    char *per_key_ = strtok_r(metis_file_read_ptr_, "\t", &saveptr_);
+                    while(per_key_ != NULL){
+                        if(col_cnt_ == 0){
+                            int64_t ts_ = atof(per_key_);
+                            if(ts_ > end_timestamp){
+                                is_break = true;
+                            }
                             if(ts_ < start_timestamp || ts_ > end_timestamp){
                                 is_in_range_ = false;
                                 break;
                             } 
                             is_in_range_ = true;
+                        } else {
+                            int64_t key_ = atoi(per_key_);
+                            keys.push_back(key_);
                         }
-                        index_num ++ ;
+                        col_cnt_ ++ ;
+                        if(col_cnt_ > 10){
+                            break;
+                        }
+                        per_key_ = strtok_r(NULL, "\t", &saveptr_);
                     }
-                    if(is_in_range_){
-                        update_record_degree_set(keys);
-                    }
-                } else {
-                    // getline(ss, _sub);
-                }
 
-                row_cnt ++ ;
-                // if(row_cnt >= num_samples){
-                //     break;
-                // }
+                    if(is_in_range_ && keys.size() > 0){
+                        update_record_degree_set(keys);
+                        cur_row_cnt ++ ;
+                    }
+                }
+                
+                file_row_cnt_ ++ ;
+                
+                metis_file_read_ptr_ = line_end_ + 1;
+                if(metis_file_read_ptr_ == NULL){
+                    LOG(INFO) << "WHY";
+                }
+                if(is_break == true){
+                    break;
+                }
             }
+            LOG(INFO) << "file_row_cnt_ : " << cur_row_cnt << " " << file_row_cnt_;
         }
 
-        void metis_partition_graph(){
+        void metis_partition_graph(const std::string& output_path_){
+            /**
+             * @brief 
+             * 
+             */
             int vexnum = get_vertex_num();
             int edgenum = get_edge_num();
 
@@ -484,7 +567,7 @@ namespace star
 
             idx_t nVertices = xadj.size() - 1;      // 节点数
             idx_t nWeights = 1;                     // 节点权重维数
-            idx_t nParts = context.coordinator_num * 100;   // 子图个数≥2
+            idx_t nParts = context.coordinator_num * 1000;   // 子图个数≥2
             idx_t objval;                           // 目标函数值
             std::vector<idx_t> parts(nVertices, 0); // 划分结果
 
@@ -500,29 +583,8 @@ namespace star
             std::cout << "METIS_OK" << std::endl;
             std::cout << "objval: " << objval << std::endl;
             
-            std::ofstream outpartition("/home/star/data/partition_result.xls");
-            for (size_t i = 0; i < parts.size(); i++) { 
-                int64_t key_ = hottest_tuple_index_seq[i];
-                outpartition << key_ << "\t" << key_coordinator_cache[key_] << "\t" << parts[i] << "\n"; 
-            }
-            outpartition.close();
-            
-            // generate move plans
-            // myMove [source][destination]
-            std::vector<std::vector<std::shared_ptr<myMove<WorkloadType>>>> myMoves(context.coordinator_num, 
-                        std::vector<std::shared_ptr<myMove<WorkloadType>>>(context.coordinator_num));
-
-
-
-            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
-            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
-            //         myMoves[i][j] = std::make_shared<myMove<WorkloadType>>();
-            //         myMoves[i][j]->dest_coordinator_id = j;
-            //     }
-            // }
-
-            std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move;
-            for(size_t j = 0; j < metis_move.size(); j ++ ){
+            std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move(nParts);
+            for(size_t j = 0; j < nParts; j ++ ){
                 metis_move[j] = std::make_shared<myMove<WorkloadType>>();
                 metis_move[j]->metis_dest_coordinator_id = j;
             }
@@ -532,154 +594,112 @@ namespace star
                 int32_t source_c_id = key_coordinator_cache[key_];
                 int32_t dest_c_id = parts[i];
 
-                // if(source_c_id == dest_c_id){
-                //     continue;
-                // }
-
                 MoveRecord<WorkloadType> new_move_rec;
                 new_move_rec.set_real_key(key_);
-                // new_move_rec.src_coordinator_id = source_c_id;
-                
-                // myMoves[source_c_id][dest_c_id]->records.push_back(new_move_rec);
+
                 metis_move[dest_c_id]->records.push_back(new_move_rec);
             }
 
 
-            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
-            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
-            //         if(myMoves[i][j]->records.size() > 0){
-            //             move_plans.push_no_wait(myMoves[i][j]);
-            //         }
-            //     }
-            // }
-
+            std::ofstream outpartition(output_path_);
+            for (size_t i = 0; i < parts.size(); i++) { 
+            }
+            
             for(size_t j = 0; j < metis_move.size(); j ++ ){
                 if(metis_move[j]->records.size() > 0){
+                    outpartition << j << "\t";
+                    for(int i = 0 ; i < metis_move[j]->records.size(); i ++ ){
+                        outpartition << metis_move[j]->records[i].record_key_ << "\t";
+                    }
+                    outpartition << "\n";
                     move_plans.push_no_wait(metis_move[j]);
                 }
             }
+            outpartition.close();
 
             movable_flag.store(false);
         }
         
 
-        void metis_partiion_read_from_file(){
+        void metis_partiion_read_from_file(const std::string& partition_filename){
+            /***
+             * 
+            */
             // generate move plans
             // myMove [source][destination]
-            std::vector<std::vector<std::shared_ptr<myMove<WorkloadType>>>> myMoves(context.coordinator_num, 
-                        std::vector<std::shared_ptr<myMove<WorkloadType>>>(context.coordinator_num));
 
-            for(size_t i = 0 ; i < myMoves.size(); i ++ ){
-                for(size_t j = 0; j < myMoves[i].size(); j ++ ){
-                    myMoves[i][j] = std::make_shared<myMove<WorkloadType>>();
-                    myMoves[i][j]->dest_coordinator_id = j;
-                }
+            if(init_partition_file_ != nullptr){
+                delete init_partition_file_;
+                init_partition_file_ = nullptr;
             }
+            partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+            if(init_partition_file_ == nullptr){
+                LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                return;
+            }
+            partition_file_read_ptr_ = init_partition_file_;
 
-            char *line=NULL, fmtstr[256], *curstr, *newstr;
-            size_t lnlen=0;
-            FILE *fpin;
-            std::string filename = "/home/star/data/partition_result.xls";
 
-            FILE *in= fopen(filename.c_str(), "r");
+            std::size_t nParts = context.coordinator_num * 1000;
+            // std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move(nParts);
+            // metis_move.clear();
+            // metis_move.resize(nParts);
             
-            char buf[1024];
-            // outpartition << key_ << "\t" << key_coordinator_cache[key_] << "\t" << parts[i] << "\n"; 
-            while (fgets(buf, sizeof(buf), in) != NULL){
-                int64_t key_;
-                int64_t source_c_id;
-                int64_t dest_c_id;
-                sscanf(buf, "%ld\t%ld\t%ld", &key_, &source_c_id, &dest_c_id);
-                
-                if(source_c_id == dest_c_id){
-                    continue;
-                }
+            // for(size_t j = 0; j < nParts; j ++ ){
+            //     metis_move[j] = std::make_shared<myMove<WorkloadType>>();
+            //     metis_move[j]->metis_dest_coordinator_id = j;
+            // }
 
-                MoveRecord<WorkloadType> new_move_rec;
-                new_move_rec.set_real_key(key_);
-                new_move_rec.src_coordinator_id = source_c_id;
-                
-                myMoves[source_c_id][dest_c_id]->records.push_back(new_move_rec);
-            }
-        
-            fclose(in);
             
-            for(size_t i = 0 ; i < myMoves.size(); i ++ ){
-                for(size_t j = 0; j < myMoves[i].size(); j ++ ){
-                    if(myMoves[i][j]->records.size() > 0){
-                        move_plans.push_no_wait(myMoves[i][j]);
-                    }
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
                 }
+                
+                int col_cnt_ = 0;
+                int row_id = 0;
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        row_id = atoi(per_key_);
+                    } else {
+                        int64_t key_ = atoi(per_key_);
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    move_plans.push_no_wait(metis_move);
+                }
+                
+                file_row_cnt_ ++ ;
+                partition_file_read_ptr_ = line_end_ + 1;
             }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
 
             movable_flag.store(false);
 
             return;
-            // fpin = gk_fopen((, "r", "ReadGRaph: Graph");
-            // do {
-            //     if (gk_getline(&line, &lnlen, fpin) == -1) 
-            //         errexit("Premature end of input file while reading vertex %"PRIDX".\n", i+1);
-            // } while (line[0] == '%');
-
-            // curstr = line;
-            // newstr = NULL;
-
-            // /* Read vertex sizes */
-            // if (readvs) {
-            // vsize[i] = strtoidx(curstr, &newstr, 10);
-            // if (newstr == curstr)
-            //     errexit("The line for vertex %"PRIDX" does not have vsize information\n", i+1);
-            // if (vsize[i] < 0)
-            //     errexit("The size for vertex %"PRIDX" must be >= 0\n", i+1);
-            // curstr = newstr;
-            // }
-            // ;
-            // for (size_t i = 0; i < parts.size(); i++) { 
-            //     outpartition << hottest_tuple_index_seq[i] << "\t" << parts[i] << "\n"; 
-            // }
-            // outpartition.close();
-
-
-
-            
-            // // generate move plans
-            // // myMove [source][destination]
-            // std::vector<std::vector<std::shared_ptr<myMove<WorkloadType>>>> myMoves(context.coordinator_num, 
-            //             std::vector<std::shared_ptr<myMove<WorkloadType>>>(context.coordinator_num));
-
-            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
-            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
-            //         myMoves[i][j] = std::make_shared<myMove<WorkloadType>>();
-            //         myMoves[i][j]->dest_coordinator_id = j;
-            //     }
-            // }
-
-            // for(size_t i = 0 ; i < parts.size(); i ++ ){
-            //     int64_t key_ = hottest_tuple_index_seq[i];
-            //     int32_t source_c_id = key_coordinator_cache[key_];
-            //     int32_t dest_c_id = parts[i];
-
-            //     if(source_c_id == dest_c_id){
-            //         continue;
-            //     }
-
-            //     MoveRecord<WorkloadType> new_move_rec;
-            //     new_move_rec.set_real_key(key_);
-            //     new_move_rec.src_coordinator_id = source_c_id;
-                
-            //     myMoves[source_c_id][dest_c_id]->records.push_back(new_move_rec);
-            // }
-
-
-            // for(size_t i = 0 ; i < myMoves.size(); i ++ ){
-            //     for(size_t j = 0; j < myMoves[i].size(); j ++ ){
-            //         if(myMoves[i][j]->records.size() > 0){
-            //             move_plans.push_no_wait(myMoves[i][j]);
-            //         }
-            //     }
-            // }
-
-            // movable_flag.store(false);
         }
         
         
@@ -721,6 +741,7 @@ namespace star
              *        each moves is the set of records which may from different 
              *        partition but will be transformed to the same destination
             */
+            std::lock_guard<std::mutex> l(mm);
             average_load = 0;
             int32_t overloaded_coordinator_id = find_overloaded_node(average_load);
             if(overloaded_coordinator_id == -1){
@@ -837,12 +858,6 @@ namespace star
             }
             return;
         }
-        // template<typename T = myKeyType>
-        // void update_record_vertex_set(const std::vector<T>& record_keys){
-        //     for(auto key: record_keys){
-        //         record_key_set_.insert(key);
-        //     }
-        // }
 
         template<typename T = myKeyType> 
         void update_record_degree_set(const std::vector<T>& record_keys){
@@ -863,6 +878,7 @@ namespace star
                 return is_jumped;
             };
             
+            mm.lock();
             std::unordered_map<ycsb::ycsb::key, size_t> cache_key_coordinator_id;
 
             for(size_t i = 0; i < record_keys.size(); i ++ ){
@@ -952,15 +968,33 @@ namespace star
 
             
             }
+            mm.unlock();
             return ;
         }
+        
+        void clear_graph(){
+            mm.lock();
+            big_node_heap.clear(); // <coordinator_id, big_heap>
+            record_for_neighbor.clear();
+            move_tuple_id.clear();
+            hottest_tuple.clear(); // <key, frequency>
+            node_load.clear(); // <coordinator_id, load>
+            record_degree.clear();
+            hottest_tuple_index_.clear();
+            hottest_tuple_index_seq.clear();
+            mm.unlock();
+        }
+    
     private:
+        std::mutex mm;
+
         void reset(){
             big_node_heap.clear(); // <coordinator_id, big_heap>
             record_for_neighbor.clear();
             move_tuple_id.clear();
             hottest_tuple.clear(); // <key, frequency>
             node_load.clear(); // <coordinator_id, load>
+            // record_degree.clear();
         }
         void update_dest(std::shared_ptr<myMove<WorkloadType>> &move)
         {
@@ -1363,8 +1397,23 @@ namespace star
         std::vector<myKeyType> hottest_tuple_index_seq;
 
         std::map<int32_t, int32_t> node_load; // <coordinator_id, load>
-        Table<10086, myKeyType, myValueType> record_degree; // unordered_ unordered_
+        Table<100860, myKeyType, myValueType> record_degree; // unordered_ unordered_
 
+
+        // 
+        char* init_metis_file_;
+        char* metis_file_read_ptr_;
+        int file_size_;
+        int file_row_cnt_;
+        char *saveptr_;
+
+
+        // 
+        char* init_partition_file_;
+        char* partition_file_read_ptr_;
+        int partition_file_size_;
+        int partition_file_row_cnt_;
+        char *partition_saveptr_;
 
         // std::set<uint64_t> record_key_set_;
         int64_t edge_nums;

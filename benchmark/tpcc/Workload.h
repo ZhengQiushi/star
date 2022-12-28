@@ -31,11 +31,24 @@ public:
         partitioner(partitioner), start_time(start_time) {}
 
   std::unique_ptr<TransactionType> next_transaction(const ContextType &context,
-                                                    std::size_t partition_id,
+                                                    std::size_t &partition_id,
                                                     StorageType &storage) {
 
     int x = random.uniform_dist(1, 100);
     std::unique_ptr<TransactionType> p;
+
+    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time)
+                 .count() * 1.0 / 1000 / 1000;
+
+    int workload_type_num = 3;
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
+    if(workload_type == 1) {
+      partition_id = partition_id / 2 * 2;
+    } else if(workload_type == 3){
+      partition_id = partition_id / 2 * 2 + 1;
+    }
+
 
     if (context.workloadType == TPCCWorkloadType::MIXED) {
       if (x <= 50) {

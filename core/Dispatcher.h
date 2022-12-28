@@ -9,6 +9,8 @@
 #include "common/Message.h"
 #include "common/Socket.h"
 #include "core/ControlMessage.h"
+#include "protocol/Lion/LionMessage.h"
+
 #include "core/Worker.h"
 #include <atomic>
 #include <glog/logging.h>
@@ -169,7 +171,12 @@ public:
     auto dest_node_id = message->get_dest_node_id();
     DCHECK(dest_node_id >= 0 && dest_node_id < sockets.size() &&
            dest_node_id != id);
-    DCHECK(message->get_message_length() == message->data.length()) << message->get_message_length() << " " << message->data.length();
+
+
+    MessagePiece messagePiece = *(message->begin());
+    auto message_type = static_cast<int>(messagePiece.get_message_type());
+
+    DCHECK(message->get_message_length() == message->data.length()) << message->get_message_length() << " " << message->data.length() << " type: " << message_type << " " << static_cast<int>(LionMessage::METIS_SEARCH_REQUEST);
 
     sockets[dest_node_id].write_n_bytes(message->get_raw_ptr(),
                                         message->get_message_length());

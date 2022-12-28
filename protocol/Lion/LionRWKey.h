@@ -31,7 +31,7 @@ public:
 
   // read respond bit
 
-  void set_read_respond_bit() {
+  void set_read_respond_bit() { // read into key already
     clear_read_respond_bit();
     bitvec |= READ_RESPOND_BIT_MASK << READ_RESPOND_BIT_OFFSET;
   }

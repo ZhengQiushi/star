@@ -25,12 +25,20 @@ struct YCSBQuery {
 class makeYCSBQuery {
 public:
 // need to reconsider
-  const double my_threshold = 0.05; // 20 0000 
+  // const double my_threshold = 0.05; // 20 0000 
+  // double my_threshold = 0.05;
+  
                                       //  0.001 = 200  
   const int period_duration = 5;
 
   // const int hot_area_size = 6;
-
+  static const double get_thresh(const Context &context){
+    if(context.protocol == "MyClay"){
+      return 0.002;
+    } else {
+      return 0.05;
+    }
+  }
   using DatabaseType = Database;
   YCSBQuery operator()(const Context &context, uint32_t partitionID,// uint32_t hot_area_size,
                           Random &random, DatabaseType &db, double cur_timestamp, size_t query_size) const {
@@ -40,17 +48,17 @@ public:
     YCSBQuery query(query_size);
     int readOnly = random.uniform_dist(1, 100);
     int crossPartition = random.uniform_dist(1, 100);
-    
+
+    double my_threshold = get_thresh(context);
 
     int32_t key;
     int32_t first_key; // 一开始的key
     // 
     int32_t key_range = partitionID;
 
-    int workload_type_num = 2;
+    int workload_type_num = 3;
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
 
-    int workload_type = (int)cur_timestamp / context.workload_time % workload_type_num;// which_workload_(crossPartition, (int)cur_timestamp);
-    
     int cross_partition_probalility = context.crossPartitionProbability ; // cur_timestamp / 2;
     
     int is_init = true;
@@ -82,6 +90,8 @@ public:
                 random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
     // }
 
+    // LOG(INFO) << cur_timestamp << " " << context.init_time << " TXN = partitionID: " << partitionID << " is_init: " << is_init << " type: " << workload_type << " " << first_key;
+
     for (auto i = 0u; i < query_size; i++) {
       // read or write
       if (readOnly <= context.readOnlyTransaction) {
@@ -112,12 +122,14 @@ public:
           int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition); // 分区偏移
           
           // never involve partitions in the same node
-          int32_t cross_partition_id_offset = workload_type % (context.coordinator_num - 1) + 1; // - context.coordinator_id
+          // int32_t cross_partition_id_offset = workload_type % (context.coordinator_num - 1) + 1; // - context.coordinator_id
+          int32_t cross_partition_id_offset = workload_type ; //% (context.coordinator_num - 1) + 1;
+          
           if(is_init){
-            cross_partition_id_offset = workload_type_num + 1;
+            cross_partition_id_offset = workload_type_num;
           }
           // 对应的几类偏移
-          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size / 2 + i; 
+          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size + i; 
           key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
         } else {
           // 单分区

@@ -36,6 +36,7 @@ public:
 
   using StorageType = typename WorkloadType::StorageType;
 
+  int pin_thread_id_ = 3;
 
   LionGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
@@ -58,6 +59,9 @@ public:
 
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
+
+      metis_async_messages.emplace_back(std::make_unique<Message>());
+      init_message(metis_async_messages[i].get(), i);
 
       messages_mutex.emplace_back(std::make_unique<std::mutex>());
     }
@@ -150,10 +154,12 @@ public:
 
   std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
+      // static std::unordered_map<int, int> busy_;
+
       std::vector<int> coordi_nums_;
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
-      int max_cnt = 0;
+      int max_cnt = INT_MIN;
 
       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
         // LOG(INFO) << "query_keys[j] : " << query_keys[j];
@@ -173,6 +179,13 @@ public:
         } else {
           from_nodes_id[cur_c_id] += 1;
         }
+        // if(!busy_.count(cur_c_id)){
+        //   busy_[cur_c_id] = 0;
+        // }
+        // if(from_nodes_id[cur_c_id] + busy_[cur_c_id] > max_cnt){
+        //   max_cnt = from_nodes_id[cur_c_id] + busy_[cur_c_id];
+        //   max_node = cur_c_id;
+        // }
         if(from_nodes_id[cur_c_id] > max_cnt){
           max_cnt = from_nodes_id[cur_c_id];
           max_node = cur_c_id;
@@ -185,6 +198,9 @@ public:
         int random_coord_id = random.uniform_dist(0, coords_num - 1);
         max_node = coordi_nums_[random_coord_id];
       }
+
+      // busy_[max_node] --;
+
      return from_nodes_id;
    }
 
@@ -205,57 +221,62 @@ public:
 
   int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
-    auto new_transmit_generate = [&](int n){
+    auto new_transmit_generate = [&](int idx){ // int n
       simpleTransaction* s = new simpleTransaction();
+      s->idx_ = idx;
       s->is_transmit_request = true;
-      s->partition_id = n;
+      s->is_distributed = true;
+      // s->partition_id = n;
       return s;
     };
     // pull request
-    std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-      transmit_requests[i] = new_transmit_generate(i);
-    }
+    std::vector<simpleTransaction*> transmit_requests;
+    static int transmit_idx = 0;
 
     const int transmit_block_size = 100;
 
-    int cur_move_size = move_plans.size();
-    int move_size = 0;
+    int cur_move_size = my_clay->move_plans.size();
     // pack up move-steps to transmit request
     for(int i = 0 ; i < cur_move_size; i ++ ){
       bool success = false;
-      std::shared_ptr<myMove<WorkloadType>> cur_move = move_plans.pop_no_wait(success);
+      std::shared_ptr<myMove<WorkloadType>> cur_move;
+      
+      success = my_clay->move_plans.pop_no_wait(cur_move);
       DCHECK(success == true);
+      
+      auto new_txn = new_transmit_generate(transmit_idx ++ );
 
       for(auto move_record: cur_move->records){
-        if(move_record.src_coordinator_id != cur_move->dest_coordinator_id){
-          //
-          if(move_size == 0){
-            move_size = 1;
-          }
-          transmit_requests[cur_move->dest_coordinator_id]->keys.push_back(move_record.record_key_);
-          transmit_requests[cur_move->dest_coordinator_id]->update.push_back(true);
+          new_txn->keys.push_back(move_record.record_key_);
+          new_txn->update.push_back(true);
 
-          if(transmit_requests[cur_move->dest_coordinator_id]->keys.size() > transmit_block_size){
+          if(new_txn->keys.size() > transmit_block_size){
             // added to the router
-            transmit_request_queue.push_no_wait(transmit_requests[cur_move->dest_coordinator_id]);
-            transmit_requests[cur_move->dest_coordinator_id] = new_transmit_generate(cur_move->dest_coordinator_id);
-            move_size ++ ;
+            transmit_requests.push_back(new_txn);
+            new_txn = new_transmit_generate(transmit_idx ++ );
           }
-        }
+      }
+
+      if(new_txn->keys.size() > 0){
+        transmit_requests.push_back(new_txn);
       }
     }
 
+    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-      if(transmit_requests[i]->keys.size() > 0){
-        transmit_request_queue.push_no_wait(transmit_requests[i]);
-      }
+      // transmit_request_queue.push_no_wait(transmit_requests[i]);
+      int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
+      VLOG(DEBUG_V16) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << ") to " << coordinator_id_dst;
+      metis_migration_router_request(router_send_txn_cnt, coordinator_id_dst, transmit_requests[i]);        
+      // if(i > 5){ // debug
+      //   break;
+      // }
     }
-    return move_size;
+    return cur_move_size;
   }
 
 
-  void router_request(std::vector<int>& router_send_txn, size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
+  void router_request(std::vector<int>& router_send_txn_cnt, size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
     // router transaction to coordinators
     messages_mutex[coordinator_id_dst]->lock();
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
@@ -264,11 +285,22 @@ public:
     flush_message(async_messages, coordinator_id_dst);
     messages_mutex[coordinator_id_dst]->unlock();
 
-    router_send_txn[coordinator_id_dst]++;
+    router_send_txn_cnt[coordinator_id_dst]++;
     n_network_size.fetch_add(router_size);
     router_transactions_send.fetch_add(1);
   };
 
+  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, size_t coordinator_id_dst, simpleTransaction* txn) {
+    // router transaction to coordinators
+    // messages_mutex[coordinator_id_dst]->lock();
+    size_t router_size = LionMessageFactory::metis_migration_transaction_message(
+        *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
+        context.coordinator_id);
+    flush_message(metis_async_messages, coordinator_id_dst);
+    // messages_mutex[coordinator_id_dst]->unlock();
+
+    n_network_size.fetch_add(router_size);
+  };
 
   void start() override {
 
@@ -314,76 +346,74 @@ public:
       }, n);
 
       if (context.cpu_affinity) {
-        generator_core_id[n] = ControlMessageFactory::pin_thread_to_core(context, generators[n]);
+        ControlMessageFactory::pin_thread_to_core(context, generators[n], pin_thread_id_);
+        generator_core_id[n] = pin_thread_id_ ++ ;
       }
     }
 
     // transmiter: do the transfer for the clay and whole system
-    // std::vector<std::thread> transmiter;
-    // transmiter.emplace_back([&]() {
-    //   ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
-    //   while(status != ExecutorStatus::EXIT){
-    //     // 
-    //     bool is_movable = my_clay->movable_flag.load();
-    //     if(!is_movable){
-    //       while(my_clay->movable_flag.load() == false && status != ExecutorStatus::EXIT){
-    //         std::this_thread::sleep_for(std::chrono::microseconds(5));
-    //         status = static_cast<ExecutorStatus>(worker_status.load());
-    //       }
-    //     } 
+    std::vector<std::thread> transmiter;
+
+    if(context.lion_with_metis_init){
+      transmiter.emplace_back([&]() {
+        my_clay = std::make_unique<Clay<WorkloadType>>(context, db, worker_status);
+
+        ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+
+        int last_timestamp_int = 0;
+        auto last_timestamp_ = start_time;
+        int trigger_time_interval = 30 * 1000; // unit sec.
+
+        // int debug_trigger_time_interval = 5 * 1000;
+
+        while(status != ExecutorStatus::EXIT){
+          status = static_cast<ExecutorStatus>(worker_status.load());
+
+          auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - last_timestamp_)
+                                  .count();
+          if(last_timestamp_int != 0 && latency < trigger_time_interval){
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            continue;
+          }
+          // directly jump into first phase
+          auto begin = std::chrono::steady_clock::now();
+          
+          // my_clay->init_with_history("/home/star/data/result_test.xls", last_timestamp_int, last_timestamp_int + trigger_time_interval);
+          char file_name_[256] = {0};
+          sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", (last_timestamp_int + trigger_time_interval) / 1000 % 80, (last_timestamp_int + trigger_time_interval * 2) / 1000 % 80);
+          LOG(INFO) << "start read from file";
+          my_clay->metis_partiion_read_from_file(file_name_);
+          LOG(INFO) << "read from file done";
+
+          latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - begin)
+                                  .count();
+          LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
+
+          last_timestamp_ = begin;
+          last_timestamp_int += trigger_time_interval;
+          begin = std::chrono::steady_clock::now();
+          // my_clay->metis_partition_graph();
+
+          latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - begin)
+                              .count();
+          LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
         
-    //     int num = router_transmit_request(my_clay->move_plans);
-    //     if(num > 0){
-    //       LOG(INFO) << "router transmit request " << num; 
-    //     }
-    //     my_clay->movable_flag.store(false);
-    //     status = static_cast<ExecutorStatus>(worker_status.load());
-    //   }
-    //   LOG(INFO) << "transmiter " << " exits.";
-    // });
+          // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
+          int num = router_transmit_request(my_clay->move_plans);
+          if(num > 0){
+            LOG(INFO) << "router transmit request " << num; 
+          }
+          break; // debug
+        }
+        LOG(INFO) << "transmiter " << " exits.";
+      });
 
-    // if(context.lion_with_metis_init){
-    //   LOG(INFO) << "lion with metis init start to shift the partition.";
-    //   auto start_time = std::chrono::steady_clock::now(); 
-
-    //   int num = router_transmit_request(my_clay->move_plans);
-    //   // transfer metis move
-    //   std::vector<int> router_send_txn(context.coordinator_num, 0);
-    //   for(size_t i = 0; i < transmit_request_queue.size(); i ++ ){
-    //     bool success = false;
-    //     std::shared_ptr<simpleTransaction> txn(transmit_request_queue.pop_no_wait(success));
-    //     if(success == false){
-    //       break;
-    //     }
-    //     size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
-    //     if(txn->is_transmit_request){
-    //       VLOG(DEBUG_V14) << " TRANSMIT " << txn->keys[0] << " " << txn->keys[1] << " -> " << coordinator_id_dst;
-    //     }
-    //     router_request(router_send_txn, coordinator_id_dst, txn);
-    //   }
-
-    //   // 
-    //   for (auto l = 0u; l < context.coordinator_num; l++){
-    //     if(l == context.coordinator_id){
-    //       continue;
-    //     }
-    //     // LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
-    //     messages_mutex[l]->lock();
-    //     for (auto n = 0u; n < context.coordinator_num; n++){
-    //       ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn[l]);
-    //     }
-    //     flush_message(async_messages, l);
-    //     messages_mutex[l]->unlock();
-    //   }
-
-    //   router_fence(); // wait for coordinator to response
-    //   auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                       std::chrono::steady_clock::now() - start_time)
-    //                       .count();
-    //   LOG(INFO) << "lion with metis init finished. Used " << latency << " ms.";
-    // }
-
-
+      ControlMessageFactory::pin_thread_to_core(context, transmiter[0], pin_thread_id_);
+      pin_thread_id_ ++ ;
+    }
     
     // for(size_t n = 0 ; n < context.coordinator_num; n ++ ){
       while(is_full_signal.load() == 0){
@@ -403,7 +433,9 @@ public:
           for (auto &t : generators) {
             t.join();
           }
-  
+          for (auto &t : transmiter) {
+            t.join();
+          }
           if(context.lion_with_trace_log){
             outfile_excel.close();
           }
@@ -433,9 +465,10 @@ public:
       std::vector<std::thread> threads;
       for (auto n = 0u; n < context.coordinator_num; n++) {
         threads.emplace_back([&](int n) {
-          std::vector<int> router_send_txn(context.coordinator_num, 0);
+          std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
         
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;  
+          // batch_size = 0; // debug
           LOG(INFO) << "batch_size: " << std::to_string(batch_size);
           for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
 
@@ -468,7 +501,7 @@ public:
             }
 
             coordinator_send[coordinator_id_dst] ++ ;
-            router_request(router_send_txn, coordinator_id_dst, txn);            
+            router_request(router_send_txn_cnt, coordinator_id_dst, txn);            
           }
           is_full_signal.store(0);
           // 
@@ -480,7 +513,7 @@ public:
             
             // LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
             messages_mutex[l]->lock();
-            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn[l]);
+            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }
@@ -488,7 +521,8 @@ public:
         }, n);
 
         if (context.cpu_affinity) {
-          ControlMessageFactory::pin_thread_to_core(context, threads[n], generator_core_id[n]);
+          ControlMessageFactory::pin_thread_to_core(context, threads[n], pin_thread_id_);// , generator_core_id[n
+          pin_thread_id_ ++; 
         }
       }
 
@@ -660,6 +694,7 @@ public:
           // transaction from LionExecutor
           messageHandlers[type](messagePiece,
                                 *sync_messages[message->get_source_node_id()], 
+                                sync_messages,
                                 db, context, partitioner.get(),
                                 transaction.get(), 
                                 &router_transactions_queue,
@@ -693,7 +728,10 @@ protected:
 
       auto message = messages[i].release();
 
+      mm.lock();
       out_queue.push(message);
+      mm.unlock();
+
       messages[i] = std::make_unique<Message>();
       init_message(messages[i].get(), i);
     }
@@ -755,18 +793,19 @@ protected:
   Percentile<int64_t> commit_latency, write_latency;
   Percentile<int64_t> dist_latency, local_latency;
   std::unique_ptr<TransactionType> transaction;
-  std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
+  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, metis_async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
   std::deque<simpleTransaction> router_transactions_queue;
-  std::deque<simpleTransaction> migration_transactions_queue;
+  group_commit::ShareQueue<simpleTransaction> migration_transactions_queue;
 
   std::deque<int> router_stop_queue;
 
-  std::vector<std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &, Partitioner *, // add partitioner
+  std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
+                                 DatabaseType &, const ContextType &, Partitioner *, // add partitioner
                                  TransactionType *, 
                                  std::deque<simpleTransaction>*,
-                                 std::deque<simpleTransaction>*)>>
+                                 group_commit::ShareQueue<simpleTransaction>*)>>
       messageHandlers;
 
   std::vector<

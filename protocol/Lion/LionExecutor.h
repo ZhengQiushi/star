@@ -35,8 +35,8 @@ public:
   using MessageFactoryType = LionMessageFactory;
   using MessageHandlerType = LionMessageHandler<DatabaseType>;
 
-  int pin_thread_id_ = 3;
-  
+  int pin_thread_id_ = 5;
+
   LionExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context, uint32_t &batch_size,
                std::atomic<uint32_t> &worker_status,
@@ -658,7 +658,7 @@ public:
     flush_record_messages();
     flush_sync_messages();
     if(cur_queue_size > 0)
-      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 
@@ -684,6 +684,7 @@ public:
     size_t cur_queue_size = m_transactions_queue.size();
     int router_txn_num = 0;
 
+    static int metis_txn_num = 0;
     // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
     for (auto i = 0u; i < cur_queue_size; i++) {
       if(m_transactions_queue.empty()){
@@ -750,6 +751,7 @@ public:
                   DCHECK(metis_transaction->abort_read_validation);
                 }
                 metis_random.set_seed(last_seed);
+                VLOG(DEBUG_V14) << "TRANSACTION RETRY: " << metis_transaction->get_query_printed();
                 retry_transaction = true;
               }
               protocol->abort(*metis_transaction, metis_messages);
@@ -772,8 +774,12 @@ public:
     }
     flush_messages(metis_messages); 
     flush_metis_sync_messages();
-    if(cur_queue_size > 1)
-      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+    
+    if(cur_queue_size > 0){
+      metis_txn_num += cur_queue_size;
+      VLOG(DEBUG_V14) << "METIS TRANSACTION: " << metis_transaction->get_query_printed();
+      VLOG(DEBUG_V14) <<"METIS cur_queue_size:" << cur_queue_size << " metis_txn_num: " << metis_txn_num << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+    }
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 

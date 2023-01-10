@@ -260,7 +260,7 @@ public:
 //      LOG(INFO) <<  key_[i] << " " << update_[i];
     }
     message.flush();
-    VLOG(DEBUG_V16) << " SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
+    VLOG(DEBUG_V16) << " METIS SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
     return message_size;
   }
 
@@ -1195,7 +1195,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     new_router_txn.is_transmit_request = is_transmit_request;
     new_router_txn.idx_ = index;
 
-    VLOG(DEBUG_V16) << " GET ROUTER " << is_transmit_request << " " << is_distributed << " " << index << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
+    VLOG(DEBUG_V14) << " METIS GET ROUTER " << is_transmit_request << " " << is_distributed << " " << index << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
     metis_router_transactions_queue->push_no_wait(new_router_txn);
   }
   

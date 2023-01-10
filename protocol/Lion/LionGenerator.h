@@ -233,7 +233,7 @@ public:
     std::vector<simpleTransaction*> transmit_requests;
     static int transmit_idx = 0;
 
-    const int transmit_block_size = 100;
+    const int transmit_block_size = 10;
 
     int cur_move_size = my_clay->move_plans.size();
     // pack up move-steps to transmit request
@@ -272,6 +272,8 @@ public:
       //   break;
       // }
     }
+    LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
+
     return cur_move_size;
   }
 
@@ -362,7 +364,7 @@ public:
 
         int last_timestamp_int = 0;
         auto last_timestamp_ = start_time;
-        int trigger_time_interval = 30 * 1000; // unit sec.
+        int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
         // int debug_trigger_time_interval = 5 * 1000;
 

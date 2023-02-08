@@ -82,7 +82,7 @@ public:
         CHECK(workerId % io_thread_num == group_id);
         // release the unique ptr
 
-//        LOG(INFO) << "get message : " << (*(message->begin())).get_message_type() << " from " << i;
+      //  LOG(INFO) << i << " get message : " << (*(message->begin())).get_message_type() << " from " << i << " workId: " << workerId;
 
         workers[workerId]->push_message(message.release());
         DCHECK(message == nullptr);
@@ -217,7 +217,7 @@ public:
     //       }
     // }
     // send the message
-//    LOG(INFO) << " send message : " << (*(cur_message->begin())).get_message_type() << " to " << cur_message->get_dest_node_id();
+  //  LOG(INFO) << cur_id << " send message : " << (*(cur_message->begin())).get_message_type() << " to " << cur_message->get_dest_node_id();
     sendMessage(cur_message);
     // message.get());
     // 

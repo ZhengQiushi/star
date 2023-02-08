@@ -24,9 +24,11 @@ public:
   using StorageType = Storage;
   static myTestSet which_workload;
 
-  Workload(std::size_t coordinator_id, DatabaseType &db, RandomType &random,
+  Workload(std::size_t coordinator_id, 
+           std::atomic<uint32_t> &worker_status, DatabaseType &db, RandomType &random,
            Partitioner &partitioner, std::chrono::steady_clock::time_point start_time)
-      : coordinator_id(coordinator_id), db(db), random(random),
+      : coordinator_id(coordinator_id), 
+        worker_status(worker_status), db(db), random(random),
         partitioner(partitioner), start_time(start_time) {}
 
   std::unique_ptr<TransactionType> next_transaction(const ContextType &context,
@@ -47,7 +49,7 @@ public:
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
-            coordinator_id, partition_id, db, context, random, partitioner,
+            coordinator_id, partition_id, worker_status, db, context, random, partitioner,
             storage, cur_timestamp);
 
     return p;
@@ -59,7 +61,7 @@ public:
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
-            coordinator_id, partition_id, db, context, random, partitioner,
+            coordinator_id, partition_id, worker_status, db, context, random, partitioner,
             storage, simple_txn);
 
     return p;
@@ -68,6 +70,7 @@ public:
   std::chrono::steady_clock::time_point start_time;
 private:
   std::size_t coordinator_id;
+  std::atomic<uint32_t> &worker_status;
   DatabaseType &db;
   RandomType &random;
   Partitioner &partitioner;

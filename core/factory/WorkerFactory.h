@@ -44,6 +44,9 @@
 // #include "protocol/Lion/LionRecorder.h"
 #include "protocol/Lion/LionGenerator.h"
 
+#include "protocol/Lion/LionMetisExecutor.h"
+#include "protocol/Lion/LionMetisGenerator.h"
+
 // #include "protocol/LionNS/LionNSExecutor.h"
 // #include "protocol/LionNS/LionNSManager.h"
 
@@ -189,8 +192,13 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
+      int manager_thread_id = context.worker_num;
+      if(context.lion_with_metis_init){
+        manager_thread_id += 1;
+      }
+
       auto manager = std::make_shared<StarManager<WorkloadType>>(
-          coordinator_id, context.worker_num, context, stop_flag, db);
+          coordinator_id, manager_thread_id, context, stop_flag, db);
 
       // add recorder for data-transformation
       // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
@@ -204,6 +212,14 @@ public:
             manager->worker_status, manager->n_completed_workers,
             manager->n_started_workers)); // , manager->recorder_status // recorder->data_pack_map
       }
+      // 
+      if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
+            coordinator_id, workers.size(), db, context, manager->batch_size,
+            manager->worker_status, manager->n_completed_workers,
+            manager->n_started_workers));
+      }
+
       workers.push_back(manager);
       // workers.push_back(recorder);  
     } else if (context.protocol == "LionWithBrain") {
@@ -451,12 +467,23 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
+      int manager_thread_id = context.worker_num;
+      if(context.lion_with_metis_init){
+        manager_thread_id += 1;
+      }
+
       auto manager = std::make_shared<LionManager<WorkloadType>>(
-          coordinator_id, context.worker_num, context, stop_flag, db);
+          coordinator_id, manager_thread_id, context, stop_flag, db);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::LionGenerator<WorkloadType, Lion<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      }
+      // 
+      if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
+              coordinator_id, workers.size(), db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers));
       }
       workers.push_back(manager);

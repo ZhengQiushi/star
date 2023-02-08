@@ -260,7 +260,7 @@ public:
 //      LOG(INFO) <<  key_[i] << " " << update_[i];
     }
     message.flush();
-    VLOG(DEBUG_V16) << " METIS SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
+    VLOG(DEBUG_V16) << " METIS SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << " " << message.get_worker_id() << " " << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
     return message_size;
   }
 

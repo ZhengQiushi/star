@@ -47,6 +47,7 @@ public:
     routerSet.clear(); // add by truth 22-03-25
   }
   virtual bool is_transmit_requests() = 0;
+  virtual ExecutorStatus get_worker_status() = 0;
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
   virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
@@ -192,6 +193,7 @@ public:
       while (pendingResponses > 0) {
         remote_request_handler();
         // 
+        status = get_worker_status();
         if(status == ExecutorStatus::EXIT){
           LOG(INFO) << "TRANSMITER SHOULD BE STOPPED";
           success = false;

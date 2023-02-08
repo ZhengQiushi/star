@@ -299,7 +299,11 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   }
 
-
+  ExecutorStatus get_worker_status() override {
+    DCHECK(false);
+    return static_cast<ExecutorStatus>(0);
+  }
+  
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     
     int32_t W_ID = this->partition_id + 1;
@@ -916,7 +920,10 @@ public:
     }
     return TransactionResult::READY_TO_COMMIT;
   }
-
+  ExecutorStatus get_worker_status() override {
+    DCHECK(false);
+    return static_cast<ExecutorStatus>(0);
+  }
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;

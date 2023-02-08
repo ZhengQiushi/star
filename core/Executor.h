@@ -42,7 +42,7 @@ public:
             context.partitioner, coordinator_id, context.coordinator_num)),
         random(reinterpret_cast<uint64_t>(this)),
         protocol(db, context, *partitioner),
-        workload(coordinator_id, db, random, *partitioner, start_time),
+        workload(coordinator_id, worker_status, db, random, *partitioner, start_time),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -85,7 +85,7 @@ public:
      *       
     */
     ProtocolType protocol(db, phase_context, *partitioner);
-    WorkloadType workload(coordinator_id, db, random, *partitioner, start_time);
+    WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner, start_time);
 
     uint64_t last_seed = 0;
 

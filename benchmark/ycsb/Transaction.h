@@ -31,11 +31,12 @@ public:
   // static constexpr std::size_t transmit_keys_num = 120;
   
 
-  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::atomic<uint32_t> &worker_status,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, double cur_timestamp)
-      : Transaction(coordinator_id, partition_id, partitioner), db(db),
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
         query(makeYCSBQuery()(context, partition_id, random, db, cur_timestamp, keys_num)) {
@@ -46,11 +47,12 @@ public:
         }
 
 
-  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id,
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::atomic<uint32_t> &worker_status,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, simpleTransaction& simple_txn)
-      : Transaction(coordinator_id, partition_id, partitioner), db(db),
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
         query(makeYCSBQuery()(simple_txn.keys, simple_txn.update)) {
@@ -58,7 +60,7 @@ public:
            * @brief convert from the generated txns
            * 
            */
-          is_transmit_request = simple_txn.is_transmit_request;          
+          is_transmit_request = simple_txn.is_transmit_request;    
         }
 
   virtual ~ReadModifyWrite() override = default;
@@ -152,6 +154,11 @@ public:
 
     return TransactionResult::READY_TO_COMMIT;
   }
+
+  ExecutorStatus get_worker_status() override {
+    return static_cast<ExecutorStatus>(worker_status_.load());
+  }
+
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     
     size_t keys_num_ = query.Y_KEY.size();
@@ -361,6 +368,7 @@ public:
     return partition_id;
   }
 private:
+  std::atomic<uint32_t> &worker_status_;
   DatabaseType &db;
   const ContextType &context;
   RandomType &random;

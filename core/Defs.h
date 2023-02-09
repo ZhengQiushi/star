@@ -82,6 +82,7 @@ struct simpleTransaction {
   uint64_t partition_id;    // for clay, it means the destination coordinator_id
   bool is_distributed;
   bool is_transmit_request; // only for clay
+  uint64_t destination_coordinator;
 };
 
 struct ExecutionStep {

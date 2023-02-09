@@ -125,7 +125,8 @@ public:
       LOG(INFO) << "SLEEP : " << std::to_string(context.sample_time_interval);
       std::this_thread::sleep_for(std::chrono::milliseconds(context.sample_time_interval * 1000));
 
-      uint64_t n_commit = 0, n_abort_no_retry = 0, n_abort_lock = 0,
+      uint64_t n_commit = 0, metis_commit = 0, 
+               n_abort_no_retry = 0, n_abort_lock = 0,
                n_abort_read_validation = 0, n_local = 0,
                n_si_in_serializable = 0, n_network_size = 0;
 
@@ -135,7 +136,11 @@ public:
                  .count() / context.workload_time % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
-
+        if(context.lion_with_metis_init == 1 && i == context.worker_num){
+          metis_commit += workers[i]->n_commit.load();
+          workers[i]->n_commit.store(0);
+          continue;
+        }
         n_commit += workers[i]->n_commit.load();
         workers[i]->n_commit.store(0);
 
@@ -160,8 +165,10 @@ public:
         workers[i]->workload_type = cur_workload_type;
       }
       outfile_excel << n_commit << "\n";
-      LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit << " abort: "
-                << n_abort_no_retry + n_abort_lock + n_abort_read_validation
+      
+      LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit 
+                << " metis_commit: " << metis_commit
+                << " abort: " << n_abort_no_retry + n_abort_lock + n_abort_read_validation
                 << " (" << n_abort_no_retry << "/" << n_abort_lock << "/"
                 << n_abort_read_validation
                 << "), network size: " << n_network_size

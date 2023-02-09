@@ -172,7 +172,8 @@ public:
     };
     // pull request
     std::vector<simpleTransaction*> transmit_requests;
-    static int transmit_idx = 0;
+    static int transmit_idx = 0; // split into sub-transactions
+    static int metis_transmit_idx = 0;
 
     const int transmit_block_size = 10;
 
@@ -186,10 +187,18 @@ public:
       DCHECK(success == true);
       
       auto new_txn = new_transmit_generate(transmit_idx ++ );
+      auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
+
+      for(auto move_record: cur_move->records){
+          metis_new_txn->keys.push_back(move_record.record_key_);
+          metis_new_txn->update.push_back(true);
+      }
+      int64_t coordinator_id_dst = select_best_node(metis_new_txn);
 
       for(auto move_record: cur_move->records){
           new_txn->keys.push_back(move_record.record_key_);
           new_txn->update.push_back(true);
+          new_txn->destination_coordinator = coordinator_id_dst;
 
           if(new_txn->keys.size() > transmit_block_size){
             // added to the router
@@ -204,11 +213,11 @@ public:
     }
 
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
+    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
-      int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
-      VLOG(DEBUG_V16) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << ") to " << coordinator_id_dst;
-      metis_migration_router_request(router_send_txn_cnt, coordinator_id_dst, transmit_requests[i]);        
+      // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
+      VLOG(DEBUG_V6) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << ") to " << transmit_requests[i]->destination_coordinator;
+      metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
       // }
@@ -233,8 +242,9 @@ public:
   //   router_transactions_send.fetch_add(1);
   // };
 
-  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, size_t coordinator_id_dst, simpleTransaction* txn) {
+  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
     // router transaction to coordinators
+    uint64_t coordinator_id_dst = txn->destination_coordinator;
     messages_mutex[coordinator_id_dst]->lock();
     size_t router_size = LionMessageFactory::metis_migration_transaction_message(
         *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
@@ -276,6 +286,7 @@ public:
         int debug_trigger_time_interval = 5 * 1000;
 
         while(status != ExecutorStatus::EXIT){
+          process_request();
           status = static_cast<ExecutorStatus>(worker_status.load());
 
           auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -319,6 +330,10 @@ public:
         }
         LOG(INFO) << "transmiter " << " exits.";
     // });
+      while(status != ExecutorStatus::EXIT){
+        process_request();
+        status = static_cast<ExecutorStatus>(worker_status.load());
+      }
 
     // ControlMessageFactory::pin_thread_to_core(context, transmiter[0], pin_thread_id_);
     // pin_thread_id_ ++ ;

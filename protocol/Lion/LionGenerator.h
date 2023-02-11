@@ -155,7 +155,6 @@ public:
   std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
       // static std::unordered_map<int, int> busy_;
-
       std::vector<int> coordi_nums_;
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
@@ -192,13 +191,17 @@ public:
         }
       }
 
-      if(context.random_router){
+      if(context.random_router > 0){
         // 
         int coords_num = (int)from_nodes_id.size();
-        int random_coord_id = random.uniform_dist(0, coords_num - 1);
-        max_node = coordi_nums_[random_coord_id];
+        int random_value = random.uniform_dist(0, 100);
+        if(random_value > context.random_router){
+          int random_coord_id = random.uniform_dist(0, coords_num - 1);
+          max_node = coordi_nums_[random_coord_id];
+        }
       }
 
+      VLOG(DEBUG_V8) << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node];
       // busy_[max_node] --;
 
      return from_nodes_id;
@@ -219,63 +222,63 @@ public:
   }
   
 
-  int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
-    // transmit_request_queue
-    auto new_transmit_generate = [&](int idx){ // int n
-      simpleTransaction* s = new simpleTransaction();
-      s->idx_ = idx;
-      s->is_transmit_request = true;
-      s->is_distributed = true;
-      // s->partition_id = n;
-      return s;
-    };
-    // pull request
-    std::vector<simpleTransaction*> transmit_requests;
-    static int transmit_idx = 0;
+  // int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+  //   // transmit_request_queue
+  //   auto new_transmit_generate = [&](int idx){ // int n
+  //     simpleTransaction* s = new simpleTransaction();
+  //     s->idx_ = idx;
+  //     s->is_transmit_request = true;
+  //     s->is_distributed = true;
+  //     // s->partition_id = n;
+  //     return s;
+  //   };
+  //   // pull request
+  //   std::vector<simpleTransaction*> transmit_requests;
+  //   static int transmit_idx = 0;
 
-    const int transmit_block_size = 10;
+  //   const int transmit_block_size = 10;
 
-    int cur_move_size = my_clay->move_plans.size();
-    // pack up move-steps to transmit request
-    for(int i = 0 ; i < cur_move_size; i ++ ){
-      bool success = false;
-      std::shared_ptr<myMove<WorkloadType>> cur_move;
+  //   int cur_move_size = my_clay->move_plans.size();
+  //   // pack up move-steps to transmit request
+  //   for(int i = 0 ; i < cur_move_size; i ++ ){
+  //     bool success = false;
+  //     std::shared_ptr<myMove<WorkloadType>> cur_move;
       
-      success = my_clay->move_plans.pop_no_wait(cur_move);
-      DCHECK(success == true);
+  //     success = my_clay->move_plans.pop_no_wait(cur_move);
+  //     DCHECK(success == true);
       
-      auto new_txn = new_transmit_generate(transmit_idx ++ );
+  //     auto new_txn = new_transmit_generate(transmit_idx ++ );
 
-      for(auto move_record: cur_move->records){
-          new_txn->keys.push_back(move_record.record_key_);
-          new_txn->update.push_back(true);
+  //     for(auto move_record: cur_move->records){
+  //         new_txn->keys.push_back(move_record.record_key_);
+  //         new_txn->update.push_back(true);
 
-          if(new_txn->keys.size() > transmit_block_size){
-            // added to the router
-            transmit_requests.push_back(new_txn);
-            new_txn = new_transmit_generate(transmit_idx ++ );
-          }
-      }
+  //         if(new_txn->keys.size() > transmit_block_size){
+  //           // added to the router
+  //           transmit_requests.push_back(new_txn);
+  //           new_txn = new_transmit_generate(transmit_idx ++ );
+  //         }
+  //     }
 
-      if(new_txn->keys.size() > 0){
-        transmit_requests.push_back(new_txn);
-      }
-    }
+  //     if(new_txn->keys.size() > 0){
+  //       transmit_requests.push_back(new_txn);
+  //     }
+  //   }
 
-    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-      // transmit_request_queue.push_no_wait(transmit_requests[i]);
-      int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
-      VLOG(DEBUG_V16) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << ") to " << coordinator_id_dst;
-      metis_migration_router_request(router_send_txn_cnt, coordinator_id_dst, transmit_requests[i]);        
-      // if(i > 5){ // debug
-      //   break;
-      // }
-    }
-    LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
+  //   std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
+  //   for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
+  //     // transmit_request_queue.push_no_wait(transmit_requests[i]);
+  //     int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
+  //     VLOG(DEBUG_V16) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << ") to " << coordinator_id_dst;
+  //     metis_migration_router_request(router_send_txn_cnt, coordinator_id_dst, transmit_requests[i]);        
+  //     // if(i > 5){ // debug
+  //     //   break;
+  //     // }
+  //   }
+  //   LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
 
-    return cur_move_size;
-  }
+  //   return cur_move_size;
+  // }
 
 
   void router_request(std::vector<int>& router_send_txn_cnt, size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {

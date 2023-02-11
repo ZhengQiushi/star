@@ -75,6 +75,8 @@ enum class RouterTxnOps {
 
 struct simpleTransaction {
   size_t idx_;
+  size_t metis_idx_;
+
   std::vector<uint64_t> keys;
   std::vector<bool> update;
   RouterTxnOps op;

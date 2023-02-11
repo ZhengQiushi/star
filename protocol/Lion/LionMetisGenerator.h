@@ -45,8 +45,8 @@ public:
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        partitioner(PartitionerFactory::create_partitioner(
-            context.partitioner, coordinator_id, context.coordinator_num)),
+        partitioner(std::make_unique<LionDynamicPartitioner<WorkloadType>>(
+            coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
         // protocol(db, context, *partitioner),
         workload(coordinator_id, worker_status, db, random, *partitioner, start_time),
@@ -95,7 +95,7 @@ public:
 
   std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
-      // static std::unordered_map<int, int> busy_;
+      static std::unordered_map<int, int> busy_;
 
       std::vector<int> coordi_nums_;
       size_t ycsbTableID = ycsb::ycsb::tableID;
@@ -140,7 +140,7 @@ public:
         max_node = coordi_nums_[random_coord_id];
       }
 
-      // busy_[max_node] --;
+      // busy_[max_node] -= 1;
 
      return from_nodes_id;
    }
@@ -199,6 +199,7 @@ public:
           new_txn->keys.push_back(move_record.record_key_);
           new_txn->update.push_back(true);
           new_txn->destination_coordinator = coordinator_id_dst;
+          new_txn->metis_idx_ = metis_new_txn->idx_;
 
           if(new_txn->keys.size() > transmit_block_size){
             // added to the router
@@ -216,7 +217,7 @@ public:
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
       // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
-      VLOG(DEBUG_V6) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << ") to " << transmit_requests[i]->destination_coordinator;
+      VLOG(DEBUG_V6) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator;
       metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
@@ -280,6 +281,9 @@ public:
         ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
 
         int last_timestamp_int = 0;
+        int workload_num = 3;
+        int total_time = workload_num * context.workload_time;
+
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
@@ -293,7 +297,7 @@ public:
                                   std::chrono::steady_clock::now() - last_timestamp_)
                                   .count();
           if(last_timestamp_int != 0 && latency < trigger_time_interval){
-            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            // std::this_thread::sleep_for(std::chrono::microseconds(5));
             continue;
           }
           // directly jump into first phase
@@ -301,7 +305,10 @@ public:
           
           // my_clay->init_with_history("/home/star/data/result_test.xls", last_timestamp_int, last_timestamp_int + trigger_time_interval);
           char file_name_[256] = {0};
-          sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", (last_timestamp_int + trigger_time_interval) / 1000 % 80, (last_timestamp_int + trigger_time_interval * 2) / 1000 % 80);
+          int time_begin = (last_timestamp_int + trigger_time_interval) / 1000 % total_time;
+          int time_end   = (last_timestamp_int + trigger_time_interval) / 1000 % total_time + context.workload_time;
+
+          sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", time_begin, time_end);
           LOG(INFO) << "start read from file";
           my_clay->metis_partiion_read_from_file(file_name_);
           LOG(INFO) << "read from file done";

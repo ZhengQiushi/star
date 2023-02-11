@@ -23,7 +23,7 @@ DEFINE_string(protocol, "Scar", "transaction protocol");
 DEFINE_string(replica_group, "1,3", "calvin replica group"); 
 
 DEFINE_int32(nop_prob, 0, "prob of transactions having nop, out of 10000");
-DEFINE_int64(n_nop, 2000, "total number of nop");
+DEFINE_int64(n_nop, 10000, "total number of nop");
 
 // 哪几个coordinator组成一个replica group
 // sum() = coordinator_num

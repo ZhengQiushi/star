@@ -401,7 +401,6 @@ public:
             // 数据更新到 发req的对面
             VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
             
-            // update the router 
             router_val->set_dynamic_coordinator_id(coordinator_id_new);
             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
@@ -517,7 +516,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
           dec.read_n_bytes(readKey.get_value(), value_size);
           DCHECK(strlen((char*)readKey.get_value()) > 0);
 
-          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert ";
+          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert " << txn->readSet.size();
           table.insert(key, value, (void*)& tid);
         }
 
@@ -798,7 +797,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
       if(success){
         auto test = table.search_value(key);
 
-        VLOG(DEBUG_V8) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key << " " << (char*)test;
+        VLOG(DEBUG_V11) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key << " " << (char*)test;
 
         //! TODO logic needs to be checked
         // DCHECK(last_tid < commit_tid);
@@ -843,7 +842,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     const void *key_ = stringPiece.data();
     key = *(int*) key_;
 
-    VLOG(DEBUG_V8) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " " << key;
+    VLOG(DEBUG_V11) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " " << key;
     /*
      * The structure of a replication response: ()
      */
@@ -908,9 +907,10 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     // reserve size for read
     responseMessage.data.append(value_size, 0);
-
-    VLOG(DEBUG_V12) << "RECV ROUTER UPDATE. " << *(int*)key;
-    // lock the router_table 
+    // if(context.coordinator_id == context.coordinator_num){
+    //   VLOG(DEBUG_V8) << "RECV ROUTER UPDATE. " << *(int*)key << "  ";
+    // }
+    
     if(partitioner->is_dynamic()){
       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
 

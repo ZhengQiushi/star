@@ -24,6 +24,7 @@ namespace star {
 template <class Database> class Lion {
 public:
   using DatabaseType = Database;
+  // using WorkloadType = Workload;
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = typename DatabaseType::ContextType;
   using MessageType = LionMessage;
@@ -279,7 +280,7 @@ private:
           
           DCHECK(strlen((char*)readKey.get_value()) > 0);
           // async_message_num.fetch_add(1);
-          VLOG(DEBUG_V8) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
+          VLOG(DEBUG_V11) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
           send_replica = true;
         }
       }

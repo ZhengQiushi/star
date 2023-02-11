@@ -819,7 +819,7 @@ public:
         dec >> debug_key;
 
         // async_message_respond_num.fetch_add(1);
-        VLOG(DEBUG_V8) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
+        VLOG(DEBUG_V11) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
       }
     }
     // if(static_cast<int>(LionMessage::METIS_SEARCH_REQUEST) <= message_type && 

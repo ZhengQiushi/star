@@ -192,7 +192,7 @@ public:
         int recv_txn_num = router_stop_queue.front();
         router_stop_queue.pop_front();
         router_recv_txn_num += recv_txn_num;
-        VLOG(DEBUG_V8) << " RECV : " << recv_txn_num;
+        VLOG(DEBUG_V11) << " RECV : " << recv_txn_num;
       }
       ret = true;
     }
@@ -961,6 +961,13 @@ public:
             
             n_network_size.fetch_add(transaction->network_size);
             if (commit) {
+              size_t ycsbTableID = ycsb::ycsb::tableID;
+              if(transaction->readSet.size() > 1)
+                VLOG(DEBUG_V8) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
+                         << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
+                         << "   " << *(int*)transaction->readSet[1].get_key() 
+                         << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
+
               n_commit.fetch_add(1);
               retry_transaction = false;
             } else {
@@ -1046,7 +1053,7 @@ public:
         dec >> debug_key;
 
         // async_message_respond_num.fetch_add(1);
-        VLOG(DEBUG_V8) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
+        VLOG(DEBUG_V11) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
       }
     }
     // if(static_cast<int>(LionMessage::METIS_MIGRATION_TRANSACTION_REQUEST) <= message_type && 

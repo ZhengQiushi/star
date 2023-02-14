@@ -146,6 +146,10 @@ public:
           n_network_size.fetch_add(transaction->network_size);
           if (commit) {
             n_commit.fetch_add(1);
+
+            n_migrate.fetch_add(transaction->migrate_cnt);
+            n_remaster.fetch_add(transaction->remaster_cnt);
+
             retry_transaction = false;
           } else {
             if (transaction->abort_lock) {
@@ -435,6 +439,11 @@ public:
       } else {
         remaster = table->contains(key); // current coordniator
         VLOG(DEBUG_V14) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+        if(remaster){
+          txn.remaster_cnt ++ ;
+        } else {
+          txn.migrate_cnt ++ ;
+        }
       }
 
       if (local_index_read || local_read) {

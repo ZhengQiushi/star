@@ -949,11 +949,11 @@ public:
             n_abort_no_retry.fetch_add(1);
             continue;
           } 
-          result = transaction->prepare_update_execute(id);
+          // result = transaction->prepare_update_execute(id);
 
-          // auto result = transaction->execute(id);
-          time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - now).count();
-          now = std::chrono::steady_clock::now();
+          // // auto result = transaction->execute(id);
+          // time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - now).count();
+          // now = std::chrono::steady_clock::now();
 
           if (result == TransactionResult::READY_TO_COMMIT) {
             // LOG(INFO) << "LionMetisExecutor: "<< id << " " << "commit" << i;
@@ -969,6 +969,10 @@ public:
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
 
               n_commit.fetch_add(1);
+              
+              n_migrate.fetch_add(transaction->migrate_cnt);
+              n_remaster.fetch_add(transaction->remaster_cnt);
+
               retry_transaction = false;
             } else {
               if(transaction->abort_lock && transaction->abort_read_validation){
@@ -1241,6 +1245,11 @@ private:
           readKey.set_read_respond_bit();
           
           local_read = true;
+        } 
+        if(remaster){
+          txn.remaster_cnt ++ ;
+        } else {
+          txn.migrate_cnt ++ ;
         }
       }
 
@@ -1256,11 +1265,11 @@ private:
           if(i == coordinatorID){
             // target
             txn.network_size += MessageFactoryType::new_search_message(
-                *(this->messages[i]), *table, key, key_offset, remaster);
+                *(this->messages[i]), *table, key, key_offset, remaster, true);
           } else {
             // others, only change the router
             txn.network_size += MessageFactoryType::new_search_router_only_message(
-                *(this->messages[i]), *table, key, key_offset);
+                *(this->messages[i]), *table, key, key_offset, true);
           }            
           txn.pendingResponses++;
         }

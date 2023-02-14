@@ -25,7 +25,7 @@
 namespace star {
 
 
-enum class LionMessage {
+enum class LionMetisMessage {
   SEARCH_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
   SEARCH_RESPONSE,
   REPLICATION_REQUEST,
@@ -40,10 +40,6 @@ enum class LionMessage {
   METIS_MIGRATION_TRANSACTION_REQUEST,
   METIS_MIGRATION_TRANSACTION_RESPONSE,
 
-  ASYNC_SEARCH_REQUEST,
-  ASYNC_SEARCH_RESPONSE,
-  ASYNC_SEARCH_REQUEST_ROUTER_ONLY,
-  ASYNC_SEARCH_RESPONSE_ROUTER_ONLY,
   // FOR METIS
   // METIS_SEARCH_REQUEST,
   // METIS_SEARCH_RESPONSE,
@@ -56,12 +52,12 @@ enum class LionMessage {
   NFIELDS
 };
 
-class LionMessageFactory {
+class LionMetisMessageFactory {
 using Transaction = LionTransaction;
 public:
   static std::size_t new_search_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
-                                        bool remaster, bool is_metis) {
+                                        bool remaster) {
 
     /*
      * The structure of a search request: (primary key, read key offset)
@@ -69,14 +65,14 @@ public:
 
     auto key_size = table.key_size();
 
-    LionMessage message_type = LionMessage::SEARCH_REQUEST;
+    LionMetisMessage message_type = LionMetisMessage::SEARCH_REQUEST;
     // if(is_metis){
-    //   message_type = LionMessage::METIS_SEARCH_REQUEST;
-    VLOG(DEBUG_V16) << "LionMessage::METIS_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
+    //   message_type = LionMetisMessage::METIS_SEARCH_REQUEST;
+    VLOG(DEBUG_V16) << "LionMetisMessage::METIS_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
     // }
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster) + sizeof(is_metis);
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(message_type), message_size,
         table.tableID(), table.partitionID());
@@ -84,37 +80,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << remaster << is_metis;
-    message.flush();
-    return message_size;
-  }
-
-  static std::size_t async_new_search_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset,
-                                        bool remaster, bool is_metis) {
-
-    /*
-     * The structure of a search request: (primary key, read key offset)
-     */
-
-    auto key_size = table.key_size();
-
-    LionMessage message_type = LionMessage::ASYNC_SEARCH_REQUEST;
-    // if(is_metis){
-    //   message_type = LionMessage::METIS_SEARCH_REQUEST;
-    VLOG(DEBUG_V16) << "LionMessage::METIS_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
-    // }
-
-    auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster) + sizeof(is_metis);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(message_type), message_size,
-        table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << remaster << is_metis;
+    encoder << key_offset << remaster;
     message.flush();
     return message_size;
   }
@@ -134,7 +100,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::REPLICATION_REQUEST), message_size,
+        static_cast<uint32_t>(LionMetisMessage::REPLICATION_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -154,10 +120,10 @@ public:
      * The structure of a replication request: (primary key, field value,
      * commit_tid)
      */
-    LionMessage message_type = LionMessage::IGNORE;
+    LionMetisMessage message_type = LionMetisMessage::IGNORE;
     // if(is_metis){
-    //   message_type = LionMessage::METIS_IGNORE;
-    //   VLOG(DEBUG_V16) << "message_type = LionMessage::METIS_IGNORE";
+    //   message_type = LionMetisMessage::METIS_IGNORE;
+    //   VLOG(DEBUG_V16) << "message_type = LionMetisMessage::METIS_IGNORE";
     // }
 
     auto key_size = table.key_size();
@@ -179,21 +145,21 @@ public:
   }
 
   static std::size_t new_search_router_only_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset, bool is_metis) {
+                                        const void *key, uint32_t key_offset) {
 
     /*
      * The structure of a search request: (primary key, read key offset)
      */
-    LionMessage message_type = LionMessage::SEARCH_REQUEST_ROUTER_ONLY;
+    LionMetisMessage message_type = LionMetisMessage::SEARCH_REQUEST_ROUTER_ONLY;
     // if(is_metis){
-    //   message_type = LionMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY;
-    //   // VLOG(DEBUG_V14) << "message_type = LionMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY";
+    //   message_type = LionMetisMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY;
+    //   // VLOG(DEBUG_V14) << "message_type = LionMetisMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY";
     // }
 
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(is_metis);
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(message_type), message_size,
         table.tableID(), table.partitionID());
@@ -203,7 +169,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << is_metis;
+    encoder << key_offset;
     message.flush();
     return message_size;
   }
@@ -214,10 +180,10 @@ public:
     /*
      * The structure of a search request: (primary key, read key offset)
      */
-    LionMessage message_type = LionMessage::SEARCH_REQUEST_READ_ONLY;
+    LionMetisMessage message_type = LionMetisMessage::SEARCH_REQUEST_READ_ONLY;
     // if(is_metis){
-    //   message_type = LionMessage::SEARCH_REQUEST_READ_ONLY;
-    //   VLOG(DEBUG_V14) << "message_type = LionMessage::SEARCH_REQUEST_READ_ONLY";
+    //   message_type = LionMetisMessage::SEARCH_REQUEST_READ_ONLY;
+    //   VLOG(DEBUG_V14) << "message_type = LionMetisMessage::SEARCH_REQUEST_READ_ONLY";
     // }
     auto key_size = table.key_size();
 
@@ -247,7 +213,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION), message_size,
+        static_cast<uint32_t>(LionMetisMessage::ROUTER_TRANSACTION), message_size,
         table_id, 0);
 
     Encoder encoder(message.data);
@@ -280,7 +246,7 @@ public:
         MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(index) + sizeof(is_transmit_request) + 
                       sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_REQUEST), message_size,
+        static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_REQUEST), message_size,
         table_id, 0);
 
     Encoder encoder(message.data);
@@ -302,7 +268,7 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_RESPONSE), message_size,
         0, 0);
     star::Encoder encoder(message.data);
     encoder << message_piece_header;
@@ -314,9 +280,9 @@ public:
 
 };
 
-template <class Database> class LionMessageHandler {
+template <class Database> class LionMetisMessageHandler {
   using Transaction = LionTransaction;
-  using MessageFactoryType = LionMessageFactory;
+  using MessageFactoryType = LionMetisMessageFactory;
   using Context = typename Database::ContextType;
 
 public:
@@ -338,7 +304,7 @@ public:
      *                    
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SEARCH_REQUEST));
+           static_cast<uint32_t>(LionMetisMessage::SEARCH_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -354,17 +320,17 @@ public:
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
-    bool remaster, is_metis; // add by truth 22-04-22
+    bool remaster; // add by truth 22-04-22
     bool success;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster) + sizeof(is_metis));
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster));
 
     // get row and offset
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> remaster >> is_metis; // index offset in the readSet from source request node
+    dec >> key_offset >> remaster; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
@@ -384,11 +350,11 @@ public:
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
-                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis) + 
+                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
                         value_size;
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -400,7 +366,7 @@ public:
     success = table.contains(key);
     if(!success){
       VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
+      encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -412,7 +378,7 @@ public:
 
     if(!success){
       VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
+      encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -420,67 +386,65 @@ public:
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
     // lock the router_table 
-    if(partitioner->is_dynamic()){
-          // 数据所在节点的路由表
-          auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
-          auto router_val = (RouterValue*)router_table->search_value(key);
+//     if(partitioner->is_dynamic()){
+//           // 数据所在节点的路由表
+//           auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+//           auto router_val = (RouterValue*)router_table->search_value(key);
           
-          // 数据所在节点
-          auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-          uint64_t static_coordinator_id = partition_id % context.coordinator_num;
-          // create the new tuple in global router of source request node
-          auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+//           // 数据所在节点
+//           auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+//           uint64_t static_coordinator_id = partition_id % context.coordinator_num;
+//           // create the new tuple in global router of source request node
+//           auto coordinator_id_new = responseMessage.get_dest_node_id(); 
 
-          if(coordinator_id_new != coordinator_id_old){
-            // 数据更新到 发req的对面
-            VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
+//           if(coordinator_id_new != coordinator_id_old){
+//             // 数据更新到 发req的对面
+//             VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
             
-            if(!is_metis){
-              router_val->set_dynamic_coordinator_id(coordinator_id_new);
-            }
-            router_val->set_secondary_coordinator_id(coordinator_id_new);
+//             router_val->set_dynamic_coordinator_id(coordinator_id_new);
+//             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
-            encoder << latest_tid << key_offset << success << remaster << is_metis;
-            // reserve size for read
-            responseMessage.data.append(value_size, 0);
+//             encoder << latest_tid << key_offset << success << remaster;
+//             // reserve size for read
+//             responseMessage.data.append(value_size, 0);
             
-//            auto value = table.search_value(key);
-//            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
+// //            auto value = table.search_value(key);
+// //            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
             
-            if(success == true && remaster == false){
-              // transfer: read from db and load data into message buffer
-              void *dest =
-                  &responseMessage.data[0] + responseMessage.data.size() - value_size;
-              auto row = table.search(key);
-              TwoPLHelper::read(row, dest, value_size);
-            }
-            responseMessage.flush();
+//             if(success == true && remaster == false){
+//               // transfer: read from db and load data into message buffer
+//               void *dest =
+//                   &responseMessage.data[0] + responseMessage.data.size() - value_size;
+//               auto row = table.search(key);
+//               TwoPLHelper::read(row, dest, value_size);
+//             }
+//             responseMessage.flush();
 
-          } else if(coordinator_id_new == coordinator_id_old) {
-            success = false;
-            VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
-            encoder << latest_tid << key_offset << success << remaster << is_metis;
-            responseMessage.data.append(value_size, 0);
-            responseMessage.flush();
+//           } else if(coordinator_id_new == coordinator_id_old) {
+//             success = false;
+//             VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
+//             encoder << latest_tid << key_offset << success << remaster;
+//             responseMessage.data.append(value_size, 0);
+//             responseMessage.flush();
           
-          } else {
-            DCHECK(false);
-          }
+//           } else {
+//             DCHECK(false);
+//           }
 
-    } else {
-      VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key; //  << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
-      responseMessage.data.append(value_size, 0);
-      if(success == true && remaster == false){
-        auto row = table.search(key);
-        // transfer: read from db and load data into message buffer
-        void *dest =
-            &responseMessage.data[0] + responseMessage.data.size() - value_size;
-        TwoPLHelper::read(row, dest, value_size);
-      }
-      responseMessage.flush();
-      // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
-    }
+//     } else {
+//       VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key; //  << " " << tid_int;
+//       encoder << latest_tid << key_offset << success << remaster;
+//       responseMessage.data.append(value_size, 0);
+//       if(success == true && remaster == false){
+//         auto row = table.search(key);
+//         // transfer: read from db and load data into message buffer
+//         void *dest =
+//             &responseMessage.data[0] + responseMessage.data.size() - value_size;
+//         TwoPLHelper::read(row, dest, value_size);
+//       }
+//       responseMessage.flush();
+//       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
+//     }
 
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
@@ -498,7 +462,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
      * 
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE));
+           static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -514,11 +478,11 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     uint64_t tid;
     uint32_t key_offset;
     bool success;
-    bool remaster, is_metis;
+    bool remaster;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset >> success >> remaster >> is_metis;
+    dec >> tid >> key_offset >> success >> remaster;
 
     if(remaster == true){
       value_size = 0;
@@ -526,7 +490,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   sizeof(tid) +
-                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis) + 
+                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
                                                   value_size);
 
     txn->pendingResponses--;
@@ -546,7 +510,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         if(!remaster){
           // read value message piece
           stringPiece = inputPiece.toStringPiece();
-          stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis));
+          stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster));
           // insert into local node
           dec = Decoder(stringPiece);
           dec.read_n_bytes(readKey.get_value(), value_size);
@@ -565,13 +529,8 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         } 
 
         // lock the respond tid and key
+        std::atomic<uint64_t> &tid_ = table.search_metadata(key);
         bool success = false;
-        std::atomic<uint64_t> &tid_ = table.search_metadata(key, success);
-        if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-          txn->abort_lock = true;
-          return;
-        } 
 
         if(readKey.get_write_lock_bit()){
           last_tid = TwoPLHelper::write_lock(tid_, success);
@@ -587,41 +546,40 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
           return;
         } 
 
-        VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
+        // VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
-        auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
-        auto router_val = (RouterValue*)router_table->search_value(key);
+        // auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+        // auto router_val = (RouterValue*)router_table->search_value(key);
 
-        // create the new tuple in global router of source request node
-        auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-        uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
-        auto coordinator_id_new = responseMessage.get_source_node_id(); 
-        // DCHECK(coordinator_id_new != coordinator_id_old);
-        if(coordinator_id_new != coordinator_id_old){
-          VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+        // // create the new tuple in global router of source request node
+        // auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+        // uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
+        // auto coordinator_id_new = responseMessage.get_source_node_id(); 
+        // // DCHECK(coordinator_id_new != coordinator_id_old);
+        // if(coordinator_id_new != coordinator_id_old){
+        //   VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
 
-          if(!is_metis){
-            // update router
-            router_val->set_dynamic_coordinator_id(coordinator_id_new);
-          }
-          router_val->set_secondary_coordinator_id(coordinator_id_new);
-          readKey.set_dynamic_coordinator_id(coordinator_id_new);
-          readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
-          readKey.set_read_respond_bit();
-          readKey.set_tid(tid); // original tid for lock release
+        //   // update router
+        //   router_val->set_dynamic_coordinator_id(coordinator_id_new);
+        //   router_val->set_secondary_coordinator_id(coordinator_id_new);
 
-          txn->tids[key_offset] = &tid_;
-        } else {
-          VLOG(DEBUG_V12) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
-          txn->abort_lock = true;
-          if(readKey.get_write_lock_bit()){
-            TwoPLHelper::write_lock_release(tid_, last_tid);
-            VLOG(DEBUG_V14) << "unLOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-          } else {
-            TwoPLHelper::read_lock_release(tid_);
-            VLOG(DEBUG_V14) << "unLOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-          }
-        }
+        //   readKey.set_dynamic_coordinator_id(coordinator_id_new);
+        //   readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+        //   readKey.set_read_respond_bit();
+        //   readKey.set_tid(tid); // original tid for lock release
+
+        //   txn->tids[key_offset] = &tid_;
+        // } else {
+        //   VLOG(DEBUG_V12) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+        //   txn->abort_lock = true;
+        //   if(readKey.get_write_lock_bit()){
+        //     TwoPLHelper::write_lock_release(tid_, last_tid);
+        //     VLOG(DEBUG_V14) << "unLOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        //   } else {
+        //     TwoPLHelper::read_lock_release(tid_);
+        //     VLOG(DEBUG_V14) << "unLOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        //   }
+        // }
 
 
       }
@@ -645,7 +603,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //      * 
 //      */
 //     DCHECK(inputPiece.get_message_type() ==
-//            static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE));
+//            static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE));
 //     auto table_id = inputPiece.get_table_id();
 //     auto partition_id = inputPiece.get_partition_id();
 //     ITable &table = *db.find_table(table_id, partition_id);
@@ -797,7 +755,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::REPLICATION_REQUEST));
+           static_cast<uint32_t>(LionMetisMessage::REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -852,7 +810,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + sizeof(debug_key);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE), message_size,
+        static_cast<uint32_t>(LionMetisMessage::REPLICATION_RESPONSE), message_size,
         table_id, partition_id);
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header << debug_key;
@@ -868,7 +826,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE));
+           static_cast<uint32_t>(LionMetisMessage::REPLICATION_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -907,7 +865,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
      * Transaction *txn unused
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_ROUTER_ONLY));
+           static_cast<uint32_t>(LionMetisMessage::SEARCH_REQUEST_ROUTER_ONLY));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -923,10 +881,9 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
-    bool is_metis;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(is_metis));
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -934,14 +891,14 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> is_metis; // index offset in the readSet from source request node
+    dec >> key_offset; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + sizeof(uint64_t) + sizeof(key_offset) + value_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_ROUTER_ONLY), message_size,
+        static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_ROUTER_ONLY), message_size,
         table_id, partition_id);
 
     uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
@@ -963,14 +920,10 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
         auto router_val = (RouterValue*)router_table->search_value(key);
 
-        if(!is_metis){
-          router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
-        }
+        router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
         router_val->set_secondary_coordinator_id(coordinator_id_new);
 
-        if(context.coordinator_id == context.coordinator_num){
-          VLOG(DEBUG_V8) << "ROUTER UPDATE." << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;
-        }
+        VLOG(DEBUG_V8) << "ROUTER UPDATE." << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;
       }
 
     } else {
@@ -989,7 +942,7 @@ std::deque<simpleTransaction>* router_txn_queue,
 group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_ROUTER_ONLY));
+           static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_ROUTER_ONLY));
 
     auto stringPiece = inputPiece.toStringPiece();
 
@@ -1018,7 +971,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
      * 
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SEARCH_REQUEST_READ_ONLY));
+           static_cast<uint32_t>(LionMetisMessage::SEARCH_REQUEST_READ_ONLY));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -1052,7 +1005,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     auto message_size = MessagePiece::get_header_size() + value_size +
                         sizeof(uint64_t) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_READ_ONLY), message_size,
+        static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_READ_ONLY), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -1077,7 +1030,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                       group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::SEARCH_RESPONSE_READ_ONLY));
+           static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_READ_ONLY));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -1119,7 +1072,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                       group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION));
+           static_cast<uint32_t>(LionMetisMessage::ROUTER_TRANSACTION));
 
     auto stringPiece = inputPiece.toStringPiece();
     uint64_t txn_size, op;
@@ -1166,7 +1119,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::IGNORE));
+           static_cast<uint32_t>(LionMetisMessage::IGNORE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -1191,7 +1144,7 @@ std::deque<simpleTransaction>* router_txn_queue,
 group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_REQUEST));
+           static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_REQUEST));
 
     auto stringPiece = inputPiece.toStringPiece();
     uint64_t txn_size, op, is_distributed, index, is_transmit_request;
@@ -1254,435 +1207,574 @@ std::deque<simpleTransaction>* router_txn_queue,
 group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::METIS_MIGRATION_TRANSACTION_RESPONSE));
+           static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_RESPONSE));
     return;
 
 }
 
 
-  static void async_search_request_handler(MessagePiece inputPiece,
-                                     Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
-                                     Transaction *txn,
-                                     std::deque<simpleTransaction>* router_txn_queue,
-                                     group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
-) {
-    /**
-     * @brief directly move the data to the request node!
-     *
-     * | 0 | 1 | 2 |    x => static replica; o => dynamic replica
-     * | x | o |   | <- imagine current coordinator_id = 1
-     * |   | x | o |    request from N0
-     * | o |   | x |      remaster / transfer both ok
-     *                  request from N2
-     *                    remaster NO! transfer only
-     *                    
-     */
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ASYNC_SEARCH_REQUEST));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-    auto value_size = table.value_size();
+//   static void metis_search_request_handler(MessagePiece inputPiece,
+//                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                      Transaction *txn,
+//                                      std::deque<simpleTransaction>* router_txn_queue,
+//                                      group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     /**
+//      * @brief directly move the data to the request node!
+//      *
+//      * | 0 | 1 | 2 |    x => static replica; o => dynamic replica
+//      * | x | o |   | <- imagine current coordinator_id = 1
+//      * |   | x | o |    request from N0
+//      * | o |   | x |      remaster / transfer both ok
+//      *                  request from N2
+//      *                    remaster NO! transfer only
+//      *                    
+//      */
 
-    /*
-     * The structure of a read request: (primary key, read key offset)
-     * The structure of a read response: (value, tid, read key offset)
-     */
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_REQUEST));
 
-    auto stringPiece = inputPiece.toStringPiece();
-    uint32_t key_offset;
-    bool remaster, is_metis; // add by truth 22-04-22
-    bool success;
+//     auto table_id = inputPiece.get_table_id();
+//     auto partition_id = inputPiece.get_partition_id();
+//     ITable &table = *db.find_table(table_id, partition_id);    
+//     DCHECK(table_id == table.tableID());
+//     DCHECK(partition_id == table.partitionID());
+//     auto key_size = table.key_size();
+//     auto value_size = table.value_size();
 
-    DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster) + sizeof(is_metis));
+//     /*
+//      * The structure of a read request: (primary key, read key offset)
+//      * The structure of a read response: (value, tid, read key offset)
+//      */
 
-    // get row and offset
-    const void *key = stringPiece.data();
-    stringPiece.remove_prefix(key_size);
-    star::Decoder dec(stringPiece);
-    dec >> key_offset >> remaster >> is_metis; // index offset in the readSet from source request node
+//     auto stringPiece = inputPiece.toStringPiece();
+//     uint32_t key_offset;
+//     bool remaster; // add by truth 22-04-22
+//     bool success;
 
-    DCHECK(dec.size() == 0);
+//     DCHECK(inputPiece.get_message_length() ==
+//            MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster));
 
-    if(remaster == true){
-      // remaster, not transfer
-      value_size = 0;
-    }
+//     // get row and offset
+//     const void *key = stringPiece.data();
+//     stringPiece.remove_prefix(key_size);
+//     star::Decoder dec(stringPiece);
+//     dec >> key_offset >> remaster; // index offset in the readSet from source request node
 
-    // WorkloadType::which_workload == myTestSet::TPCC
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
-      // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop; i++) {
-        asm("nop");
-      }
-    }
-    //TODO: add transmit length with longer transaction
+//     DCHECK(dec.size() == 0);
 
-    // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + 
-                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis) + 
-                        value_size;
+//     if(remaster == true){
+//       // remaster, not transfer
+//       value_size = 0;
+//     }
 
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::ASYNC_SEARCH_RESPONSE), message_size,
-        table_id, partition_id);
+//     // WorkloadType::which_workload == myTestSet::TPCC
+//     if(remaster == false || (remaster == true && context.migration_only > 0)) {
+//       // simulate cost of transmit data
+//       for (auto i = 0u; i < context.n_nop; i++) {
+//         asm("nop");
+//       }
+//     }
+//     //TODO: add transmit length with longer transaction
 
-    star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header;
+//     // prepare response message header
+//     auto message_size = MessagePiece::get_header_size() + 
+//                         sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+//                         value_size;
+    
+//     VLOG(DEBUG_V16) << "send LionMetisMessage::METIS_SEARCH_RESPONSE MESSAGE SIZE: " << message_size << " " << "value_size: " << value_size;
 
-    uint64_t latest_tid;
+//     auto message_piece_header = MessagePiece::construct_message_piece_header(
+//         static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE), message_size,
+//         table_id, partition_id);
+
+//     star::Encoder encoder(responseMessage.data);
+//     encoder << message_piece_header;
+
+//     uint64_t latest_tid;
+//     success = table.contains(key);
+//     if(!success){
+//       VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+//       encoder << latest_tid << key_offset << success << remaster;
+//       responseMessage.data.append(value_size, 0);
+//       VLOG(DEBUG_V16) << " TEST " << responseMessage.get_message_length() << " " << responseMessage.data.length();
+//       responseMessage.flush();
+//       return;
+//     }
+
+//     std::atomic<uint64_t> &tid = table.search_metadata(key);
+//     // try to lock tuple. Ensure not locked by current node
+//     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
+
+//     if(!success){
+//       VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
+//       encoder << latest_tid << key_offset << success << remaster;
+//       responseMessage.data.append(value_size, 0);
+//       VLOG(DEBUG_V16) << " TEST " << responseMessage.get_message_length() << " " << responseMessage.data.length();
+//       responseMessage.flush();
+//       return;
+//     } else {
+//       VLOG(DEBUG_V14) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
+//     }
+//     // lock the router_table 
+//           // 数据所在节点的路由表
+//           auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+//           auto router_val = (RouterValue*)router_table->search_value(key);
+          
+//           // 数据所在节点
+//           auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+//           uint64_t static_coordinator_id = partition_id % context.coordinator_num;
+//           // create the new tuple in global router of source request node
+//           auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+
+//           if(coordinator_id_new != coordinator_id_old){
+//             // 数据更新到 发req的对面
+//             VLOG(DEBUG_V14) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
+            
+//             // update the router 
+//             router_val->set_dynamic_coordinator_id(coordinator_id_new);
+//             router_val->set_secondary_coordinator_id(coordinator_id_new);
+
+//             encoder << latest_tid << key_offset << success << remaster;
+//             // reserve size for read
+//             VLOG(DEBUG_V16) << " TEST " << responseMessage.get_message_length() << " " << responseMessage.data.length() << " " << success << " " << remaster << " " << "message_size:" << message_size << " value_size:" << value_size ;
+//             responseMessage.data.append(value_size, 0);
+            
+// //            auto value = table.search_value(key);
+// //            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
+            
+//             if(success == true && remaster == false){
+//               // transfer: read from db and load data into message buffer
+//               void *dest =
+//                   &responseMessage.data[0] + responseMessage.data.size() - value_size;
+//               auto row = table.search(key);
+//               TwoPLHelper::read(row, dest, value_size);
+//             }
+//             VLOG(DEBUG_V16) << " TEST " << responseMessage.get_message_length() << " " << responseMessage.data.length() << " " << success << " " << remaster << " " << "message_size:" << message_size << " value_size:" << value_size ;
+//             responseMessage.flush();
+
+//           } else if(coordinator_id_new == coordinator_id_old) {
+//             success = false;
+//             VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
+//             encoder << latest_tid << key_offset << success << remaster;
+//             responseMessage.data.append(value_size, 0);
+//             VLOG(DEBUG_V16) << " TEST " << responseMessage.get_message_length() << " " << responseMessage.data.length();
+//             responseMessage.flush();
+          
+//           } else {
+//             DCHECK(false);
+//           }
+
+//     // wait for the commit / abort to unlock
+//     TwoPLHelper::write_lock_release(tid);
+//   }
+
+//   static void metis_search_response_handler(MessagePiece inputPiece,
+//                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                       Transaction *txn,
+// std::deque<simpleTransaction>* router_txn_queue,
+// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     /**
+//      * @brief 
+//      * 
+//      * 
+//      */
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE));
 
     
-    success = table.contains(key);
-    if(!success){
-      VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
-      responseMessage.data.append(value_size, 0);
-      responseMessage.flush();
-      return;
-    }
+//     auto table_id = inputPiece.get_table_id();
+//     auto partition_id = inputPiece.get_partition_id();
+//     ITable &table = *db.find_table(table_id, partition_id);
+//     DCHECK(table_id == table.tableID());
+//     DCHECK(partition_id == table.partitionID());
+//     auto key_size = table.key_size();
+//     auto value_size = table.value_size();
 
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
-    // try to lock tuple. Ensure not locked by current node
-    latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
+//     /*
+//      * The structure of a read response: (value, tid, read key offset)
+//      */
 
-    if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
-      responseMessage.data.append(value_size, 0);
-      responseMessage.flush();
-      return;
-    } else {
-      VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
-    }
-    // lock the router_table 
-    if(partitioner->is_dynamic()){
-          // 数据所在节点的路由表
-          auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
-          auto router_val = (RouterValue*)router_table->search_value(key);
-          
-          // 数据所在节点
-          auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-          uint64_t static_coordinator_id = partition_id % context.coordinator_num;
-          // create the new tuple in global router of source request node
-          auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+//     uint64_t tid;
+//     uint32_t key_offset;
+//     bool success;
+//     bool remaster;
 
-          if(coordinator_id_new != coordinator_id_old){
-            // 数据更新到 发req的对面
-            VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
-            
-            if(!is_metis){
-              router_val->set_dynamic_coordinator_id(coordinator_id_new);
-            }
-            router_val->set_secondary_coordinator_id(coordinator_id_new);
+//     StringPiece stringPiece = inputPiece.toStringPiece();
+//     Decoder dec(stringPiece);
+//     dec >> tid >> key_offset >> success >> remaster;
 
-            encoder << latest_tid << key_offset << success << remaster << is_metis;
-            // reserve size for read
-            responseMessage.data.append(value_size, 0);
-            
-//            auto value = table.search_value(key);
-//            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
-            
-            if(success == true && remaster == false){
-              // transfer: read from db and load data into message buffer
-              void *dest =
-                  &responseMessage.data[0] + responseMessage.data.size() - value_size;
-              auto row = table.search(key);
-              TwoPLHelper::read(row, dest, value_size);
-            }
-            responseMessage.flush();
+//     if(remaster == true){
+//       value_size = 0;
+//     }
 
-          } else if(coordinator_id_new == coordinator_id_old) {
-            success = false;
-            VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
-            encoder << latest_tid << key_offset << success << remaster << is_metis;
-            responseMessage.data.append(value_size, 0);
-            responseMessage.flush();
-          
-          } else {
-            DCHECK(false);
-          }
-
-    } else {
-      VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key; //  << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
-      responseMessage.data.append(value_size, 0);
-      if(success == true && remaster == false){
-        auto row = table.search(key);
-        // transfer: read from db and load data into message buffer
-        void *dest =
-            &responseMessage.data[0] + responseMessage.data.size() - value_size;
-        TwoPLHelper::read(row, dest, value_size);
-      }
-      responseMessage.flush();
-      // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
-    }
-
-    // wait for the commit / abort to unlock
-    TwoPLHelper::write_lock_release(tid);
-  }
-
-  static void async_search_response_handler(MessagePiece inputPiece,
-                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
-) {
-    /**
-     * @brief 
-     * 
-     * 
-     */
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ASYNC_SEARCH_RESPONSE));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-    auto value_size = table.value_size();
-
-    /*
-     * The structure of a read response: (value, tid, read key offset)
-     */
-
-    uint64_t tid;
-    uint32_t key_offset;
-    bool success;
-    bool remaster, is_metis;
-
-    StringPiece stringPiece = inputPiece.toStringPiece();
-    Decoder dec(stringPiece);
-    dec >> tid >> key_offset >> success >> remaster >> is_metis;
-
-    if(remaster == true){
-      value_size = 0;
-    }
-
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  sizeof(tid) +
-                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis) + 
-                                                  value_size);
-
-    txn->asyncPendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
-
-    LionRWKey &readKey = txn->readSet[key_offset];
-    auto key = readKey.get_key();
-
-    uint64_t last_tid = 0;
-
-    if(success == true){
-      if(partitioner->is_dynamic()){
-        // update router 
-        auto key = readKey.get_key();
-        auto value = readKey.get_value();
-
-        if(!remaster){
-          // read value message piece
-          stringPiece = inputPiece.toStringPiece();
-          stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis));
-          // insert into local node
-          dec = Decoder(stringPiece);
-          dec.read_n_bytes(readKey.get_value(), value_size);
-          DCHECK(strlen((char*)readKey.get_value()) > 0);
-
-          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert " << txn->readSet.size();
-          table.insert(key, value, (void*)& tid);
-        }
-
-        // simulate migrations with receiver 
-        if(remaster == false || (remaster == true && context.migration_only > 0)) {
-          // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop; i++) {
-            asm("nop");
-          }
-        } 
-
-        // lock the respond tid and key
-        bool success = false;
-        std::atomic<uint64_t> &tid_ = table.search_metadata(key, success);
-        if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-          txn->abort_lock = true;
-          return;
-        } 
-
-        if(readKey.get_write_lock_bit()){
-          last_tid = TwoPLHelper::write_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        } else {
-          last_tid = TwoPLHelper::read_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        }
-
-        if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-          txn->abort_lock = true;
-          return;
-        } 
-
-        VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
-
-        auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
-        auto router_val = (RouterValue*)router_table->search_value(key);
-
-        // create the new tuple in global router of source request node
-        auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-        uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
-        auto coordinator_id_new = responseMessage.get_source_node_id(); 
-        // DCHECK(coordinator_id_new != coordinator_id_old);
-        if(coordinator_id_new != coordinator_id_old){
-          VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
-
-          if(!is_metis){
-            // update router
-            router_val->set_dynamic_coordinator_id(coordinator_id_new);
-          }
-          router_val->set_secondary_coordinator_id(coordinator_id_new);
-          readKey.set_dynamic_coordinator_id(coordinator_id_new);
-          readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
-          readKey.set_read_respond_bit();
-          readKey.set_tid(tid); // original tid for lock release
-
-          txn->tids[key_offset] = &tid_;
-        } else {
-          VLOG(DEBUG_V12) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
-          txn->abort_lock = true;
-          if(readKey.get_write_lock_bit()){
-            TwoPLHelper::write_lock_release(tid_, last_tid);
-            VLOG(DEBUG_V14) << "unLOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-          } else {
-            TwoPLHelper::read_lock_release(tid_);
-            VLOG(DEBUG_V14) << "unLOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-          }
-        }
-
-
-      }
-
-    } else {
-      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-      txn->abort_lock = true;
-    }
-
-  }
-
-
-  static void async_search_request_router_only_handler(MessagePiece inputPiece,
-                                     Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
-                                     Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
-) {
-    /**
-     * @brief directly move the data to the request node!
-     * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
-     * Transaction *txn unused
-     */
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-    auto value_size = table.value_size();
-
-    /*
-     * The structure of a read request: (primary key, read key offset)
-     * The structure of a read response: (value, tid, read key offset)
-     */
-
-    auto stringPiece = inputPiece.toStringPiece();
-    uint32_t key_offset;
-    bool is_metis;
-
-    DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(is_metis));
-
-    // get row and offset
-    const void *key = stringPiece.data();
-    // auto row = table.search(key);
-
-    stringPiece.remove_prefix(key_size);
-    star::Decoder dec(stringPiece);
-    dec >> key_offset >> is_metis; // index offset in the readSet from source request node
-
-    DCHECK(dec.size() == 0);
-
-    // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + sizeof(uint64_t) + sizeof(key_offset) + value_size;
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
-        table_id, partition_id);
-
-    uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
-    star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header << tid << key_offset;
-
-    // reserve size for read
-    responseMessage.data.append(value_size, 0);
-    // if(context.coordinator_id == context.coordinator_num){
-    //   VLOG(DEBUG_V8) << "RECV ROUTER UPDATE. " << *(int*)key << "  ";
-    // }
+//     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+//                                                   sizeof(tid) +
+//                                                   sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+//                                                   value_size);
     
-    if(partitioner->is_dynamic()){
-      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+//     txn->pendingResponses--;
+//     txn->network_size += inputPiece.get_message_length();
 
-      // create the new tuple in global router of source request node
-      auto coordinator_id_new = responseMessage.get_dest_node_id(); 
-      if(coordinator_id_new != coordinator_id_old){
-        auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
-        auto router_val = (RouterValue*)router_table->search_value(key);
+//     LionRWKey &readKey = txn->readSet[key_offset];
+//     auto key = readKey.get_key();
 
-        if(!is_metis){
-          router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
-        }
-        router_val->set_secondary_coordinator_id(coordinator_id_new);
+//     uint64_t last_tid = 0;
 
-        if(context.coordinator_id == context.coordinator_num){
-          VLOG(DEBUG_V8) << "ROUTER UPDATE." << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;
-        }
-      }
+//     if(success == true){
+//         // update router 
+//         auto key = readKey.get_key();
+//         auto value = readKey.get_value();
 
-    } else {
+//         if(!remaster){
+//           // read value message piece
+//           stringPiece = inputPiece.toStringPiece();
+//           stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster));
+//           // insert into local node
+//           dec = Decoder(stringPiece);
+//           dec.read_n_bytes(readKey.get_value(), value_size);
+//           DCHECK(strlen((char*)readKey.get_value()) > 0);
 
-      // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
+//           VLOG(DEBUG_V16) << *(int*) key << " " << (char*) value << " insert ";
+//           table.insert(key, value, (void*)& tid);
+//         }
 
-    }
+//         // simulate migrations with receiver 
+//         if(remaster == false || (remaster == true && context.migration_only > 0)) {
+//           // simulate cost of transmit data
+//           for (auto i = 0u; i < context.n_nop; i++) {
+//             asm("nop");
+//           }
+//         } 
 
-    responseMessage.flush();
-  }
+//         // lock the respond tid and key
+//         std::atomic<uint64_t> &tid_ = table.search_metadata(key);
+//         bool success = false;
 
-  static void async_search_response_router_only_handler(MessagePiece inputPiece,
-                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn,
-std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
-) {
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY));
+//         if(readKey.get_write_lock_bit()){
+//           last_tid = TwoPLHelper::write_lock(tid_, success);
+//           VLOG(DEBUG_V14) << "METIS-LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+//         } else {
+//           CHECK(false);
+//         }
 
-    auto stringPiece = inputPiece.toStringPiece();
+//         if(!success){
+//           VLOG(DEBUG_V12) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+//           txn->abort_lock = true;
+//           // txn->pendingResponses--;
+//           // txn->network_size += inputPiece.get_message_length();
+//           return;
+//         } 
 
-    uint64_t tid;
-    uint32_t key_offset;
+//         VLOG(DEBUG_V16) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
-    star::Decoder dec(stringPiece);
-    dec >> tid >> key_offset; // index offset in the readSet from source request node
+//         auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+//         auto router_val = (RouterValue*)router_table->search_value(key);
 
-    txn->asyncPendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
+//         // create the new tuple in global router of source request node
+//         auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+//         uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
+//         auto coordinator_id_new = responseMessage.get_source_node_id(); 
+//         // DCHECK(coordinator_id_new != coordinator_id_old);
+//         if(coordinator_id_new != coordinator_id_old){
+//           VLOG(DEBUG_V16) <<"METIS-LOCK-FROM-REMOTE."<< table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+//           // update router
+//           router_val->set_dynamic_coordinator_id(coordinator_id_new);
+//           router_val->set_secondary_coordinator_id(coordinator_id_new);
 
-    VLOG(DEBUG_V12) << "RECV DONE SEARCH_RESPONSE_ROUTER_ONLY " << key_offset << " " << *(int*)txn->readSet[key_offset].get_key() << " txn->pendingResponses: " << txn->pendingResponses;
-  }
+//           readKey.set_dynamic_coordinator_id(coordinator_id_new);
+//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+//           readKey.set_read_respond_bit();
+//           readKey.set_tid(tid); // original tid for lock release
+
+//           txn->tids[key_offset] = &tid_;
+//                     // 
+//           // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+//           //   // also send to generator to update the router-table
+//           //   if(i == context.coordinator_id){
+//           //     continue; // local
+//           //   }
+//           //   if(i != coordinator_id_new){
+//           //     // target
+//           //     txn->network_size += MessageFactoryType::new_search_router_only_message(
+//           //         *messages[i], table, key, key_offset, true);
+//           //     txn->pendingResponses++;
+//           //   }          
+//           // }
+//         } else {
+//           txn->abort_lock = true;
+//           VLOG(DEBUG_V12) << "METIS-ABORT. FAIL TO " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+//           if(readKey.get_write_lock_bit()){
+//             TwoPLHelper::write_lock_release(tid_, last_tid);
+//             VLOG(DEBUG_V16) << "METIS-unLOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+//           } else {
+//             TwoPLHelper::read_lock_release(tid_);
+//             VLOG(DEBUG_V16) << "METIS-unLOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+//           }
+//         }
+
+
+//     } else {
+//       VLOG(DEBUG_V12) << "METIS-FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+//       txn->abort_lock = true;
+//     }
+
+//     // txn->pendingResponses--;
+//     // txn->network_size += inputPiece.get_message_length();
+//   }
+
+
+//   static void metis_search_request_router_only_handler(MessagePiece inputPiece,
+//                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                      Transaction *txn,
+// std::deque<simpleTransaction>* router_txn_queue,
+// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     /**
+//      * @brief directly move the data to the request node!
+//      * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
+//      * Transaction *txn unused
+//      */
+    
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY));
+//     auto table_id = inputPiece.get_table_id();
+//     auto partition_id = inputPiece.get_partition_id();
+//     ITable &table = *db.find_table(table_id, partition_id);    
+//     DCHECK(table_id == table.tableID());
+//     DCHECK(partition_id == table.partitionID());
+//     auto key_size = table.key_size();
+//     auto value_size = table.value_size();
+
+//     /*
+//      * The structure of a read request: (primary key, read key offset)
+//      * The structure of a read response: (value, tid, read key offset)
+//      */
+
+//     auto stringPiece = inputPiece.toStringPiece();
+//     uint32_t key_offset;
+
+//     DCHECK(inputPiece.get_message_length() ==
+//            MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+//     // get row and offset
+//     const void *key = stringPiece.data();
+//     // auto row = table.search(key);
+
+//     stringPiece.remove_prefix(key_size);
+//     star::Decoder dec(stringPiece);
+//     dec >> key_offset; // index offset in the readSet from source request node
+
+//     DCHECK(dec.size() == 0);
+
+//     // prepare response message header
+//     auto message_size = MessagePiece::get_header_size() + value_size +
+//                         sizeof(uint64_t) + sizeof(key_offset);
+//     auto message_piece_header = MessagePiece::construct_message_piece_header(
+//         static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
+//         table_id, partition_id);
+
+//     star::Encoder encoder(responseMessage.data);
+//     encoder << message_piece_header;
+
+//     // reserve size for read
+//     responseMessage.data.append(value_size, 0);
+//     uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
+
+//     encoder << tid << key_offset;
+
+//     // lock the router_table 
+    
+//       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+//       // create the new tuple in global router of source request node
+//       auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+//       if(coordinator_id_new != coordinator_id_old){
+//         auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
+//         auto router_val = (RouterValue*)router_table->search_value(key);
+//         // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+
+//         router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
+//         router_val->set_secondary_coordinator_id(coordinator_id_new);
+//         // std::atomic<uint64_t> &tid_r_new = router_table_new->search_metadata(key);
+//         // TwoPLHelper::lock(tid_r_new); // locked, not available so far
+
+//         // delete old value in router and real-replica
+//         // router_table_old->delete_(key);
+        
+//         // TwoPLHelper::unlock(tid_r_new); 
+//       }
+
+//     responseMessage.flush();
+//   }
+
+//   static void metis_search_response_router_only_handler(MessagePiece inputPiece,
+//                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                       Transaction *txn,
+// std::deque<simpleTransaction>* router_txn_queue,
+// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_ROUTER_ONLY));
+
+//     VLOG(DEBUG_V16) << "LionMetisMessage::METIS_SEARCH_RESPONSE_ROUTER_ONLY";
+
+//     txn->pendingResponses--;
+//     txn->network_size += inputPiece.get_message_length();
+
+//   }
+
+
+//   static void metis_search_request_original_handler(MessagePiece inputPiece,
+//                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                      Transaction *txn,
+// std::deque<simpleTransaction>* router_txn_queue,
+// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     /**
+//      * @brief directly move the data to the request node!
+//      *  最原始的只读
+//      * 
+//      */
+//     bool is_metis = (inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_REQUEST_READ_ONLY));
+
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::SEARCH_REQUEST_READ_ONLY) || 
+//            inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_REQUEST_READ_ONLY));
+//     auto table_id = inputPiece.get_table_id();
+//     auto partition_id = inputPiece.get_partition_id();
+//     ITable &table = *db.find_table(table_id, partition_id);    
+//     DCHECK(table_id == table.tableID());
+//     DCHECK(partition_id == table.partitionID());
+//     auto key_size = table.key_size();
+//     auto value_size = table.value_size();
+
+//     /*
+//      * The structure of a read request: (primary key, read key offset)
+//      * The structure of a read response: (value, tid, read key offset)
+//      */
+
+//     auto stringPiece = inputPiece.toStringPiece();
+//     uint32_t key_offset;
+
+//     DCHECK(inputPiece.get_message_length() ==
+//            MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+//     // get row and offset
+//     const void *key = stringPiece.data();
+//     auto row = table.search(key);
+
+//     stringPiece.remove_prefix(key_size);
+//     star::Decoder dec(stringPiece);
+//     dec >> key_offset; // index offset in the readSet from source request node
+
+//     DCHECK(dec.size() == 0);
+
+//     // prepare response message header
+//     VLOG(DEBUG_V16) << "LionMetisMessage::METIS_SEARCH_RESPONSE_READ_ONLY";
+//     auto message_size = MessagePiece::get_header_size() + value_size +
+//                         sizeof(uint64_t) + sizeof(key_offset);
+//     auto message_piece_header = MessagePiece::construct_message_piece_header(
+//         static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_READ_ONLY), message_size,
+//         table_id, partition_id);
+
+//     star::Encoder encoder(responseMessage.data);
+//     encoder << message_piece_header;
+
+//     // reserve size for read
+//     responseMessage.data.append(value_size, 0);
+//     void *dest =
+//         &responseMessage.data[0] + responseMessage.data.size() - value_size;
+//     // read to message buffer
+//     auto tid = TwoPLHelper::read(row, dest, value_size);
+
+//     encoder << tid << key_offset;
+
+//     responseMessage.flush();
+//   }
+
+//   static void metis_search_response_original_handler(MessagePiece inputPiece,
+//                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                       Transaction *txn,
+//                                       std::deque<simpleTransaction>* router_txn_queue,
+//                                       group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_READ_ONLY) || 
+//            inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_READ_ONLY));
+
+//     auto table_id = inputPiece.get_table_id();
+//     auto partition_id = inputPiece.get_partition_id();
+//     ITable &table = *db.find_table(table_id, partition_id);
+//     DCHECK(table_id == table.tableID());
+//     DCHECK(partition_id == table.partitionID());
+//     auto key_size = table.key_size();
+//     auto value_size = table.value_size();
+
+//     if(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_READ_ONLY)){
+//       VLOG(DEBUG_V16) << "inputPiece.get_message_type() == static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_READ_ONLY)";
+//     }
+//     /*
+//      * The structure of a read response: (value, tid, read key offset)
+//      */
+
+//     uint64_t tid;
+//     uint32_t key_offset;
+
+//     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+//                                                   value_size + sizeof(tid) +
+//                                                   sizeof(key_offset));
+
+//     StringPiece stringPiece = inputPiece.toStringPiece();
+//     stringPiece.remove_prefix(value_size);
+//     Decoder dec(stringPiece);
+//     dec >> tid >> key_offset;
+
+//     LionRWKey &readKey = txn->readSet[key_offset];
+//     dec = Decoder(inputPiece.toStringPiece());
+//     dec.read_n_bytes(readKey.get_value(), value_size);
+//     readKey.set_tid(tid);
+//     txn->pendingResponses--;
+//     txn->network_size += inputPiece.get_message_length();
+
+//   }
+
+
+//   static void metis_ignore_handler(MessagePiece inputPiece,
+//                                            Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, 
+//                                            Database &db, const Context &context,  Partitioner *partitioner,
+//                                            Transaction *txn,
+// std::deque<simpleTransaction>* router_txn_queue,
+// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::IGNORE) || 
+//            inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMetisMessage::METIS_IGNORE));
+
+//     if(inputPiece.get_message_type() == static_cast<uint32_t>(LionMetisMessage::METIS_IGNORE)){
+//       VLOG(DEBUG_V16) << "static_cast<uint32_t>(LionMetisMessage::METIS_IGNORE)";
+//     }
+//     auto table_id = inputPiece.get_table_id();
+//     auto partition_id = inputPiece.get_partition_id();
+//     ITable &table = *db.find_table(table_id, partition_id);
+
+//     DCHECK(table_id == table.tableID());
+//     DCHECK(partition_id == table.partitionID());
+//     auto key_size = table.key_size();
+
+//     /*
+//      * The structure of a replication response: ()
+//      */
+
+//     // txn->pendingResponses--;
+//     // txn->network_size += inputPiece.get_message_length();
+//   }
 
 
   static std::vector<
@@ -1714,11 +1806,11 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     // 
     v.push_back(metis_migration_transaction_handler);
     v.push_back(metis_migration_transaction_response_handler);
-    
-    v.push_back(async_search_request_handler); // SEARCH_REQUEST
-    v.push_back(async_search_response_handler); // SEARCH_RESPONSE
-    v.push_back(async_search_request_router_only_handler); // SEARCH_REQUEST_ROUTER_ONLY
-    v.push_back(async_search_response_router_only_handler); // SEARCH_RESPONSE_ROUTER_ONLY
+    //
+    // v.push_back(metis_search_request_handler); // SEARCH_REQUEST
+    // v.push_back(metis_search_response_handler); // SEARCH_RESPONSE
+    // v.push_back(metis_search_request_router_only_handler); // SEARCH_REQUEST_ROUTER_ONLY
+    // v.push_back(metis_search_response_router_only_handler); // SEARCH_RESPONSE_ROUTER_ONLY
     // v.push_back(metis_search_request_original_handler); // SEARCH_REQUEST_READ_ONLY
     // v.push_back(metis_search_response_original_handler); // SEARCH_RESPONSE_READ_ONLY
     // v.push_back(metis_ignore_handler); // IGNORE

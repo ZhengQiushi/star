@@ -50,6 +50,15 @@ public:
     return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
   }
 
+  std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
+    /**
+     * @brief from router table to find the coordinator
+     * 
+     */
+    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
+  }
+
   void init_router_table(const Context& context){
     /**
      * @brief for Lion only.

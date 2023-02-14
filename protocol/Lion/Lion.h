@@ -84,8 +84,8 @@ public:
       // remote
       auto coordinatorID = readKey.get_dynamic_coordinator_id();
 
+      std::atomic<uint64_t> &tid = table->search_metadata(key);
       if (coordinatorID == context.coordinator_id) {
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
         if(readKey.get_write_lock_bit()){
           VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << tid.load();
           TwoPLHelper::write_lock_release(tid);
@@ -94,7 +94,18 @@ public:
           TwoPLHelper::read_lock_release(tid);
         }
       } else {
-        DCHECK(false);
+        // DCHECK(false);
+        if(readKey.get_write_lock_bit()){
+          if(TwoPLHelper::is_write_locked(tid.load())){
+            VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << tid.load();
+            TwoPLHelper::write_lock_release(tid);
+          }
+        } else {
+          if(TwoPLHelper::is_read_locked(tid.load())){
+            VLOG(DEBUG_V14) << "  unLOCK-read " << *(int*)key << " " << tid.load();
+            TwoPLHelper::read_lock_release(tid);
+          }
+        }
       }
     }
 

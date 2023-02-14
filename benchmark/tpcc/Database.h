@@ -545,6 +545,16 @@ public:
     return router_val->get_dynamic_coordinator_id();
   }
 
+  std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
+    /**
+     * @brief from router table to find the coordinator
+     * 
+     */
+    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    auto router_val = (RouterValue*)(tab->search_value(key));
+    return router_val->get_secondary_coordinator_id();
+  }
+
   void apply_operation(const Operation &operation) {
 
     Decoder dec(operation.data);

@@ -40,6 +40,10 @@ public:
     si_in_serializable = false;
     distributed_transaction = false;
     execution_phase = true;
+
+    remaster_cnt = 0;
+    migrate_cnt = 0;
+    
     operation.clear();
     readSet.clear();
     writeSet.clear();
@@ -320,9 +324,14 @@ public:
   std::size_t coordinator_id, partition_id;
   std::chrono::steady_clock::time_point startTime;
   std::size_t pendingResponses;
+  std::size_t asyncPendingResponses;
+
   std::vector<std::atomic<uint64_t> *> tids;
 
   std::size_t network_size;
+
+  int remaster_cnt, migrate_cnt; // statistic
+
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;
   bool execution_phase;

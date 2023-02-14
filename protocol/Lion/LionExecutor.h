@@ -589,7 +589,7 @@ public:
           //   VLOG(DEBUG_V14) << "read_execute DEBUG TXN READ SET " << debug;
           //   ///
           // }
-
+          
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
             protocol->abort(*transaction, messages);
@@ -606,13 +606,17 @@ public:
 
           if (result == TransactionResult::READY_TO_COMMIT) {
             ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
-
+            
             bool commit = protocol->commit(*transaction, messages, async_message_num, false);
             
             n_network_size.fetch_add(transaction->network_size);
             if (commit) {
               n_commit.fetch_add(1);
               retry_transaction = false;
+              
+              n_migrate.fetch_add(transaction->migrate_cnt);
+              n_remaster.fetch_add(transaction->remaster_cnt);
+
               q.push(std::move(transaction));
             } else {
               if(transaction->abort_lock && transaction->abort_read_validation){
@@ -1000,13 +1004,36 @@ private:
           
           std::atomic<uint64_t> &tid = table->search_metadata(key, success);
           TwoPLHelper::read_lock(tid, success);
-          
           txn.tids[key_offset] = &tid;
-
           // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
           readKey.set_read_respond_bit();
-          
           local_read = true;
+          
+          // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+          //   // also send to generator to update the router-table
+          //   if(i == coordinator_id){
+          //     continue; // local
+          //   }
+          //   if(i == coordinatorID){
+          //     // target
+          //     txn.network_size += MessageFactoryType::new_async_search_message(
+          //         *(this->messages[i]), *table, key, key_offset, remaster, false);
+          //   } else {
+          //     // others, only change the router
+          //     txn.network_size += MessageFactoryType::new_async_search_router_only_message(
+          //         *(this->messages[i]), *table, key, key_offset, false);
+          //   }            
+          //   txn.asyncPendingResponses++;
+          // }
+          // this->flush_messages(messages);
+          // 
+        }
+
+        if(remaster){
+          txn.remaster_cnt ++ ;
+          VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
+        } else {
+          txn.migrate_cnt ++ ;
         }
       }
 
@@ -1022,11 +1049,11 @@ private:
           if(i == coordinatorID){
             // target
             txn.network_size += MessageFactoryType::new_search_message(
-                *(this->messages[i]), *table, key, key_offset, remaster);
+                *(this->messages[i]), *table, key, key_offset, remaster, false);
           } else {
             // others, only change the router
             txn.network_size += MessageFactoryType::new_search_router_only_message(
-                *(this->messages[i]), *table, key, key_offset);
+                *(this->messages[i]), *table, key, key_offset, false);
           }            
           txn.pendingResponses++;
         }

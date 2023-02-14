@@ -79,6 +79,9 @@ public:
     generator_core_id.resize(context.coordinator_num);
 
     generator_num = 1;
+
+    
+    outfile_excel.open("/home/star/data/metis_router.xls", std::ios::trunc); // ios::trunc
   }
 
   void router_fence(){
@@ -140,7 +143,7 @@ public:
         max_node = coordi_nums_[random_coord_id];
       }
 
-      // busy_[max_node] -= 1;
+      // busy_[max_node] -= 10;
 
      return from_nodes_id;
    }
@@ -216,8 +219,9 @@ public:
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
-      // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);
-      VLOG(DEBUG_V6) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator;
+      // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
+      outfile_excel << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+
       metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
@@ -287,7 +291,21 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int debug_trigger_time_interval = 5 * 1000;
+        int start_offset = 10 * 1000;
+        // 
+        while(status != ExecutorStatus::EXIT){
+          process_request();
+          status = static_cast<ExecutorStatus>(worker_status.load());
+          auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                  std::chrono::steady_clock::now() - last_timestamp_)
+                                  .count();
+          if(latency > start_offset){
+            break;
+          }
+        }
+        // 
+        last_timestamp_ = std::chrono::steady_clock::now();
+        // 
 
         while(status != ExecutorStatus::EXIT){
           process_request();
@@ -638,6 +656,8 @@ public:
               << local_latency.nth(95) << " us (95%) " << local_latency.nth(99)
               << " us (99%).";
 
+    outfile_excel.close();
+    
     if (id == 0) {
       for (auto i = 0u; i < message_stats.size(); i++) {
         LOG(INFO) << "message stats, type: " << i

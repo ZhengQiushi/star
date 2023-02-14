@@ -8,7 +8,7 @@
 #include <atomic>
 #include <thread>
 #include <set>
-
+#include <unordered_set>
 #include <glog/logging.h>
 
 namespace star {
@@ -51,6 +51,19 @@ public:
   bool count_secondary_coordinator_id(uint64_t secondary_coordinator_id) const {
     return ((get_secondary_coordinator_id() >> secondary_coordinator_id) & 1);
   }
+
+  std::unordered_set<int> get_secondary_coordinator_id_array() {
+    std::unordered_set<int> ret; 
+    uint64_t tmp = get_secondary_coordinator_id();
+    for(int i = 0; i < 64 - 8; i ++ ){
+        if(tmp & 1){
+            ret.insert(i);
+        }
+        tmp = tmp >> 1;
+    }
+    return ret;// (bitvec >> SECONDARY_COORDINATOR_ID_BIT_OFFSET) & SECONDARY_COORDINATOR_ID_BIT_MASK;
+  }
+
   std::string get_secondary_coordinator_id_printed() const {
     std::string ret; 
     ret += "[";

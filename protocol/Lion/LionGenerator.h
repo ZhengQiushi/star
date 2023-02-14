@@ -45,8 +45,8 @@ public:
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        partitioner(PartitionerFactory::create_partitioner(
-            context.partitioner, coordinator_id, context.coordinator_num)),
+        partitioner(std::make_unique<LionDynamicPartitioner<WorkloadType>>(
+            coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
         // protocol(db, context, *partitioner),
         workload(coordinator_id, worker_status, db, random, *partitioner, start_time),
@@ -154,8 +154,11 @@ public:
 
   std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
       std::unordered_map<int, int> from_nodes_id;
+      std::unordered_map<int, int> from_nodes_id_secondary;
       // static std::unordered_map<int, int> busy_;
       std::vector<int> coordi_nums_;
+
+      
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
       int max_cnt = INT_MIN;
@@ -164,9 +167,11 @@ public:
         // LOG(INFO) << "query_keys[j] : " << query_keys[j];
         // judge if is cross txn
         size_t cur_c_id = -1;
+        size_t secondary_c_ids;
         if(is_dynamic){
           // look-up the dynamic router to find-out where
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+          // secondary_c_ids = db.get_secondary_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
           cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
@@ -178,6 +183,18 @@ public:
         } else {
           from_nodes_id[cur_c_id] += 1;
         }
+
+
+        // for(int i = 0; i < 64 - 8; i ++ ){
+        //     if(secondary_c_ids & 1){
+        //         from_nodes_id_secondary[i] += 1;
+        //     }
+        //     secondary_c_ids = secondary_c_ids >> 1;
+        // }
+
+        // for(auto& i: secondary_c_ids){
+        //   from_nodes_id_secondary[i] += 1;
+        // }
         // if(!busy_.count(cur_c_id)){
         //   busy_[cur_c_id] = 0;
         // }
@@ -185,6 +202,8 @@ public:
         //   max_cnt = from_nodes_id[cur_c_id] + busy_[cur_c_id];
         //   max_node = cur_c_id;
         // }
+
+
         if(from_nodes_id[cur_c_id] > max_cnt){
           max_cnt = from_nodes_id[cur_c_id];
           max_node = cur_c_id;
@@ -197,11 +216,25 @@ public:
         int random_value = random.uniform_dist(0, 100);
         if(random_value > context.random_router){
           int random_coord_id = random.uniform_dist(0, coords_num - 1);
+          VLOG(DEBUG_V8) << "bad  " << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << coordi_nums_[random_coord_id] << " " << from_nodes_id[coordi_nums_[random_coord_id]];
           max_node = coordi_nums_[random_coord_id];
         }
+      } else {
+        if(max_cnt == 10){
+
+        } else {
+          for(auto& i: from_nodes_id_secondary){
+            if(i.second == 10 || from_nodes_id[i.first] + i.second == 10){
+              max_node = i.first;
+              break;
+            }
+          }
+        } 
+
+        if(from_nodes_id[max_node] < 10 && from_nodes_id_secondary[max_node] < 10)
+          VLOG(DEBUG_V8) << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node];
       }
 
-      VLOG(DEBUG_V8) << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node];
       // busy_[max_node] --;
 
      return from_nodes_id;

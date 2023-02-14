@@ -121,11 +121,16 @@ public:
     sprintf(output, "/home/star/data/commits_%d.xls", id);
     outfile_excel.open(output, std::ios::trunc); // ios::trunc
 
+    outfile_excel << "n_commit" << "\t" << "metis_commit" << "\t" << "n_remaster" << "\t" << "n_migrate" << "\t" 
+                  << "metis_remaster" << "\t" << "metis_migrate" << "\t" << "n_network_size" << "\t" << "abort" << "\n";
+
     do {
       LOG(INFO) << "SLEEP : " << std::to_string(context.sample_time_interval);
       std::this_thread::sleep_for(std::chrono::milliseconds(context.sample_time_interval * 1000));
 
       uint64_t n_commit = 0, metis_commit = 0, 
+               n_remaster = 0, n_migrate = 0, // 
+               metis_remaster = 0, metis_migrate = 0, // 
                n_abort_no_retry = 0, n_abort_lock = 0,
                n_abort_read_validation = 0, n_local = 0,
                n_si_in_serializable = 0, n_network_size = 0;
@@ -139,10 +144,22 @@ public:
         if(context.lion_with_metis_init == 1 && i == context.worker_num){
           metis_commit += workers[i]->n_commit.load();
           workers[i]->n_commit.store(0);
+
+          metis_remaster += workers[i]->n_remaster.load();
+          workers[i]->n_remaster.store(0);
+
+          metis_migrate += workers[i]->n_migrate.load();
+          workers[i]->n_migrate.store(0);
           continue;
         }
         n_commit += workers[i]->n_commit.load();
         workers[i]->n_commit.store(0);
+        // 
+        n_remaster += workers[i]->n_remaster.load();
+        workers[i]->n_remaster.store(0);
+
+        n_migrate += workers[i]->n_migrate.load();
+        workers[i]->n_migrate.store(0);
 
         n_abort_no_retry += workers[i]->n_abort_no_retry.load();
         workers[i]->n_abort_no_retry.store(0);
@@ -164,10 +181,16 @@ public:
 
         workers[i]->workload_type = cur_workload_type;
       }
-      outfile_excel << n_commit << "\n";
-      
+
+      outfile_excel << n_commit << "\t" << metis_commit << "\t" << n_remaster << "\t" << n_migrate << "\t" 
+                  << metis_remaster << "\t" << metis_migrate << "\t" << 1.0 * n_network_size / n_commit << "\t" << abort << "\n";
+
       LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit 
                 << " metis_commit: " << metis_commit
+                << " n_remaster: " << n_remaster 
+                << " n_migrate: " << n_migrate 
+                << " metis_remaster: " << metis_remaster 
+                << " metis_migrate: " << metis_migrate 
                 << " abort: " << n_abort_no_retry + n_abort_lock + n_abort_read_validation
                 << " (" << n_abort_no_retry << "/" << n_abort_lock << "/"
                 << n_abort_read_validation

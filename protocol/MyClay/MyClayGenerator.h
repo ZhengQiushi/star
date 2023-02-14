@@ -42,8 +42,8 @@ public:
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        partitioner(PartitionerFactory::create_partitioner(
-            context.partitioner, coordinator_id, context.coordinator_num)),
+        partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
+            coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
         protocol(db, context, *partitioner),
         workload(coordinator_id, worker_status, db, random, *partitioner, start_time),

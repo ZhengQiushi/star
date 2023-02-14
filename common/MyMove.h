@@ -10,6 +10,8 @@
 #include "common/ShareQueue.h"
 #include "common/skiplist/skip_list.h"
 #include <unordered_set>
+#include <queue>
+
 #include <fstream>
 #include <iostream>
 #include <fstream>
@@ -564,13 +566,13 @@ namespace star
                 }
             }
             xadj.push_back(adjncy.size());
-
+            
             idx_t nVertices = xadj.size() - 1;      // 节点数
             idx_t nWeights = 1;                     // 节点权重维数
-            idx_t nParts = context.coordinator_num * 1000;   // 子图个数≥2
+            idx_t nParts = key_coordinator_cache.size() / 50;   // 子图个数≥2
             idx_t objval;                           // 目标函数值
             std::vector<idx_t> parts(nVertices, 0); // 划分结果
-
+            std::cout << key_coordinator_cache.size() << " " << key_coordinator_cache.size() / 50 << std::endl;
             int ret = METIS_PartGraphKway(&nVertices, &nWeights, xadj.data(), adjncy.data(),
                 vwgt.data(), NULL, adjwgt.data(), &nParts, NULL,
                 NULL, NULL, &objval, parts.data());
@@ -859,6 +861,75 @@ namespace star
             return;
         }
 
+
+        void my_find_clump(std::string output_path_) // std::vector<myMove<WorkloadType>> &moves
+        {
+            /***
+             * @brief find all the records to move
+             *        each moves is the set of records which may from different 
+             *        partition but will be transformed to the same destination
+            */
+            std::unordered_set<int64_t> used;
+            std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_moves;
+            
+
+            for(size_t i = 0 ; i < hottest_tuple_index_seq.size(); i ++ ){                
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                int64_t key = hottest_tuple_index_seq[i];                
+                // xadj.push_back(adjncy.size()); // 
+                // vwgt.push_back(hottest_tuple[key]);
+
+                std::queue<int64_t> q_;
+                q_.push(key);
+
+                while(!q_.empty()){
+                    int64_t c_key = q_.front();
+                    q_.pop();
+                    if(used.count(c_key)){
+                        continue;
+                    }
+                    used.insert(c_key);
+                    MoveRecord<WorkloadType> new_move_rec;
+                    new_move_rec.set_real_key(c_key);
+                    metis_move->records.push_back(new_move_rec);
+                    myValueType* it = (myValueType*)record_degree.search_value(&c_key);
+                    for(auto edge: *it){
+                        // adjncy.push_back(hottest_tuple_index_[edge.first]); // 节点id从0开始
+                        // adjwgt.push_back(edge.second.degree);
+                        if(used.count(edge.second.to)){
+                            continue;
+                        }
+                        q_.push(edge.second.to);
+                    }
+
+                }
+
+                if(metis_move->records.size() > 0){
+                    metis_moves.push_back(metis_move);
+                }
+            }
+
+
+            // 
+            std::ofstream outpartition(output_path_);
+            
+            for(size_t j = 0; j < metis_moves.size(); j ++ ){
+                if(metis_moves[j]->records.size() > 0){
+                    outpartition << j << "\t";
+                    for(int i = 0 ; i < metis_moves[j]->records.size(); i ++ ){
+                        outpartition << metis_moves[j]->records[i].record_key_ << "\t";
+                    }
+                    outpartition << "\n";
+                    move_plans.push_no_wait(metis_moves[j]);
+                }
+            }
+            outpartition.close();
+
+            return;
+        }
+
+
+
         template<typename T = myKeyType> 
         void update_record_degree_set(const std::vector<T>& record_keys){
             /**
@@ -983,6 +1054,9 @@ namespace star
             hottest_tuple_index_.clear();
             hottest_tuple_index_seq.clear();
             mm.unlock();
+
+            init_metis_file_ = nullptr;
+            file_row_cnt_ = 0;
         }
     
     private:

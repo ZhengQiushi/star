@@ -17,6 +17,8 @@ public:
   Worker(std::size_t coordinator_id, std::size_t id)
       : coordinator_id(coordinator_id), id(id) {
     n_commit.store(0);
+    n_remaster.store(0);
+    n_migrate.store(0);
     n_abort_no_retry.store(0);
     n_abort_lock.store(0);
     n_abort_read_validation.store(0);
@@ -59,7 +61,9 @@ public:
 public:
   std::size_t coordinator_id;
   std::size_t id;
-  std::atomic<uint64_t> n_commit, n_abort_no_retry, n_abort_lock,
+  std::atomic<uint64_t> n_commit, 
+      n_remaster, n_migrate, // 
+      n_abort_no_retry, n_abort_lock,
       n_abort_read_validation, n_local, n_si_in_serializable, n_network_size;
 
   int workload_type; // 0-5

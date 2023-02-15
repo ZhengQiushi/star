@@ -33,6 +33,7 @@ public:
 
   void reset() {
     pendingResponses = 0;
+    asyncPendingResponses = 0;
     network_size = 0;
     abort_lock = false;
     abort_read_validation = false;

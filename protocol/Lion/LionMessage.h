@@ -89,7 +89,7 @@ public:
     return message_size;
   }
 
-  static std::size_t async_new_search_message(Message &message, ITable &table,
+  static std::size_t new_async_search_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
                                         bool remaster, bool is_metis) {
 
@@ -102,7 +102,7 @@ public:
     LionMessage message_type = LionMessage::ASYNC_SEARCH_REQUEST;
     // if(is_metis){
     //   message_type = LionMessage::METIS_SEARCH_REQUEST;
-    VLOG(DEBUG_V16) << "LionMessage::METIS_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
+    VLOG(DEBUG_V8) << "LionMessage::ASYNC_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
     // }
 
     auto message_size =
@@ -207,6 +207,37 @@ public:
     message.flush();
     return message_size;
   }
+
+    static std::size_t new_async_search_router_only_message(Message &message, ITable &table,
+                                        const void *key, uint32_t key_offset, bool is_metis) {
+
+    /*
+     * The structure of a search request: (primary key, read key offset)
+     */
+    LionMessage message_type = LionMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY;
+    // if(is_metis){
+    //   message_type = LionMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY;
+    //   // VLOG(DEBUG_V14) << "message_type = LionMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY";
+    // }
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(is_metis);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(message_type), message_size,
+        table.tableID(), table.partitionID());
+    
+    VLOG(DEBUG_V8) << "SEND ASYNC UPDATE ROUTER MESSAGE " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset << is_metis;
+    message.flush();
+    return message_size;
+  }
+
 
   static std::size_t new_search_read_only_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset) {
@@ -552,7 +583,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
           dec.read_n_bytes(readKey.get_value(), value_size);
           DCHECK(strlen((char*)readKey.get_value()) > 0);
 
-          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert " << txn->readSet.size();
+          VLOG(DEBUG_V9) << *(int*) key << " " << (char*) value << " insert " << txn->readSet.size();
           table.insert(key, value, (void*)& tid);
         }
 
@@ -1477,6 +1508,8 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     uint64_t last_tid = 0;
 
+    VLOG(DEBUG_V8) << *(int*) key << " async_search_response_handler ";
+
     if(success == true){
       if(partitioner->is_dynamic()){
         // update router 
@@ -1492,7 +1525,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
           dec.read_n_bytes(readKey.get_value(), value_size);
           DCHECK(strlen((char*)readKey.get_value()) > 0);
 
-          VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert " << txn->readSet.size();
+          
           table.insert(key, value, (void*)& tid);
         }
 
@@ -1512,20 +1545,21 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
           txn->abort_lock = true;
           return;
         } 
+        // already be locked by read
+        
+        // if(readKey.get_write_lock_bit()){
+        //   last_tid = TwoPLHelper::write_lock(tid_, success);
+        //   VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        // } else {
+        //   last_tid = TwoPLHelper::read_lock(tid_, success);
+        //   VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        // }
 
-        if(readKey.get_write_lock_bit()){
-          last_tid = TwoPLHelper::write_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        } else {
-          last_tid = TwoPLHelper::read_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        }
-
-        if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-          txn->abort_lock = true;
-          return;
-        } 
+        // if(!success){
+        //   VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+        //   txn->abort_lock = true;
+        //   return;
+        // } 
 
         VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
@@ -1550,7 +1584,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
           readKey.set_read_respond_bit();
           readKey.set_tid(tid); // original tid for lock release
 
-          txn->tids[key_offset] = &tid_;
+          // txn->tids[key_offset] = &tid_;
         } else {
           VLOG(DEBUG_V12) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
           txn->abort_lock = true;
@@ -1610,6 +1644,8 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
     // get row and offset
     const void *key = stringPiece.data();
     // auto row = table.search(key);
+
+    VLOG(DEBUG_V8) << *(int*) key << " async_search_request_router_only_handler ";
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);

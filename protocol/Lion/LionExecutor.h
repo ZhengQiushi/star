@@ -111,6 +111,9 @@ public:
 
     router_transaction_done.store(0);
     router_transactions_send.store(0);
+
+    remaster_delay_transactions = 0;
+
   }
   void trace_txn(){
     if(coordinator_id == 0 && id == 0){
@@ -479,6 +482,22 @@ public:
     return partition_id;
   }
 
+  bool async_remaster_fence(){
+      if(transaction->asyncPendingResponses > 0){
+        remaster_delay_transactions ++ ;
+      }
+      while (transaction->asyncPendingResponses > 0) {
+        // 
+        ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+        process_request();
+        if(status == ExecutorStatus::EXIT){
+          LOG(INFO) << "TRANSMITER SHOULD BE STOPPED";
+          return false;
+        }
+      }
+    return true;
+  }
+  
   void run_transaction(ExecutorStatus status, 
                        std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue,
                        std::atomic<uint32_t>& async_message_num,
@@ -606,7 +625,10 @@ public:
 
           if (result == TransactionResult::READY_TO_COMMIT) {
             ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
-            
+            if(!async_remaster_fence()){
+              break;
+            }
+
             bool commit = protocol->commit(*transaction, messages, async_message_num, false);
             
             n_network_size.fetch_add(transaction->network_size);
@@ -661,8 +683,13 @@ public:
     flush_async_messages();
     flush_record_messages();
     flush_sync_messages();
-    if(cur_queue_size > 0)
+    if(cur_queue_size > 0){
       VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+      LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
+      remaster_delay_transactions = 0;
+    }
+      
+
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 
@@ -1009,24 +1036,25 @@ private:
           readKey.set_read_respond_bit();
           local_read = true;
           
-          // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-          //   // also send to generator to update the router-table
-          //   if(i == coordinator_id){
-          //     continue; // local
-          //   }
-          //   if(i == coordinatorID){
-          //     // target
-          //     txn.network_size += MessageFactoryType::new_async_search_message(
-          //         *(this->messages[i]), *table, key, key_offset, remaster, false);
-          //   } else {
-          //     // others, only change the router
-          //     txn.network_size += MessageFactoryType::new_async_search_router_only_message(
-          //         *(this->messages[i]), *table, key, key_offset, false);
-          //   }            
-          //   txn.asyncPendingResponses++;
-          // }
-          // this->flush_messages(messages);
-          // 
+          for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+            // also send to generator to update the router-table
+            if(i == coordinator_id){
+              continue; // local
+            }
+            if(i == coordinatorID){
+              // target
+              txn.network_size += MessageFactoryType::new_async_search_message(
+                  *(this->messages[i]), *table, key, key_offset, remaster, false);
+            } else {
+              // others, only change the router
+              txn.network_size += MessageFactoryType::new_async_search_router_only_message(
+                  *(this->messages[i]), *table, key, key_offset, false);
+            }   
+            // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+            txn.asyncPendingResponses++;
+          }
+          this->flush_messages(messages);
+          
         }
 
         if(remaster){
@@ -1260,6 +1288,7 @@ private:
       std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
+  std::size_t remaster_delay_transactions;
 
   ContextType s_context, c_context;
   ProtocolType* s_protocol, *c_protocol;

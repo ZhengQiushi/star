@@ -80,10 +80,10 @@ int main(int argc, char *argv[]) {
   
   LOG(INFO) << "start";
   // my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
-  my_clay->init_with_history("/home/star/data/resultss.xls", 0, 40 - 1);
+  my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
   
   LOG(INFO) << "history init done";
-  my_clay->metis_partition_graph("/home/star/data/resultss_partition_0_40.xls");
+  my_clay->metis_partition_graph("/home/star/data/resultss_partition_0_30.xls");
   LOG(INFO) << "done";
 
 
@@ -91,9 +91,9 @@ int main(int argc, char *argv[]) {
 
   LOG(INFO) << "start";
   LOG(INFO) << "history init done";
-  my_clay->init_with_history("/home/star/data/resultss.xls", 40, 80 - 1);
+  my_clay->init_with_history("/home/star/data/resultss.xls", 30, 60 - 1);
   // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
-  my_clay->my_find_clump("/home/star/data/resultss_partition_40_80_.xls");
+  my_clay->my_find_clump("/home/star/data/resultss_partition_30_60.xls");
   LOG(INFO) << "done";
 
 
@@ -108,10 +108,10 @@ int main(int argc, char *argv[]) {
   // my_clay->clear_graph();
 
   LOG(INFO) << "start";
-  my_clay->init_with_history("/home/star/data/resultss.xls", 80, 120 - 1);
+  my_clay->init_with_history("/home/star/data/resultss.xls", 60, 90 - 1);
   LOG(INFO) << "history init done";
   // my_clay->metis_partition_graph("/home/star/data/resultss_partition_60_90.xls");
-  my_clay->my_find_clump("/home/star/data/resultss_partition_80_120.xls");
+  my_clay->my_find_clump("/home/star/data/resultss_partition_60_90.xls");
   LOG(INFO) << "done";
 
 

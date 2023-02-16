@@ -297,7 +297,7 @@ private:
       }
 
       if(send_replica == false && context.coordinator_num > 1){
-        LOG(INFO) << router_val->get_secondary_coordinator_ids() << " " << coordinatorID;
+        // LOG(INFO) << router_val->get_secondary_coordinator_ids() << " " << coordinatorID;
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }

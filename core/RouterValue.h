@@ -26,6 +26,11 @@ public:
   // dynamic coordinator id
   void set_dynamic_coordinator_id(uint64_t dynamic_coordinator_id) {
     DCHECK(dynamic_coordinator_id < (1 << 8));
+    
+    if(secondary_cnt > 0){
+      set_secondary_coordinator_id(get_dynamic_coordinator_id());
+    }
+    
     clear_dynamic_coordinator_id();
     bitvec |= dynamic_coordinator_id << DYNAMIC_COORDINATOR_ID_BIT_OFFSET;
     // 判断是否存在于 secondary 中
@@ -56,6 +61,9 @@ public:
   // secondary coordinator id
   void set_secondary_coordinator_id(uint64_t secondary_coordinator_id) {
     // LOW BIT -> SMALL C_ID
+    if(count_secondary_coordinator_id(secondary_coordinator_id)){
+      return;
+    }
     DCHECK(secondary_coordinator_id < (1 << 8));
     bitvec |= (1 << secondary_coordinator_id) << SECONDARY_COORDINATOR_IDS_BIT_OFFSET;
     secondary_cnt ++;
@@ -164,7 +172,7 @@ private:
   uint64_t secondary_cnt = 0;
 
 public:
-  static constexpr uint64_t MAX_CNT = 2;
+  static constexpr uint64_t MAX_CNT = 3;
 
   static constexpr uint64_t SECONDARY_COORDINATOR_IDS_BIT_MASK = 0xffffffffffffff; // 64 - 8
   static constexpr uint64_t SECONDARY_COORDINATOR_IDS_BIT_OFFSET = 8;

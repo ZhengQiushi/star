@@ -58,7 +58,9 @@ public:
 
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-
+    if(workload_type == 3){
+      workload_type = -3;
+    }
     int cross_partition_probalility = context.crossPartitionProbability ; // cur_timestamp / 2;
     
     int is_init = true;
@@ -119,17 +121,19 @@ public:
             context.partition_num > 1) {
           // 跨分区
           int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition); // 分区内偏移
-          int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition); // 分区偏移
+          int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition) + workload_type; // 分区偏移
           
           // never involve partitions in the same node
           // int32_t cross_partition_id_offset = workload_type % (context.coordinator_num - 1) + 1; // - context.coordinator_id
-          int32_t cross_partition_id_offset = workload_type ; //% (context.coordinator_num - 1) + 1;
-          
-          if(is_init){
-            cross_partition_id_offset = workload_type_num;
+          // int32_t cross_partition_id_offset =  ; //% (context.coordinator_num - 1) + 1;
+          if(key_partition_num < 0){
+            key_partition_num += context.partition_num;
           }
+          // if(is_init){
+          //   cross_partition_id_offset = workload_type_num;
+          // }
           // 对应的几类偏移
-          key = (key_partition_num + cross_partition_id_offset) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size + i; 
+          key = (key_partition_num) * static_cast<int32_t>(context.keysPerPartition) + key_num * query_size + i; 
           key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
         } else {
           // 单分区

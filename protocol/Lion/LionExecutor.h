@@ -113,6 +113,7 @@ public:
     router_transactions_send.store(0);
 
     remaster_delay_transactions = 0;
+    delay_transactions = 0;
 
   }
   void trace_txn(){
@@ -341,10 +342,13 @@ public:
       n_started_workers.fetch_add(1);
 
       size_t r_size = c_transactions_queue.size() + r_transactions_queue.size();;
+      
+      // may need async remaster
+      run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
       // LOG(INFO) << "c_transactions_queue.size() : " <<  r_size;
       run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue ,async_message_num);
       // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish r_transactions_queue";
-      run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
+      
       // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish c_transactions_queue";
       for(size_t r = 0; r < r_size; r ++ ){
         // 发回原地...
@@ -498,6 +502,10 @@ public:
     return true;
   }
   
+  void ahead_remaster_transaction(std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue){
+     
+  }
+
   void run_transaction(ExecutorStatus status, 
                        std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue,
                        std::atomic<uint32_t>& async_message_num,
@@ -609,6 +617,9 @@ public:
           //   ///
           // }
           
+          if(transaction->distributed_transaction){
+            delay_transactions ++ ;
+          }
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
             protocol->abort(*transaction, messages);
@@ -684,9 +695,12 @@ public:
     flush_record_messages();
     flush_sync_messages();
     if(cur_queue_size > 0){
-      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
-      LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
+      LOG(INFO) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+      LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions << " " << cur_queue_size << " " << remaster_delay_transactions * 1.0 / cur_queue_size << "\n" 
+                << "                                    delay_transactions: " << delay_transactions << " " << cur_queue_size << " " << delay_transactions * 1.0 / cur_queue_size;
       remaster_delay_transactions = 0;
+      delay_transactions = 0;
+
     }
       
 
@@ -980,13 +994,14 @@ private:
 
       auto &readKey = txn.readSet[key_offset];
       // master-replica
-      size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
-      if(readKey.get_write_lock_bit()){
-        // write key, the find all its replica
-        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
-        coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
-      }
+      size_t              coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      uint64_t coordinator_secondaryIDs = this->partitioner->secondary_coordinator(table_id, partition_id, key);
+
+      // if(readKey.get_write_lock_bit()){
+      //   // write key, the find all its replica
+      //   LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
+        
+      // }
 
       if(coordinatorID == context.coordinator_num){
         success = false;
@@ -994,7 +1009,7 @@ private:
       }
       // sec keys replicas
       readKey.set_dynamic_coordinator_id(coordinatorID);
-      readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
+      readKey.set_router_value(coordinatorID, coordinator_secondaryIDs); // 只是通知commit后的replication sync
 
       bool remaster = false;
 
@@ -1026,40 +1041,45 @@ private:
       } else {
         // master not at local, but has a secondary one. need to be remastered
         // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
-        remaster = table->contains(key); // current coordniator
+        remaster = RouterValue::contain_secondary_coordinator_id(coordinator_secondaryIDs, coordinator_id);// table->contains(key); // current coordniator
+
         if(remaster && context.read_on_replica && !readKey.get_write_lock_bit()){
           
           std::atomic<uint64_t> &tid = table->search_metadata(key, success);
           TwoPLHelper::read_lock(tid, success);
+          if(success == false){
+            return 0;
+          }
           txn.tids[key_offset] = &tid;
-          // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+          VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster << " " << coordinator_secondaryIDs << "  " << coordinator_id; 
           readKey.set_read_respond_bit();
           local_read = true;
           
-          for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-            // also send to generator to update the router-table
-            if(i == coordinator_id){
-              continue; // local
-            }
-            if(i == coordinatorID){
-              // target
-              txn.network_size += MessageFactoryType::new_async_search_message(
-                  *(this->messages[i]), *table, key, key_offset, remaster, false);
-            } else {
-              // others, only change the router
-              txn.network_size += MessageFactoryType::new_async_search_router_only_message(
-                  *(this->messages[i]), *table, key, key_offset, false);
-            }   
-            // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
-            txn.asyncPendingResponses++;
-          }
-          this->flush_messages(messages);
+          // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+          //   // also send to generator to update the router-table
+          //   if(i == coordinator_id){
+          //     continue; // local
+          //   }
+          //   if(i == coordinatorID){
+          //     // target
+          //     txn.network_size += MessageFactoryType::new_async_search_message(
+          //         *(this->messages[i]), *table, key, key_offset, remaster, false);
+          //   } else {
+          //     // others, only change the router
+          //     txn.network_size += MessageFactoryType::new_async_search_router_only_message(
+          //         *(this->messages[i]), *table, key, key_offset, false);
+          //   }   
+          //   // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+          //   txn.asyncPendingResponses++;
+          // }
+          // this->flush_messages(messages);
+          txn.remaster_cnt ++ ;
           
         }
 
         if(remaster){
-          txn.remaster_cnt ++ ;
-          VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
+          
+          // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
         } else {
           txn.migrate_cnt ++ ;
         }
@@ -1289,6 +1309,7 @@ private:
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
   std::size_t remaster_delay_transactions;
+  std::size_t delay_transactions;
 
   ContextType s_context, c_context;
   ProtocolType* s_protocol, *c_protocol;

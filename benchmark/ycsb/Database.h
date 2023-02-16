@@ -50,13 +50,13 @@ public:
     return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
   }
 
-  std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
+  std::size_t get_secondary_coordinator_ids(size_t coordinator_num, std::size_t table_id, const void* key){
     /**
      * @brief from router table to find the coordinator
      * 
      */
     ITable* tab = find_router_table(table_id); // , coordinator_id);
-    return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
+    return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_ids();
   }
 
   void init_router_table(const Context& context){
@@ -90,10 +90,10 @@ public:
 
           ITable *table_router = tbl_vecs_router[0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
 
-          RouterValue router;
-          router.set_dynamic_coordinator_id(router_coordinator);
-          router.set_secondary_coordinator_id(router_coordinator);
-          router.set_secondary_coordinator_id(router_secondary_coordinator);
+          RouterValue router(router_coordinator, router_secondary_coordinator);
+          // router.set_dynamic_coordinator_id(router_coordinator);
+          // router.set_secondary_coordinator_id(router_coordinator);
+          // router.set_secondary_coordinator_id(router_secondary_coordinator);
           table_router->insert(&key, &router); // 
 
           // }
@@ -127,10 +127,10 @@ public:
           int router_coordinator = partitionID % context.coordinator_num;
           ITable *table_router = tbl_vecs_router[0];
 
-          RouterValue router;
-          router.set_dynamic_coordinator_id(0);
-          router.set_secondary_coordinator_id(0);
-          router.set_secondary_coordinator_id(router_coordinator);
+          RouterValue router(0, router_coordinator);
+          // router.set_dynamic_coordinator_id(0);
+          // router.set_secondary_coordinator_id(0);
+          // router.set_secondary_coordinator_id(router_coordinator);
           table_router->insert(&key, &router); // 
 
           // if(*(int*)(&key) == 7200034){

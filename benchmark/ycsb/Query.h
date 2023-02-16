@@ -58,7 +58,9 @@ public:
 
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-
+    if(workload_type == 3){
+      workload_type = -3;
+    }
     int cross_partition_probalility = context.crossPartitionProbability ; // cur_timestamp / 2;
     
     int is_init = true;

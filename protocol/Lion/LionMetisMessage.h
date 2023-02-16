@@ -564,7 +564,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         //   router_val->set_secondary_coordinator_id(coordinator_id_new);
 
         //   readKey.set_dynamic_coordinator_id(coordinator_id_new);
-        //   readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+        //   readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_ids());
         //   readKey.set_read_respond_bit();
         //   readKey.set_tid(tid); // original tid for lock release
 
@@ -704,7 +704,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //           router_val->set_secondary_coordinator_id(coordinator_id_new);
 
 //           readKey.set_dynamic_coordinator_id(coordinator_id_new);
-//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_ids());
 //           readKey.set_read_respond_bit();
 //           readKey.set_tid(tid); // original tid for lock release
 
@@ -1484,7 +1484,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //           router_val->set_secondary_coordinator_id(coordinator_id_new);
 
 //           readKey.set_dynamic_coordinator_id(coordinator_id_new);
-//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_ids());
 //           readKey.set_read_respond_bit();
 //           readKey.set_tid(tid); // original tid for lock release
 

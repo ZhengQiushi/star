@@ -171,7 +171,7 @@ public:
         if(is_dynamic){
           // look-up the dynamic router to find-out where
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
-          // secondary_c_ids = db.get_secondary_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+          // secondary_c_ids = db.get_secondary_coordinator_ids(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
           cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;

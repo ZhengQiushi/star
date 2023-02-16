@@ -1187,13 +1187,9 @@ private:
 
       auto &readKey = txn.readSet[key_offset];
       // master-replica
-      size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
-      if(readKey.get_write_lock_bit()){
-        // write key, the find all its replica
-        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
-        coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
-      }
+      size_t              coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      uint64_t coordinator_secondaryIDs = this->partitioner->secondary_coordinator(table_id, partition_id, key);
+
 
       if(coordinatorID == context.coordinator_num){
         success = false;
@@ -1233,12 +1229,15 @@ private:
       } else {
         // master not at local, but has a secondary one. need to be remastered
         // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
-        remaster = table->contains(key); // current coordniator
+        remaster = RouterValue::contain_secondary_coordinator_id(coordinator_secondaryIDs, coordinator_id);// table->contains(key); // current coordniator
+
         if(remaster && context.read_on_replica && !readKey.get_write_lock_bit()){
           
           std::atomic<uint64_t> &tid = table->search_metadata(key, success);
           TwoPLHelper::read_lock(tid, success);
-          
+          if(success == false){
+            return 0;
+          }
           txn.tids[key_offset] = &tid;
 
           // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;

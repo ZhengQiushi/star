@@ -351,7 +351,7 @@ public:
           if(num > 0){
             LOG(INFO) << "router transmit request " << num; 
           }
-          break; // debug
+          // break; // debug
         }
         LOG(INFO) << "transmiter " << " exits.";
     // });

@@ -250,7 +250,7 @@ private:
 
       // lock dynamic replica
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
-      const RouterValue* const router_val = readKey.get_router_value();
+      const RouterValue* const router_val = readKey.get_router_value(); // 记录副本
 
       // write
       if (coordinatorID == context.coordinator_id) {
@@ -297,7 +297,7 @@ private:
       }
 
       if(send_replica == false && context.coordinator_num > 1){
-        DCHECK(false);
+        LOG(INFO) << router_val->get_secondary_coordinator_ids() << " " << coordinatorID;
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }

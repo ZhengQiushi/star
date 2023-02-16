@@ -474,7 +474,7 @@ public:
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
     auto router_table = db.find_router_table(table_id);// , master_coordinator_id);
     auto router_val = static_cast<RouterValue*>(router_table->search_value(key));
-    return router_val->get_secondary_coordinator_id();
+    return router_val->get_secondary_coordinator_ids();
   }
 
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
@@ -486,8 +486,12 @@ public:
       // db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
       auto router_table = db.find_router_table(table_id);//, master_coordinator_id);
       auto router_val = (RouterValue*)(router_table->search_value(key));
-      uint64_t secondary_coordinator_ids = router_val->get_secondary_coordinator_id(); 
-      return ((secondary_coordinator_ids >> coordinator_id) & 1);// all_replicas->second.count(coordinator_id);
+      uint64_t secondary_coordinator_ids = router_val->get_secondary_coordinator_ids(); 
+      if ((secondary_coordinator_ids >> coordinator_id) & 1) {
+        return true;
+      } else {
+        return (router_val->get_dynamic_coordinator_id() == coordinator_id);
+      }
   }
 
 
@@ -551,7 +555,7 @@ public:
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
     auto router_table = db.find_router_table(table_id);// , master_coordinator_id);
     auto router_val = static_cast<RouterValue*>(router_table->search_value(key));
-    return router_val->get_secondary_coordinator_id();
+    return router_val->get_secondary_coordinator_ids();
   }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
@@ -563,9 +567,13 @@ public:
       // db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
       auto router_table = db.find_router_table(table_id);//, master_coordinator_id);
       auto router_val = (RouterValue*)(router_table->search_value(key));
-      uint64_t secondary_coordinator_ids = router_val->get_secondary_coordinator_id(); 
-      
-      return ((secondary_coordinator_ids >> coordinator_id) & 1);
+      uint64_t secondary_coordinator_ids = router_val->get_secondary_coordinator_ids(); 
+
+      if((secondary_coordinator_ids >> coordinator_id) & 1){
+        return true;
+      } else {
+        return (coordinator_id == router_val->get_dynamic_coordinator_id());
+      }
   }
 
 

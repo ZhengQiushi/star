@@ -454,7 +454,7 @@ public:
     if(partitioner->is_dynamic()){
           // 数据所在节点的路由表
           auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
-          auto router_val = (RouterValue*)router_table->search_value(key);
+          auto router_val = (RouterValue*)router_table->search_value(key); // ptr
           
           // 数据所在节点
           auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
@@ -469,7 +469,7 @@ public:
             if(!is_metis){
               router_val->set_dynamic_coordinator_id(coordinator_id_new);
             }
-            router_val->set_secondary_coordinator_id(coordinator_id_new);
+            router_val->set_secondary_coordinator_id(coordinator_id_old);
 
             encoder << latest_tid << key_offset << success << remaster << is_metis;
             // reserve size for read
@@ -635,9 +635,10 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
             // update router
             router_val->set_dynamic_coordinator_id(coordinator_id_new);
           }
-          router_val->set_secondary_coordinator_id(coordinator_id_new);
+          router_val->set_secondary_coordinator_id(coordinator_id_old);
+
           readKey.set_dynamic_coordinator_id(coordinator_id_new);
-          readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+          readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_ids());
           readKey.set_read_respond_bit();
           readKey.set_tid(tid); // original tid for lock release
 
@@ -777,7 +778,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //           router_val->set_secondary_coordinator_id(coordinator_id_new);
 
 //           readKey.set_dynamic_coordinator_id(coordinator_id_new);
-//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+//           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_ids());
 //           readKey.set_read_respond_bit();
 //           readKey.set_tid(tid); // original tid for lock release
 
@@ -997,7 +998,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         if(!is_metis){
           router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
         }
-        router_val->set_secondary_coordinator_id(coordinator_id_new);
+        router_val->set_secondary_coordinator_id(coordinator_id_old);
 
         if(context.coordinator_id == context.coordinator_num){
           VLOG(DEBUG_V8) << "ROUTER UPDATE." << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;
@@ -1409,7 +1410,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
             if(!is_metis){
               router_val->set_dynamic_coordinator_id(coordinator_id_new);
             }
-            router_val->set_secondary_coordinator_id(coordinator_id_new);
+            router_val->set_secondary_coordinator_id(coordinator_id_old);
 
             encoder << latest_tid << key_offset << success << remaster << is_metis;
             // reserve size for read
@@ -1578,9 +1579,10 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
             // update router
             router_val->set_dynamic_coordinator_id(coordinator_id_new);
           }
-          router_val->set_secondary_coordinator_id(coordinator_id_new);
+          router_val->set_secondary_coordinator_id(coordinator_id_old);
+
           readKey.set_dynamic_coordinator_id(coordinator_id_new);
-          readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
+          readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_ids());
           readKey.set_read_respond_bit();
           readKey.set_tid(tid); // original tid for lock release
 
@@ -1681,7 +1683,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         if(!is_metis){
           router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
         }
-        router_val->set_secondary_coordinator_id(coordinator_id_new);
+        router_val->set_secondary_coordinator_id(coordinator_id_old);
 
         if(context.coordinator_id == context.coordinator_num){
           VLOG(DEBUG_V8) << "ROUTER UPDATE." << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;

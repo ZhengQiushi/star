@@ -285,6 +285,11 @@ public:
       //   m_transactions_queue.push_back(std::move(p));
       //   run_metis_transaction(ExecutorStatus::C_PHASE);
       // }
+      int size = metis_router_transactions_queue.size();
+      if(size == 0){
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      }
       unpack_route_transaction();
       run_metis_transaction(ExecutorStatus::C_PHASE);
     }

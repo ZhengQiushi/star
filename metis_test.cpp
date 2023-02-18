@@ -80,52 +80,55 @@ int main(int argc, char *argv[]) {
   
   LOG(INFO) << "start";
   // my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
-  // my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
+  my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
   
   LOG(INFO) << "history init done";
   // my_clay->metis_partition_graph("/home/star/data/resultss_partition_0_30.xls");
+  my_clay->my_find_clump("/home/star/data/resultss_partition_0_30.xls");
   // LOG(INFO) << "done";
 
 
-  // my_clay->clear_graph();
+  my_clay->clear_graph();
 
   // LOG(INFO) << "start";
   LOG(INFO) << "history init done";
   my_clay->init_with_history("/home/star/data/resultss.xls", 30, 60 - 1);
   // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
-  my_clay->my_find_clump("/home/star/data/resultss_partition_30_60_.xls");
+  my_clay->my_find_clump("/home/star/data/resultss_partition_30_60.xls");
   LOG(INFO) << "done";
 
 
   my_clay->clear_graph();
 
 
-  LOG(INFO) << "history init done";
-  my_clay->init_with_history("/home/star/data/resultss.xls", 0, 60 - 1);
-  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
-  my_clay->my_find_clump("/home/star/data/resultss_partition_0_60_.xls");
-  LOG(INFO) << "done";
-
-
-  my_clay->clear_graph();
-
-  // LOG(INFO) << "start";
-  // my_clay->init_with_history("/home/star/data/resultss.xls", 60, 90 - 1);
   // LOG(INFO) << "history init done";
-  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_60_90.xls");
-  // LOG(INFO) << "done";
-
-
-  //   my_clay->clear_graph();
-
-  // LOG(INFO) << "start";
-  // my_clay->init_with_history("/home/star/data/resultss.xls", 90, 120 - 1);
-  // LOG(INFO) << "history init done";
-  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_90_120.xls");
+  // my_clay->init_with_history("/home/star/data/resultss.xls", 0, 60 - 1);
+  // // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
+  // my_clay->my_find_clump("/home/star/data/resultss_partition_0_60_.xls");
   // LOG(INFO) << "done";
 
 
   // my_clay->clear_graph();
+
+  LOG(INFO) << "start";
+  my_clay->init_with_history("/home/star/data/resultss.xls", 60, 90 - 1);
+  LOG(INFO) << "history init done";
+  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_60_90.xls");
+  my_clay->my_find_clump("/home/star/data/resultss_partition_60_90.xls");
+  LOG(INFO) << "done";
+
+
+  my_clay->clear_graph();
+
+  LOG(INFO) << "start";
+  my_clay->init_with_history("/home/star/data/resultss.xls", 90, 120 - 1);
+  LOG(INFO) << "history init done";
+  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_90_120.xls");
+  my_clay->my_find_clump("/home/star/data/resultss_partition_90_120.xls");
+  LOG(INFO) << "done";
+
+
+  my_clay->clear_graph();
 
   // LOG(INFO) << "start";
   // my_clay->init_with_history("/home/star/data/resultss.xls", 40, 60 - 1);

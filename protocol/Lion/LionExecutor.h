@@ -1036,24 +1036,24 @@ private:
           readKey.set_read_respond_bit();
           local_read = true;
           
-          for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-            // also send to generator to update the router-table
-            if(i == coordinator_id){
-              continue; // local
-            }
-            if(i == coordinatorID){
-              // target
-              txn.network_size += MessageFactoryType::new_async_search_message(
-                  *(this->messages[i]), *table, key, key_offset, remaster, false);
-            } else {
-              // others, only change the router
-              txn.network_size += MessageFactoryType::new_async_search_router_only_message(
-                  *(this->messages[i]), *table, key, key_offset, false);
-            }   
-            // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
-            txn.asyncPendingResponses++;
-          }
-          this->flush_messages(messages);
+          // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+          //   // also send to generator to update the router-table
+          //   if(i == coordinator_id){
+          //     continue; // local
+          //   }
+          //   if(i == coordinatorID){
+          //     // target
+          //     txn.network_size += MessageFactoryType::new_async_search_message(
+          //         *(this->messages[i]), *table, key, key_offset, remaster, false);
+          //   } else {
+          //     // others, only change the router
+          //     txn.network_size += MessageFactoryType::new_async_search_router_only_message(
+          //         *(this->messages[i]), *table, key, key_offset, false);
+          //   }   
+          //   // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+          //   txn.asyncPendingResponses++;
+          // }
+          // this->flush_messages(messages);
           
         }
 

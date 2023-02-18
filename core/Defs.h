@@ -16,6 +16,7 @@ namespace star {
 
 #define DEBUG_V8 8    // 对比 no switch
 #define DEBUG_V9 9    // 对比 no switch
+#define DEBUG_V10 10    // 对比 no switch
 
 #define DEBUG_V11 11 // router_only
 #define DEBUG_V12 12  //

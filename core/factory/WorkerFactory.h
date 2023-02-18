@@ -193,9 +193,9 @@ public:
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
       int manager_thread_id = context.worker_num;
-      if(context.lion_with_metis_init){
+      // if(context.lion_with_metis_init){
         manager_thread_id += 1;
-      }
+      // }
 
       auto manager = std::make_shared<StarManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag, db);
@@ -213,12 +213,12 @@ public:
             manager->n_started_workers)); // , manager->recorder_status // recorder->data_pack_map
       }
       // 
-      if(context.lion_with_metis_init){
+      // if(context.lion_with_metis_init){
         workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
             coordinator_id, workers.size(), db, context, manager->batch_size,
             manager->worker_status, manager->n_completed_workers,
             manager->n_started_workers));
-      }
+      // }
 
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -468,9 +468,9 @@ public:
           typename WorkloadType::DatabaseType;
 
       int manager_thread_id = context.worker_num;
-      if(context.lion_with_metis_init){
+      // if(context.lion_with_metis_init){
         manager_thread_id += 1;
-      }
+      // }
 
       auto manager = std::make_shared<LionManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag, db);
@@ -481,11 +481,11 @@ public:
               manager->n_completed_workers, manager->n_started_workers));
       }
       // 
-      if(context.lion_with_metis_init){
+      // if(context.lion_with_metis_init){
         workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
               coordinator_id, workers.size(), db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers));
-      }
+      // }
       workers.push_back(manager);
       // workers.push_back(recorder);  
     } else if (context.protocol == "MyClay") {

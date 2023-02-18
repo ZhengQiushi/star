@@ -1102,7 +1102,7 @@ namespace star
             auto cur_partition_heap = big_node_heap.find(cur_node.c_id);
             if(cur_partition_heap == big_node_heap.end()){
                 // 
-                top_frequency_key<50000> new_big_heap;
+                top_frequency_key<100000> new_big_heap;
                 new_big_heap.push_back(cur_node);
                 big_node_heap.insert(std::make_pair(cur_node.c_id, new_big_heap));
             } else {
@@ -1460,7 +1460,7 @@ namespace star
         
         std::atomic<bool> movable_flag;
 
-        std::unordered_map<int32_t, top_frequency_key<50000>> big_node_heap; // <coordinator_id, big_heap>
+        std::unordered_map<int32_t, top_frequency_key<100000>> big_node_heap; // <coordinator_id, big_heap>
         // std::unordered_map<int32_t, fixed_priority_queue> big_node_heap; // <coordinator_id, big_heap>
         std::unordered_map<myKeyType, std::vector<std::pair<myKeyType, Node> > > record_for_neighbor;
         std::unordered_set<myKeyType> move_tuple_id;

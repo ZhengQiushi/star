@@ -407,7 +407,7 @@ public:
     // WorkloadType::which_workload == myTestSet::TPCC
     if(remaster == false || (remaster == true && context.migration_only > 0)) {
       // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop; i++) {
+      for (auto i = 0u; i < context.n_nop * 2; i++) {
         asm("nop");
       }
     }
@@ -590,7 +590,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
         // simulate migrations with receiver 
         if(remaster == false || (remaster == true && context.migration_only > 0)) {
           // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop; i++) {
+          for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
           }
         } 

@@ -285,7 +285,7 @@ public:
         ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
 
         int last_timestamp_int = 0;
-        int workload_num = 3;
+        int workload_num = 4;
         int total_time = workload_num * context.workload_time;
 
         auto last_timestamp_ = start_time;
@@ -315,7 +315,10 @@ public:
                                   std::chrono::steady_clock::now() - last_timestamp_)
                                   .count();
           if(last_timestamp_int != 0 && latency < trigger_time_interval){
-            // std::this_thread::sleep_for(std::chrono::microseconds(5));
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            continue;
+          }
+          if(!context.lion_with_metis_init){
             continue;
           }
           // directly jump into first phase
@@ -351,7 +354,7 @@ public:
           if(num > 0){
             LOG(INFO) << "router transmit request " << num; 
           }
-          break; // debug
+          // break; // debug
         }
         LOG(INFO) << "transmiter " << " exits.";
     // });

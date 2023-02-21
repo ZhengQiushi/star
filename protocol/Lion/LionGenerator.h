@@ -508,6 +508,9 @@ public:
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;  
           // batch_size = 0; // debug
           LOG(INFO) << "batch_size: " << std::to_string(batch_size);
+
+          auto tests = std::chrono::steady_clock::now();
+
           for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
 
             bool success = false;
@@ -543,6 +546,10 @@ public:
           }
           is_full_signal.store(0);
           // 
+
+          LOG(INFO) << "test _ time : " << std::chrono::duration_cast<std::chrono::microseconds>(
+                           std::chrono::steady_clock::now() - tests)
+                           .count();
 
           for (auto l = 0u; l < context.coordinator_num; l++){
             if(l == context.coordinator_id){

@@ -87,6 +87,8 @@ struct simpleTransaction {
   bool is_distributed;
   bool is_transmit_request; // only for clay
   uint64_t destination_coordinator;
+  int execution_cost;
+  uint64_t access_frequency;
 };
 
 struct ExecutionStep {

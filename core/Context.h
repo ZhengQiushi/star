@@ -25,7 +25,7 @@ public:
 
 public:
   std::size_t coordinator_id = 0;
-  std::size_t partition_num = 0;
+  std::size_t partition_num = 0; // partitions in total
   std::size_t worker_num = 0;
   std::size_t coordinator_num = 0;
   std::size_t io_thread_num = 1;
@@ -41,6 +41,7 @@ public:
   std::string log_path;
   std::string cdf_path;
   std::size_t cpu_core_id = 0;
+  std::size_t skew_factor = 0;
   std::size_t time_to_run = 25;
   std::size_t workload_time = 30;
   std::size_t init_time = 10;
@@ -49,6 +50,7 @@ public:
   std::size_t data_transform_interval = 5;
   
   std::size_t lion_with_metis_init = 0;
+  std::string data_src_path_dir = "/home/star/data/";
   std::size_t random_router = 0;
   std::size_t migration_only = 0;
 

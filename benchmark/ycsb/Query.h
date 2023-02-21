@@ -34,7 +34,7 @@ public:
   // const int hot_area_size = 6;
   static const double get_thresh(const Context &context){
     if(context.protocol == "MyClay"){
-      return 0.002;
+      return 0.005;
     } else {
       return 0.05;
     }

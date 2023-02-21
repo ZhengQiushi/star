@@ -1269,11 +1269,11 @@ private:
           }
           if(i == coordinatorID){
             // target
-            txn.network_size += MessageFactoryType::new_search_message(
+            txn.network_size += MessageFactoryType::new_metis_search_message(
                 *(this->messages[i]), *table, key, key_offset, remaster, true);
           } else {
             // others, only change the router
-            txn.network_size += MessageFactoryType::new_search_router_only_message(
+            txn.network_size += MessageFactoryType::new_metis_search_router_only_message(
                 *(this->messages[i]), *table, key, key_offset, true);
           }            
           txn.pendingResponses++;

@@ -135,6 +135,18 @@ public:
     }
   }
 
+  void async_fence(ExecutorStatus status){
+    while(async_pend_num.load() != async_respond_num.load()){
+      int a = async_pend_num.load();
+      int b = async_respond_num.load();
+
+      process_request();
+      std::this_thread::yield();
+    }
+    async_pend_num.store(0);
+    async_respond_num.store(0);
+  }
+
   void replication_fence(ExecutorStatus status){
     while(async_message_num.load() != async_message_respond_num.load()){
       int a = async_message_num.load();
@@ -370,7 +382,7 @@ public:
              ExecutorStatus::S_PHASE) {
         process_request(); 
       }
-
+      async_fence(ExecutorStatus::C_PHASE);
       replication_fence(ExecutorStatus::C_PHASE);
 
       // commit transaction in c_phase;
@@ -913,6 +925,11 @@ private:
                                 transaction.get(), 
                                 &router_transactions_queue,
                                 &metis_router_transactions_queue);
+
+          if(type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE) || 
+             type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY)){
+              async_respond_num.fetch_add(1);
+          }
         }
 
         if (logger) {
@@ -1036,23 +1053,24 @@ private:
           readKey.set_read_respond_bit();
           local_read = true;
           
-          // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-          //   // also send to generator to update the router-table
-          //   if(i == coordinator_id){
-          //     continue; // local
-          //   }
-          //   if(i == coordinatorID){
-          //     // target
-          //     txn.network_size += MessageFactoryType::new_async_search_message(
-          //         *(this->messages[i]), *table, key, key_offset, remaster, false);
-          //   } else {
-          //     // others, only change the router
-          //     txn.network_size += MessageFactoryType::new_async_search_router_only_message(
-          //         *(this->messages[i]), *table, key, key_offset, false);
-          //   }   
-          //   // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
-          //   txn.asyncPendingResponses++;
-          // }
+          for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+            // also send to generator to update the router-table
+            if(i == coordinator_id){
+              continue; // local
+            }
+            if(i == coordinatorID){
+              // target
+              txn.network_size += MessageFactoryType::new_async_search_message(
+                  *(this->messages[i]), *table, key, key_offset, remaster, false);
+            } else {
+              // others, only change the router
+              txn.network_size += MessageFactoryType::new_async_search_router_only_message(
+                  *(this->messages[i]), *table, key, key_offset, false);
+            }   
+            // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+            // txn.asyncPendingResponses++;
+            this->async_pend_num.fetch_add(1);
+          }
           // this->flush_messages(messages);
           
         }
@@ -1256,6 +1274,9 @@ private:
   Percentile<int64_t> percentile;
   std::unique_ptr<TransactionType> transaction;
   std::unique_ptr<TransactionType> metis_transaction;
+
+  std::atomic<uint32_t> async_pend_num;
+  std::atomic<uint32_t> async_respond_num;
 
   std::vector<std::unique_ptr<Message>> messages;
   std::vector<std::unique_ptr<Message>> metis_messages;

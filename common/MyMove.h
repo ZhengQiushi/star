@@ -40,6 +40,7 @@ namespace star
         int32_t field_size;
         int32_t src_coordinator_id;
         myKeyType record_key_;
+        int32_t access_frequency;
 
         union key_ {
             key_(){
@@ -178,7 +179,8 @@ namespace star
         std::vector<MoveRecord<WorkloadType>> records;
         int32_t dest_coordinator_id;
         int32_t metis_dest_coordinator_id; // only for metis
-
+        int32_t access_frequency;
+        
         myMove(){
             reset(); 
         }
@@ -186,6 +188,7 @@ namespace star
         {
             records.clear();
             dest_coordinator_id = -1;
+            access_frequency = 0;
         }
 
         void copy(const std::shared_ptr<myMove<Workload>>& m_){
@@ -672,11 +675,15 @@ namespace star
                 
                 int col_cnt_ = 0;
                 int row_id = 0;
+                int access_frequency = 0;
+
                 auto metis_move = std::make_shared<myMove<WorkloadType>>();
                 char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
                 while(per_key_ != NULL){
                     if(col_cnt_ == 0){
                         row_id = atoi(per_key_);
+                    } else if(col_cnt_ == 1){
+                        metis_move->access_frequency = atoi(per_key_);
                     } else {
                         int64_t key_ = atoi(per_key_);
 
@@ -891,7 +898,11 @@ namespace star
                     used.insert(c_key);
                     MoveRecord<WorkloadType> new_move_rec;
                     new_move_rec.set_real_key(c_key);
+                    new_move_rec.access_frequency = hottest_tuple[c_key];
+
                     metis_move->records.push_back(new_move_rec);
+                    metis_move->access_frequency += new_move_rec.access_frequency;
+
                     myValueType* it = (myValueType*)record_degree.search_value(&c_key);
                     for(auto edge: *it){
                         // adjncy.push_back(hottest_tuple_index_[edge.first]); // 节点id从0开始
@@ -915,7 +926,9 @@ namespace star
             
             for(size_t j = 0; j < metis_moves.size(); j ++ ){
                 if(metis_moves[j]->records.size() > 0){
-                    outpartition << j << "\t";
+                    outpartition << j << "\t"; // id
+                    outpartition << metis_moves[j]->access_frequency << "\t"; // weight
+
                     for(int i = 0 ; i < metis_moves[j]->records.size(); i ++ ){
                         outpartition << metis_moves[j]->records[i].record_key_ << "\t";
                     }
@@ -1118,8 +1131,7 @@ namespace star
         }
         void update_hottest_tuple(int32_t key_one){
             // hottest tuple
-            auto cur_key = hottest_tuple.find(key_one);
-            if(cur_key == hottest_tuple.end()){
+            if(!hottest_tuple.count(key_one)){
                 hottest_tuple.insert(std::make_pair(key_one, 1));
 
                 
@@ -1127,7 +1139,7 @@ namespace star
                 hottest_tuple_index_seq.push_back(key_one);
                 
             } else {
-                cur_key->second ++;
+                hottest_tuple[key_one] ++;
             }
         }
         void update_node_load(const Node& cur_node){

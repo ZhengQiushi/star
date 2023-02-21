@@ -13,6 +13,7 @@
 #include "glog/logging.h"
 #include <chrono>
 
+#include <unordered_map>
 #include "core/Coordinator.h"
 #include <mutex>          // std::mutex, std::lock_guard
 
@@ -81,7 +82,7 @@ public:
     generator_num = 1;
 
     
-    outfile_excel.open("/home/star/data/metis_router.xls", std::ios::trunc); // ios::trunc
+    outfile_excel.open(context.data_src_path_dir + "metis_router.xls", std::ios::trunc); // ios::trunc
   }
 
   void router_fence(){
@@ -96,22 +97,27 @@ public:
   }
 
 
-  std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
-      std::unordered_map<int, int> from_nodes_id;
-      static std::unordered_map<int, int> busy_;
-
+  void txn_nodes_involved(simpleTransaction* t, bool is_dynamic) {
+    
+      std::unordered_map<int, int> from_nodes_id; // dynamic replica nums
+      // std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
       std::vector<int> coordi_nums_;
+
+      
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
       int max_cnt = INT_MIN;
+      int max_node = -1;
 
       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
         // LOG(INFO) << "query_keys[j] : " << query_keys[j];
         // judge if is cross txn
         size_t cur_c_id = -1;
+        size_t secondary_c_ids;
         if(is_dynamic){
           // look-up the dynamic router to find-out where
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+          // secondary_c_ids = db.get_secondary_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
           cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
@@ -123,30 +129,22 @@ public:
         } else {
           from_nodes_id[cur_c_id] += 1;
         }
-        // if(!busy_.count(cur_c_id)){
-        //   busy_[cur_c_id] = 0;
-        // }
-        // if(from_nodes_id[cur_c_id] + busy_[cur_c_id] > max_cnt){
-        //   max_cnt = from_nodes_id[cur_c_id] + busy_[cur_c_id];
-        //   max_node = cur_c_id;
-        // }
+
         if(from_nodes_id[cur_c_id] > max_cnt){
           max_cnt = from_nodes_id[cur_c_id];
           max_node = cur_c_id;
         }
       }
 
-      if(context.random_router){
-        // 
-        int coords_num = (int)from_nodes_id.size();
-        int random_coord_id = random.uniform_dist(0, coords_num - 1);
-        max_node = coordi_nums_[random_coord_id];
-      }
+      t->destination_coordinator = max_node;
+      t->execution_cost = query_keys.size() - max_cnt;
 
-      // busy_[max_node] -= 10;
+      // VLOG(DEBUG_V8) << t->keys[0] << "(" << test << ")" << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " = " << t->execution_cost;
 
-     return from_nodes_id;
+
+     return;
    }
+
 
   int select_best_node(simpleTransaction* t) {
     
@@ -162,9 +160,153 @@ public:
     return max_node;
   }
   
+  struct cmp{
+    bool operator()(simpleTransaction* a, 
+                    simpleTransaction* b){
+      return a->execution_cost < b->execution_cost;
+    }
+  };
+
+  long long cal_load_distribute(int aver_val, 
+                          std::unordered_map<int, long long>& busy_){
+    long long cur_val = 0;
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      // 
+      cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
+    }
+    cur_val /= context.coordinator_num;
+
+    return cur_val;
+  }
+  
+  long long cal_load_average(std::unordered_map<int, long long>& busy_){
+    long long cur_val = 0;
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      // 
+      cur_val += busy_[i];
+    }
+    cur_val /= context.coordinator_num;
+
+    return cur_val;
+  }
+
+  void scheduler_transactions(
+      std::vector<simpleTransaction*>& metis_txns,
+      std::vector<int>& router_send_txn_cnt){    
+        
+    std::vector<simpleTransaction*> txns;
+    std::priority_queue<simpleTransaction*, 
+                        std::vector<simpleTransaction*>, 
+                        cmp> q_;
+
+    std::unordered_map<int, long long> busy_;
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      busy_[i] = 0;
+    }
+    
+
+    // find minimal cost routing 
+    for(size_t i = 0; i < metis_txns.size(); i ++ ){
+      simpleTransaction* txn = metis_txns[i];
+
+      // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
+      if(txn->is_distributed){ 
+        // static-distribute
+        // std::unordered_map<int, int> result;
+        txn_nodes_involved(txn, true);
+      } else {
+        DCHECK(txn->is_distributed == 0);
+        txn->destination_coordinator = txn->partition_id % context.coordinator_num;
+      } 
+
+      txns.push_back(txn);
+      q_.push(txn);
+
+      busy_[txn->destination_coordinator] += txn->access_frequency;
+    }
+
+    // int cur_thread_transaction_num = metis_txns.size();
+    
+    long long aver_val = cal_load_average(busy_);//; cur_thread_transaction_num / context.coordinator_num;
+
+    // LOG(INFO) << "BEFORE";
+    // for(int i = 0; i < txns.size(); i ++ ){
+    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
+    // }
+    // 100 * 110 workload * average 
+    int weight = 30000;
+    long long threshold = weight / (context.coordinator_num / 2) * weight / (context.coordinator_num / 2); // 2200 - 2800
+
+    long long cur_val = cal_load_distribute(aver_val, busy_);
+
+    if(cur_val > threshold){
+      // start tradeoff for balancing
+      int batch_num = 50; // 
+
+      bool is_ok = true;
+      do {
+        
+        for(int i = 0 ; i < batch_num && q_.size() > 0; i ++ ){
+
+          std::unordered_map<int, int> overload_node;
+          std::unordered_map<int, int> idle_node;
+
+          for(int j = 0 ; j < context.coordinator_num; j ++ ){
+            if((long long) (busy_[j] - aver_val) * (busy_[j] - aver_val) > threshold){
+              if((busy_[j] - aver_val) > 0){
+                overload_node[j] = busy_[j] - aver_val;
+              } else {
+                idle_node[j] = aver_val - busy_[j];
+              } 
+            }
+          }
+          if(overload_node.size() == 0 || idle_node.size() == 0){
+            is_ok = false;
+            break;
+          }
+          simpleTransaction* t = q_.top();
+          q_.pop();
+
+          if(overload_node.count(t->destination_coordinator)){
+            for(auto& idle: idle_node){
+              // 
+              busy_[t->destination_coordinator] -= t->access_frequency;
+              overload_node[t->destination_coordinator] -= t->access_frequency;
+              if(overload_node[t->destination_coordinator] <= 0){
+                overload_node.erase(t->destination_coordinator);
+              }
+
+              t->destination_coordinator = idle.first;
+              busy_[t->destination_coordinator] += t->access_frequency;
+              idle.second -= t->access_frequency;
+              if(idle.second <= 0){
+                idle_node.erase(idle.first);
+              }
+              break;
+            }
+          }
+
+          if(overload_node.size() == 0 || idle_node.size() == 0){
+            break;
+          }
+
+        }
+        
+      } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
+    }
+
+
+    // LOG(INFO) << "NEW";
+    // for(int i = 0; i < txns.size(); i ++ ){
+    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
+    // }
+  }
+
 
   int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
+    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
+
     auto new_transmit_generate = [&](int idx){ // int n
       simpleTransaction* s = new simpleTransaction();
       s->idx_ = idx;
@@ -173,8 +315,13 @@ public:
       // s->partition_id = n;
       return s;
     };
-    // pull request
-    std::vector<simpleTransaction*> transmit_requests;
+
+
+    // 一一对应
+    std::vector<simpleTransaction*> metis_txns;
+    std::vector<std::shared_ptr<myMove<WorkloadType>>> cur_moves;
+
+
     static int transmit_idx = 0; // split into sub-transactions
     static int metis_transmit_idx = 0;
 
@@ -182,27 +329,62 @@ public:
 
     int cur_move_size = my_clay->move_plans.size();
     // pack up move-steps to transmit request
-    for(int i = 0 ; i < cur_move_size; i ++ ){
+    double thresh_ratio = 1;
+    for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
       bool success = false;
       std::shared_ptr<myMove<WorkloadType>> cur_move;
       
       success = my_clay->move_plans.pop_no_wait(cur_move);
       DCHECK(success == true);
       
-      auto new_txn = new_transmit_generate(transmit_idx ++ );
+      
       auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
+      metis_new_txn->access_frequency = cur_move->access_frequency;
 
       for(auto move_record: cur_move->records){
           metis_new_txn->keys.push_back(move_record.record_key_);
           metis_new_txn->update.push_back(true);
       }
-      int64_t coordinator_id_dst = select_best_node(metis_new_txn);
+      //
 
-      for(auto move_record: cur_move->records){
+      metis_txns.push_back(metis_new_txn);
+      cur_moves.push_back(cur_move);
+      // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
+
+      // auto new_txn = new_transmit_generate(transmit_idx ++ );
+      // for(auto move_record: cur_move->records){
+      //     new_txn->keys.push_back(move_record.record_key_);
+      //     new_txn->update.push_back(true);
+      //     new_txn->destination_coordinator = coordinator_id_dst;
+      //     new_txn->metis_idx_ = metis_new_txn->idx_;
+
+      //     if(new_txn->keys.size() > transmit_block_size){
+      //       // added to the router
+      //       transmit_requests.push_back(new_txn);
+      //       new_txn = new_transmit_generate(transmit_idx ++ );
+      //     }
+      // }
+
+      // if(new_txn->keys.size() > 0){
+      //   transmit_requests.push_back(new_txn); // 
+      // }
+    }
+
+    scheduler_transactions(metis_txns, router_send_txn_cnt);
+
+
+    // pull request
+    std::vector<simpleTransaction*> transmit_requests;
+    // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
+    for(int i = 0 ; i < metis_txns.size(); i ++ ){
+      // split into sub_transactions
+      auto new_txn = new_transmit_generate(transmit_idx ++ );
+
+      for(auto move_record: cur_moves[i]->records){
           new_txn->keys.push_back(move_record.record_key_);
           new_txn->update.push_back(true);
-          new_txn->destination_coordinator = coordinator_id_dst;
-          new_txn->metis_idx_ = metis_new_txn->idx_;
+          new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
+          new_txn->metis_idx_ = metis_txns[i]->idx_;
 
           if(new_txn->keys.size() > transmit_block_size){
             // added to the router
@@ -216,7 +398,10 @@ public:
       }
     }
 
-    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
+
+    my_clay->move_plans.clear();
+
+    
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
       // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
@@ -277,6 +462,12 @@ public:
     // 
     auto trace_log = std::chrono::steady_clock::now();
 
+    std::unordered_map<int, std::string> map_;
+    map_[0] = context.data_src_path_dir + "resultss_partition_30_60.xls";
+    map_[1] = context.data_src_path_dir + "resultss_partition_60_90.xls";
+    map_[2] = context.data_src_path_dir + "resultss_partition_90_120.xls";
+    map_[3] = context.data_src_path_dir + "resultss_partition_0_30.xls";
+
     // transmiter: do the transfer for the clay and whole system
     // std::vector<std::thread> transmiter;
     // transmiter.emplace_back([&]() {
@@ -293,6 +484,8 @@ public:
 
         int start_offset = 10 * 1000;
         // 
+        int cur_workload = 0;
+
         while(status != ExecutorStatus::EXIT){
           process_request();
           status = static_cast<ExecutorStatus>(worker_status.load());
@@ -308,6 +501,7 @@ public:
         // 
 
         while(status != ExecutorStatus::EXIT){
+
           process_request();
           status = static_cast<ExecutorStatus>(worker_status.load());
 
@@ -325,13 +519,21 @@ public:
           auto begin = std::chrono::steady_clock::now();
           
           // my_clay->init_with_history("/home/star/data/result_test.xls", last_timestamp_int, last_timestamp_int + trigger_time_interval);
-          char file_name_[256] = {0};
-          int time_begin = (last_timestamp_int + trigger_time_interval) / 1000 % total_time;
-          int time_end   = (last_timestamp_int + trigger_time_interval) / 1000 % total_time + context.workload_time;
+          // char file_name_[256] = {0};
 
-          sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", time_begin, time_end);
+          // 30_60
+          // 60_90
+          // 90_120
+          //  0_30
+
+          // int time_begin = (last_timestamp_int + trigger_time_interval) / 1000 % total_time;
+          // int time_end   = (last_timestamp_int + trigger_time_interval) / 1000 % total_time + context.workload_time;
+
+          // sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", time_begin, time_end);
+          std::string file_name_ = map_[cur_workload];
+
           LOG(INFO) << "start read from file";
-          my_clay->metis_partiion_read_from_file(file_name_);
+          my_clay->metis_partiion_read_from_file(file_name_.c_str());
           LOG(INFO) << "read from file done";
 
           latency = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -354,6 +556,7 @@ public:
           if(num > 0){
             LOG(INFO) << "router transmit request " << num; 
           }
+          cur_workload = (cur_workload + 1) % workload_num;
           // break; // debug
         }
         LOG(INFO) << "transmiter " << " exits.";

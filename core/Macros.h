@@ -52,6 +52,9 @@ DEFINE_bool(enable_data_transfer, false, "enable data transfer or not");
 
 DEFINE_bool(lion_no_switch, false, "");
 DEFINE_int32(lion_with_metis_init, 0, "use metis to initialize");
+
+DEFINE_string(data_src_path_dir, "/home/star/data/", "data-source");
+
 DEFINE_int32(migration_only, 0, "migrate only");
 DEFINE_int32(random_router, 0, "random transfer");
 DEFINE_bool(lion_with_trace_log, false, "use metis to initialize");
@@ -64,6 +67,10 @@ DEFINE_int32(init_time, 0, "running time");
 DEFINE_int32(sample_time_interval, 1, "running time");
 
 DEFINE_int32(cpu_core_id, 0, "cpu core id");
+
+
+DEFINE_int32(skew_factor, 0, "workload skew factor");
+
 
 #define SETUP_CONTEXT(context)                                                 \
   boost::algorithm::split(context.peers, FLAGS_servers,                        \
@@ -109,7 +116,9 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
   context.data_transform_interval = FLAGS_data_transform_interval;             \
   context.lion_no_switch = FLAGS_lion_no_switch;                               \
   context.lion_with_metis_init = FLAGS_lion_with_metis_init;                   \
+  context.data_src_path_dir = FLAGS_data_src_path_dir;                         \
   context.random_router = FLAGS_random_router;                                 \
   context.lion_with_trace_log = FLAGS_lion_with_trace_log;                     \
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
+  context.skew_factor = FLAGS_skew_factor;                                     \
   context.set_star_partitioner();

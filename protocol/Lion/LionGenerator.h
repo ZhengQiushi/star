@@ -185,8 +185,11 @@ public:
         size_t secondary_c_ids;
         if(is_dynamic){
           // look-up the dynamic router to find-out where
-          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
-          secondary_c_ids = db.get_secondary_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+          auto router_table = db.find_router_table(ycsbTableID);// , master_coordinator_id);
+          auto tab = static_cast<RouterValue*>(router_table->search_value((void*) &query_keys[j]));
+
+          cur_c_id = tab->get_dynamic_coordinator_id();
+          secondary_c_ids = tab->get_secondary_coordinator_id();
         } else {
           // cal the partition to figure out the coordinator-id
           cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
@@ -200,12 +203,12 @@ public:
         }
 
         // key on which node
-        for(int i = 0; i <= context.coordinator_num; i ++ ){
-            if(secondary_c_ids & 1 && i != cur_c_id){
-                from_nodes_id_secondary[i] += 1;
-            }
-            secondary_c_ids = secondary_c_ids >> 1;
-        }
+        // for(int i = 0; i <= context.coordinator_num; i ++ ){
+        //     if(secondary_c_ids & 1 && i != cur_c_id){
+        //         from_nodes_id_secondary[i] += 1;
+        //     }
+        //     secondary_c_ids = secondary_c_ids >> 1;
+        // }
       }
 
       int max_cnt = INT_MIN;
@@ -213,13 +216,13 @@ public:
 
       for(int cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0;
-        if(from_nodes_id[cur_c_id] == query_keys.size()){
-          cur_score = 100 * (int)query_keys.size();
-        } else if(from_nodes_id_secondary[cur_c_id] + from_nodes_id[cur_c_id] == query_keys.size()){
+        // if(from_nodes_id[cur_c_id] == query_keys.size()){
+        //   cur_score = 100 * (int)query_keys.size();
+        // } else if(from_nodes_id_secondary[cur_c_id] + from_nodes_id[cur_c_id] == query_keys.size()){
+        //   cur_score = 25 * from_nodes_id[cur_c_id] + 15 * from_nodes_id_secondary[cur_c_id];
+        // } else {
           cur_score = 25 * from_nodes_id[cur_c_id] + 15 * from_nodes_id_secondary[cur_c_id];
-        } else {
-          cur_score = 25 * from_nodes_id[cur_c_id] + 15 * from_nodes_id_secondary[cur_c_id];
-        }
+        // }
         if(cur_score > max_cnt){
           max_node = cur_c_id;
           max_cnt = cur_score;
@@ -537,6 +540,11 @@ public:
       coordinator_send[txns[i]->destination_coordinator] ++ ;
       router_request(router_send_txn_cnt, txns[i]);   
     }
+
+    cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - staart)
+                 .count() * 1.0 / 1000 / 1000;
+    LOG(INFO) << "scheduler_transactions + send : " << cur_timestamp__;
   }
   
   

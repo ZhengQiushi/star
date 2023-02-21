@@ -169,8 +169,8 @@ public:
     
       std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
       std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      std::unordered_map<int, int> nodes_cost;              // cost on each node
-      txns_coord_cost[t->idx_] = nodes_cost;
+      // std::unordered_map<int, int> nodes_cost;              // cost on each node
+      // txns_coord_cost[t->idx_] = nodes_cost;
       std::vector<int> coordi_nums_;
 
       
@@ -200,7 +200,7 @@ public:
         }
 
         // key on which node
-        for(int i = 0; i < 64 - 8; i ++ ){
+        for(int i = 0; i <= context.coordinator_num; i ++ ){
             if(secondary_c_ids & 1 && i != cur_c_id){
                 from_nodes_id_secondary[i] += 1;
             }
@@ -218,13 +218,13 @@ public:
         } else if(from_nodes_id_secondary[cur_c_id] + from_nodes_id[cur_c_id] == query_keys.size()){
           cur_score = 25 * from_nodes_id[cur_c_id] + 15 * from_nodes_id_secondary[cur_c_id];
         } else {
-          cur_score = 5 * from_nodes_id[cur_c_id] + 1 * from_nodes_id_secondary[cur_c_id];
+          cur_score = 25 * from_nodes_id[cur_c_id] + 15 * from_nodes_id_secondary[cur_c_id];
         }
         if(cur_score > max_cnt){
           max_node = cur_c_id;
           max_cnt = cur_score;
         }
-        txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+        // txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
       }
 
       
@@ -254,8 +254,8 @@ public:
       //   } 
 
       // if(from_nodes_id[max_node] < 10 && from_nodes_id_secondary[max_node] < 10) {
-        int test = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& t->keys[0]);
-        VLOG(DEBUG_V8) << t->keys[0] << "(" << test << ")" << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << from_nodes_id_secondary[max_node] << " = " << t->execution_cost;
+        // int test = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& t->keys[0]);
+        // VLOG(DEBUG_V8) << t->keys[0] << "(" << test << ")" << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << from_nodes_id_secondary[max_node] << " = " << t->execution_cost;
       // }
 
       // busy_[max_node] --;
@@ -392,15 +392,15 @@ public:
 
     std::unordered_map<int, std::unordered_map<int, int>> txns_coord_cost;
 
-    std::priority_queue<std::shared_ptr<simpleTransaction>, 
-                        std::vector<std::shared_ptr<simpleTransaction>>, 
-                        cmp> q_;
+
 
     std::unordered_map<int, int> busy_;
     for(int i = 0 ; i < context.coordinator_num; i ++ ){
       busy_[i] = 0;
     }
     
+    auto staart = std::chrono::steady_clock::now();
+
     int cur_thread_transaction_num = batch_size / context.coordinator_num;
     int aver_val = cur_thread_transaction_num / context.coordinator_num;
 
@@ -438,11 +438,15 @@ public:
       } 
 
       txns.push_back(txn);
-      q_.push(txn);
 
       busy_[txn->destination_coordinator] ++;
     }
 
+    double cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - staart)
+                 .count() * 1.0 / 1000 / 1000;
+
+    LOG(INFO) << "scheduler_transactions : " << cur_timestamp__;
     // LOG(INFO) << "BEFORE";
     // for(int i = 0; i < txns.size(); i ++ ){
     //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
@@ -459,6 +463,12 @@ public:
 
 
     if(cur_val > threshold){ //  && workload_type <= 1 && context.lion_with_metis_init
+      std::priority_queue<std::shared_ptr<simpleTransaction>, 
+                        std::vector<std::shared_ptr<simpleTransaction>>, 
+                        cmp> q_;
+      for(int i = 0 ; i < txns.size(); i ++ ){
+        q_.push(txns[i]);
+      }
       // start tradeoff for balancing
       int batch_num = 50; // 
 

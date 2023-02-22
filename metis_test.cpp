@@ -78,14 +78,14 @@ int main(int argc, char *argv[]) {
   std::atomic<uint32_t> worker_status;
   std::unique_ptr<star::Clay<WorkloadType>> my_clay = std::make_unique<star::Clay<WorkloadType>>(context, db, worker_status);
   
-  LOG(INFO) << "start";
-  // my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
-  my_clay->init_with_history(context.data_src_path_dir + "resultss.xls", 0, 30 - 1);
-  LOG(INFO) << "history init done";
-  // my_clay->metis_partition_graph("/home/star/data/resultss_partition_0_30.xls");
-  my_clay->my_find_clump(context.data_src_path_dir + "resultss_partition_0_30.xls");
-  LOG(INFO) << "done";
-  my_clay->clear_graph();
+  // LOG(INFO) << "start";
+  // // my_clay->init_with_history("/home/star/data/resultss.xls", 0, 30 - 1);
+  // my_clay->init_with_history(context.data_src_path_dir + "resultss.xls", 0, 30 - 1);
+  // LOG(INFO) << "history init done";
+  // // my_clay->metis_partition_graph("/home/star/data/resultss_partition_0_30.xls");
+  // my_clay->my_find_clump(context.data_src_path_dir + "resultss_partition_0_30.xls");
+  // LOG(INFO) << "done";
+  // my_clay->clear_graph();
 
   // LOG(INFO) << "start";
   LOG(INFO) << "history init done";

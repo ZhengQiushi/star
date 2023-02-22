@@ -1467,7 +1467,7 @@ private:
                                  std::deque<simpleTransaction>*,
                                  group_commit::ShareQueue<simpleTransaction>*)>>
       messageHandlers;
-  LockfreeQueue<Message *, 10086> in_queue, out_queue,
+  LockfreeQueue<Message *, 60086> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 

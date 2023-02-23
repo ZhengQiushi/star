@@ -377,7 +377,7 @@ namespace star
         void start(){
             // main loop
             ExecutorStatus status;
-            size_t batch_size = 20;
+            size_t batch_size = 500;
             for (;;) {
                 static int cnt = 0;
                 status = static_cast<ExecutorStatus>(worker_status.load());
@@ -1062,7 +1062,7 @@ namespace star
             record_for_neighbor.clear();
             move_tuple_id.clear();
             hottest_tuple.clear(); // <key, frequency>
-            node_load.clear(); // <coordinator_id, load>
+            // node_load.clear(); // <coordinator_id, load>
             record_degree.clear();
             hottest_tuple_index_.clear();
             hottest_tuple_index_seq.clear();

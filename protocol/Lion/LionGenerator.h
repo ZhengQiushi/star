@@ -230,7 +230,7 @@ public:
         if(cnt_master == query_keys.size()){
           cur_score = 100 * (int)query_keys.size();
         } else if(cnt_secondary + cnt_master == query_keys.size()){
-          cur_score = 25 * cnt_master + 15 * cnt_secondary;
+          cur_score = 50 * cnt_master + 25 * cnt_secondary;
         } else {
           cur_score = 25 * cnt_master + 15 * cnt_secondary;
         }
@@ -241,7 +241,20 @@ public:
         txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
       }
 
-      
+
+      if(context.random_router > 0){
+        // 
+        int coords_num = (int)coordi_nums_.size();
+        int random_value = random.uniform_dist(0, 100);
+        if(random_value > context.random_router){
+          int random_coord_id = random.uniform_dist(0, coords_num - 1);
+          if(random_coord_id > context.coordinator_num){
+            VLOG(DEBUG_V8) << "bad  " << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << coordi_nums_[random_coord_id] << " " << from_nodes_id[coordi_nums_[random_coord_id]];
+          }
+          max_node = coordi_nums_[random_coord_id];
+        }
+      } 
+
 
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
@@ -471,7 +484,7 @@ public:
     int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
 
 
-    if(cur_val > threshold){ //  && workload_type <= 1 && context.lion_with_metis_init
+    if(cur_val > threshold && context.random_router == 0){ //  && workload_type <= 1 && context.lion_with_metis_init
       std::priority_queue<std::shared_ptr<simpleTransaction>, 
                         std::vector<std::shared_ptr<simpleTransaction>>, 
                         cmp> q_;

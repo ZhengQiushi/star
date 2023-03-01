@@ -434,7 +434,7 @@ public:
 
     if(coordinator_id_new != coordinator_id_old){
       // 数据更新到 发req的对面
-      VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
+      // LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
       
       // update the router 
       router_val->set_dynamic_coordinator_id(coordinator_id_new);
@@ -444,8 +444,8 @@ public:
       // reserve size for read
       responseMessage.data.append(value_size, 0);
       
-//      auto value = table.search_value(key);
-//      LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
+      // auto value = table.search_value(key);
+      // LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
       
       if(success == true && remaster == false){
         // transfer: read from db and load data into message buffer
@@ -526,7 +526,7 @@ public:
         dec.read_n_bytes(readKey.get_value(), value_size);
         DCHECK(strlen((char*)readKey.get_value()) > 0);
 
-        VLOG(DEBUG_V8) << *(int*) key << " " << (char*) value << " insert ";
+        VLOG(DEBUG_V12) << *(int*) key << " " << (char*) value << " insert ";
         table.insert(key, value, (void*)& tid);
       }
 
@@ -543,7 +543,7 @@ public:
         return;
       } 
 
-      VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
+      VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
       auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
       auto router_val = (RouterValue*)router_table->search_value(key);
@@ -554,7 +554,7 @@ public:
       auto coordinator_id_new = responseMessage.get_source_node_id(); 
       DCHECK(coordinator_id_new != coordinator_id_old);
 
-      VLOG(DEBUG_V8) << table_id <<" " << *(int*) key << " " << (char*)value << " transmit reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+      // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " transmit reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
 
       // update router
       router_val->set_dynamic_coordinator_id(coordinator_id_new);
@@ -639,6 +639,10 @@ public:
       router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
       router_val->set_secondary_coordinator_id(coordinator_id_new);
     }
+
+    // if(context.coordinator_id == context.coordinator_num){
+    //   LOG(INFO) << "transmit_router_only_request_handler : " << *(int*)key << " " << coordinator_id_old << " -> " << coordinator_id_new;
+    // }
     responseMessage.flush();
   }
 

@@ -141,7 +141,7 @@ public:
                  .count() / context.workload_time % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
-        if(context.lion_with_metis_init == 1 && i == context.worker_num){
+        if((context.lion_with_metis_init == 1 || context.protocol == "MyClay") && i == context.worker_num){
           metis_commit += workers[i]->n_commit.load();
           workers[i]->n_commit.store(0);
 

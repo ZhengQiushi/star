@@ -771,8 +771,8 @@ public:
 
       LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
+                           .count() * 1.0 / 1000 / 1000;
+      // test = std::chrono::steady_clock::now();
 
       n_complete_workers.fetch_add(1);
       VLOG(DEBUG_V) << "Generator " << id << " finish C_PHASE";
@@ -793,8 +793,8 @@ public:
 
       LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
+                           .count() * 1.0 / 1000 / 1000;
+      // test = std::chrono::steady_clock::now();
 
       // flush_async_messages();
       for(int thread_id = 0 ; thread_id < context.coordinator_num; thread_id ++ ){
@@ -808,11 +808,11 @@ public:
       }
 
       VLOG_IF(DEBUG_V, id==0) << "wait back "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
+              << std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - test)
-                     .count()
-              << " milliseconds.";
-      test = std::chrono::steady_clock::now();
+                     .count() * 1.0 / 1000 / 1000
+              << " microseconds.";
+      // test = std::chrono::steady_clock::now();
 
 
       // n_complete_workers has been cleared
@@ -1008,7 +1008,7 @@ protected:
 protected:
   std::unique_ptr<Clay<WorkloadType>> my_clay;
   
-  ShareQueue<simpleTransaction*, 14096> transactions_queue;// [20];
+  ShareQueue<simpleTransaction*, 54096> transactions_queue;// [20];
   ShareQueue<simpleTransaction*, 14096> transmit_request_queue;
 
   size_t generator_num;

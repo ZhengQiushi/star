@@ -26,7 +26,8 @@ public:
   using WorkloadType = Workload;
   using ProtocolType = Protocol;
   using DatabaseType = typename WorkloadType::DatabaseType;
-  using TransactionType = typename WorkloadType::TransactionType;
+  using TransactionType = SiloTransaction;
+  
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
   using MessageType = typename ProtocolType::MessageType;
@@ -81,10 +82,21 @@ public:
      * @note add by truth 22-01-24
      */
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      // 
+      int skew_factor = random.uniform_dist(1, 100);
+      if (context.skew_factor >= skew_factor) {
+        // 0 >= 50 
+        partition_id = 0;
+      } else {
+        // 0 < 50
+        //正常
+      }
+      // 
       std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
                                   partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
+
+      // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
       
       simpleTransaction* txn = new simpleTransaction();
@@ -125,6 +137,10 @@ public:
         size_t cur_c_id = -1;
         if(is_dynamic){
           // look-up the dynamic router to find-out where
+          // debug
+          // int test_key = 3116619;
+          // int test_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& test_key);
+
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
@@ -157,56 +173,108 @@ public:
     return max_node;
   }
   
-  int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
-    // transmit_request_queue
-    auto new_transmit_generate = [&](int n){
-      simpleTransaction* s = new simpleTransaction();
-      s->is_transmit_request = true;
-      s->partition_id = n;
-      return s;
-    };
-    // pull request
-    std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-      transmit_requests[i] = new_transmit_generate(i);
-    }
+  // int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+  //   // transmit_request_queue
+  //   auto new_transmit_generate = [&](int n){
+  //     simpleTransaction* s = new simpleTransaction();
+  //     s->is_transmit_request = true;
+  //     s->partition_id = n;
+  //     return s;
+  //   };
 
-    const int transmit_block_size = 100;
+  //   static int transmit_idx = 0; // split into sub-transactions
+  //   static int metis_transmit_idx = 0;
+  //   int move_size = 0;
+  //   const int transmit_block_size = 10;
 
-    int cur_move_size = move_plans.size();
-    int move_size = 0;
-    // pack up move-steps to transmit request
-    for(int i = 0 ; i < cur_move_size; i ++ ){
-      bool success = false;
-      std::shared_ptr<myMove<WorkloadType>> cur_move = move_plans.pop_no_wait(success);
-      DCHECK(success == true);
+  //   int cur_move_size = my_clay->move_plans.size();
+  //   // pack up move-steps to transmit request
+  //   double thresh_ratio = 1;
+  //   for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
+  //     bool success = false;
+  //     std::shared_ptr<myMove<WorkloadType>> cur_move;
+      
+  //     success = my_clay->move_plans.pop_no_wait(cur_move);
+  //     DCHECK(success == true);
+      
+      
+  //     auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
+  //     metis_new_txn->access_frequency = cur_move->access_frequency;
+  //     metis_new_txn->destination_coordinator = cur_move->dest_coordinator_id;
+  //     for(auto move_record: cur_move->records){
+  //         metis_new_txn->keys.push_back(move_record.record_key_);
+  //         metis_new_txn->update.push_back(true);
+  //     }
+  //     //
+  //     transmit_request_queue.push_no_wait(metis_new_txn);
+  //     move_size++;
+  //     // metis_txns.push_back(metis_new_txn);
+  //     // cur_moves.push_back(cur_move);
+  //     // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
 
-      for(auto move_record: cur_move->records){
-        if(move_record.src_coordinator_id != cur_move->dest_coordinator_id){
-          //
-          if(move_size == 0){
-            move_size = 1;
-          }
-          transmit_requests[cur_move->dest_coordinator_id]->keys.push_back(move_record.record_key_);
-          transmit_requests[cur_move->dest_coordinator_id]->update.push_back(true);
+  //     // auto new_txn = new_transmit_generate(transmit_idx ++ );
+  //     // for(auto move_record: cur_move->records){
+  //     //     new_txn->keys.push_back(move_record.record_key_);
+  //     //     new_txn->update.push_back(true);
+  //     //     new_txn->destination_coordinator = coordinator_id_dst;
+  //     //     new_txn->metis_idx_ = metis_new_txn->idx_;
 
-          if(transmit_requests[cur_move->dest_coordinator_id]->keys.size() > transmit_block_size){
-            // added to the router
-            transmit_request_queue.push_no_wait(transmit_requests[cur_move->dest_coordinator_id]);
-            transmit_requests[cur_move->dest_coordinator_id] = new_transmit_generate(cur_move->dest_coordinator_id);
-            move_size ++ ;
-          }
-        }
-      }
-    }
+  //     //     if(new_txn->keys.size() > transmit_block_size){
+  //     //       // added to the router
+  //     //       transmit_requests.push_back(new_txn);
+  //     //       new_txn = new_transmit_generate(transmit_idx ++ );
+  //     //     }
+  //     // }
 
-    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-      if(transmit_requests[i]->keys.size() > 0){
-        transmit_request_queue.push_no_wait(transmit_requests[i]);
-      }
-    }
-    return move_size;
-  }
+  //     // if(new_txn->keys.size() > 0){
+  //     //   transmit_requests.push_back(new_txn); // 
+  //     // }
+  //   }
+
+
+
+  //   // // pull request
+  //   // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
+  //   // for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
+  //   //   transmit_requests[i] = new_transmit_generate(i);
+  //   // }
+
+  //   // const int transmit_block_size = 10;
+
+  //   // int cur_move_size = move_plans.size();
+  //   // int move_size = 0;
+  //   // // pack up move-steps to transmit request
+  //   // for(int i = 0 ; i < cur_move_size; i ++ ){
+  //   //   bool success = false;
+  //   //   std::shared_ptr<myMove<WorkloadType>> cur_move = move_plans.pop_no_wait(success);
+  //   //   DCHECK(success == true);
+
+  //   //   for(auto move_record: cur_move->records){
+  //   //     if(move_record.src_coordinator_id != cur_move->dest_coordinator_id){
+  //   //       //
+  //   //       if(move_size == 0){
+  //   //         move_size = 1;
+  //   //       }
+  //   //       transmit_requests[cur_move->dest_coordinator_id]->keys.push_back(move_record.record_key_);
+  //   //       transmit_requests[cur_move->dest_coordinator_id]->update.push_back(true);
+
+  //   //       if(transmit_requests[cur_move->dest_coordinator_id]->keys.size() >= transmit_block_size){
+  //   //         // added to the router
+  //   //         transmit_request_queue.push_no_wait(transmit_requests[cur_move->dest_coordinator_id]);
+  //   //         transmit_requests[cur_move->dest_coordinator_id] = new_transmit_generate(cur_move->dest_coordinator_id);
+  //   //         move_size ++ ;
+  //   //       }
+  //   //     }
+  //   //   }
+  //   // }
+
+  //   // for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
+  //   //   if(transmit_requests[i]->keys.size() > 0){
+  //   //     transmit_request_queue.push_no_wait(transmit_requests[i]);
+  //   //   }
+  //   // }
+  //   return move_size;
+  // }
 
   int pin_thread_id_ = 3;
 
@@ -257,51 +325,51 @@ public:
     }
 
     // clay: do the clustering 
-    std::vector<std::thread> clay;
-    my_clay = std::make_unique<Clay<WorkloadType>>(context, db, worker_status);
-    clay.emplace_back(&Clay<WorkloadType>::start, my_clay.get());
-    ControlMessageFactory::pin_thread_to_core(context, clay[0], pin_thread_id_);
-    pin_thread_id_ ++ ;
+    // std::vector<std::thread> clay;
+    // my_clay = std::make_unique<Clay<WorkloadType>>(context, db, worker_status);
+    // clay.emplace_back(&Clay<WorkloadType>::start, my_clay.get());
+    // ControlMessageFactory::pin_thread_to_core(context, clay[0], pin_thread_id_);
+    // pin_thread_id_ ++ ;
 
-    static int cur_workload_type = 0;
+    int cur_workload_type = 0;
 
 
     // transmiter: do the transfer for the clay and whole system
-    std::vector<std::thread> transmiter;
-    transmiter.emplace_back([&]() {
-      ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
-      while(status != ExecutorStatus::EXIT){
-        // 
-        bool is_movable = my_clay->movable_flag.load();
-        if(!is_movable){
-          while(my_clay->movable_flag.load() == false && status != ExecutorStatus::EXIT){
-            std::this_thread::sleep_for(std::chrono::microseconds(5));
-            status = static_cast<ExecutorStatus>(worker_status.load());
-          }
-        } 
+    // std::vector<std::thread> transmiter;
+    // transmiter.emplace_back([&]() {
+    //   ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+    //   while(status != ExecutorStatus::EXIT){
+    //     // 
+    //     bool is_movable = my_clay->movable_flag.load();
+    //     if(!is_movable){
+    //       while(my_clay->movable_flag.load() == false && status != ExecutorStatus::EXIT){
+    //         std::this_thread::sleep_for(std::chrono::microseconds(5));
+    //         status = static_cast<ExecutorStatus>(worker_status.load());
+    //       }
+    //     } 
         
-        int num = router_transmit_request(my_clay->move_plans);
-        if(num > 0){
-          LOG(INFO) << "router transmit request " << num; 
-        }
-        my_clay->movable_flag.store(false);
+    //     int num = router_transmit_request(my_clay->move_plans);
+    //     if(num > 0){
+    //       LOG(INFO) << "router transmit request " << num; 
+    //     }
+    //     my_clay->movable_flag.store(false);
         
-        double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - start_time)
-                    .count() * 1.0 / 1000 / 1000;
+    //     double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+    //                 std::chrono::steady_clock::now() - start_time)
+    //                 .count() * 1.0 / 1000 / 1000;
 
-        if(cur_workload_type != cur_timestamp / context.workload_time){
-          cur_workload_type = cur_timestamp / context.workload_time;
-          my_clay->clear_graph();
-          LOG(INFO) << " workload type changed to [" << cur_workload_type << "]. Clear Graph.";
-        }
+    //     if(cur_workload_type != (int)(cur_timestamp / context.workload_time)){
+    //       cur_workload_type = cur_timestamp / context.workload_time;
+    //       my_clay->clear_graph();
+    //       LOG(INFO) << " workload type changed to [" << cur_workload_type << "]. Clear Graph.";
+    //     }
         
-        status = static_cast<ExecutorStatus>(worker_status.load());
-      }
-      LOG(INFO) << "transmiter " << " exits.";
-    });
-    ControlMessageFactory::pin_thread_to_core(context, transmiter[0], pin_thread_id_);
-    pin_thread_id_ ++ ;
+    //     status = static_cast<ExecutorStatus>(worker_status.load());
+    //   }
+    //   LOG(INFO) << "transmiter " << " exits.";
+    // });
+    // ControlMessageFactory::pin_thread_to_core(context, transmiter[0], pin_thread_id_);
+    // pin_thread_id_ ++ ;
     
 
     // main loop
@@ -317,12 +385,12 @@ public:
           for (auto &t : generators) {
             t.join();
           }
-          for (auto &t : clay) {
-            t.join();
-          }
-          for (auto &t : transmiter) {
-            t.join();
-          }
+          // for (auto &t : clay) {
+          //   t.join();
+          // }
+          // for (auto &t : transmiter) {
+          //   t.join();
+          // }
           return;
         }
       } while (status != ExecutorStatus::START);
@@ -342,9 +410,9 @@ public:
 
       
       // // prepare_transactions_to_run(workload, storage);
-      // LOG(INFO) << "prepare_transactions_to_run: " << std::chrono::duration_cast<std::chrono::microseconds>(
-      //                      std::chrono::steady_clock::now() - test)
-      //                      .count();
+      LOG(INFO) << "prepare_transactions_to_run: " << std::chrono::duration_cast<std::chrono::microseconds>(
+                           std::chrono::steady_clock::now() - test)
+                           .count() * 1.0 / 1000 / 1000;
       // test = std::chrono::steady_clock::now();
 
 
@@ -382,29 +450,42 @@ public:
             std::shared_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success));
             DCHECK(success == true);
             // 
-            if(txn->is_distributed)
-              my_clay->push_txn(txn);
+            //   int max_node = -1;
+            //   auto result = txn_nodes_involved(txn.get(), max_node, true);
+            //   if(result.size() > 1){
+            // my_clay->push_txn(txn);
+            //   }
+            // }
             // 
-            size_t coordinator_id_dst = select_best_node(txn.get()); // txn->partition_id % context.coordinator_num;
+
+            int coordinator_id_dst = -1;
+            std::unordered_map<int, int> result = txn_nodes_involved(txn.get(), coordinator_id_dst, true);
+            
             cnt1 ++ ;
             router_request(coordinator_id_dst, txn);
+
+            // if(txn->keys[0] > 2800000 && txn->keys[0] < 2801547){
+            //   LOG(INFO) << "DEBUG";
+            //   LOG(INFO) << " txn : " << txn->keys[0] << " " << txn->keys[1] << " -> " << coordinator_id_dst;
+            // }
+            
           }
 
           // transfer clay move
-          size_t transmit_batch_size = (size_t)transmit_request_queue.size();
-          for(size_t i = 0; i < transmit_batch_size / context.coordinator_num; i ++ ){
-            bool success = false;
-            std::shared_ptr<simpleTransaction> txn(transmit_request_queue.pop_no_wait(success));
-            if(success == false){
-              break;
-            }
-            size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
-            if(txn->is_transmit_request){
-              VLOG(DEBUG_V14) << " TRANSMIT " << txn->keys[0] << " " << txn->keys[1] << " -> " << coordinator_id_dst;
-            }
-            cnt2 ++ ;
-            router_request(coordinator_id_dst, txn);
-          }
+          // size_t transmit_batch_size = (size_t)transmit_request_queue.size();
+          // for(size_t i = 0; i < transmit_batch_size / context.coordinator_num; i ++ ){
+          //   bool success = false;
+          //   std::shared_ptr<simpleTransaction> txn(transmit_request_queue.pop_no_wait(success));
+          //   if(success == false){
+          //     break;
+          //   }
+          //   // size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
+          //   if(txn->is_transmit_request){
+          //     VLOG(DEBUG_V14) << " TRANSMIT " << txn->keys[0] << " " << txn->keys[1] << " -> " << txn->destination_coordinator;
+          //   }
+          //   cnt2 ++ ;
+          //   router_request(txn->destination_coordinator, txn);
+          // }
           is_full_signal.store(0);
           VLOG(DEBUG_V14) << "Generator " << n << " send router " << router_send_txn_cnt[0] << " " << router_send_txn_cnt[1];
           // after router all txns, send the stop-SIGNAL
@@ -412,7 +493,7 @@ public:
             if(l == context.coordinator_id){
               continue;
             }
-            VLOG(DEBUG_V14) << "SEND ROUTER_STOP " << n << " -> " << l;
+            LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
             messages_mutex[l]->lock();
             ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
             flush_message(async_messages, l);
@@ -432,15 +513,15 @@ public:
 
       LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
+                           .count() * 1.0 / 1000 / 1000 ;
+      // test = std::chrono::steady_clock::now();
       
       router_fence(); // wait for coordinator to response
 
       LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
+                           .count() * 1.0 / 1000 / 1000 ;
+      // test = std::chrono::steady_clock::now();
 
       // process replication request after all workers stop.
       process_request();
@@ -490,22 +571,22 @@ public:
     }
   }
 
-  std::size_t get_partition_id() {
+  // std::size_t get_partition_id() {
 
-    std::size_t partition_id;
+  //   std::size_t partition_id;
 
-    if (context.partitioner == "pb") {
-      partition_id = random.uniform_dist(0, context.partition_num - 1);
-    } else {
-      auto partition_num_per_node =
-          context.partition_num / context.coordinator_num;
-      partition_id = random.uniform_dist(0, partition_num_per_node - 1) *
-                         context.coordinator_num +
-                     coordinator_id;
-    }
-    CHECK(partitioner->has_master_partition(partition_id));
-    return partition_id;
-  }
+  //   if (context.partitioner == "pb") {
+  //     partition_id = random.uniform_dist(0, context.partition_num - 1);
+  //   } else {
+  //     auto partition_num_per_node =
+  //         context.partition_num / context.coordinator_num;
+  //     partition_id = random.uniform_dist(0, partition_num_per_node - 1) *
+  //                        context.coordinator_num +
+  //                    coordinator_id;
+  //   }
+  //   CHECK(partitioner->has_master_partition(partition_id));
+  //   return partition_id;
+  // }
 
 
   void push_message(Message *message) override { 
@@ -648,8 +729,8 @@ protected:
   std::unique_ptr<Clay<WorkloadType>> my_clay;
   std::atomic<uint32_t> transmit_request_response;
 
-  ShareQueue<simpleTransaction*, 4096> transactions_queue;
-  ShareQueue<simpleTransaction*, 4096> transmit_request_queue;
+  ShareQueue<simpleTransaction*, 54096> transactions_queue;
+  ShareQueue<simpleTransaction*, 409600> transmit_request_queue;
 
   size_t generator_num;
   std::atomic<uint32_t> is_full_signal;// [20];

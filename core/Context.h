@@ -30,6 +30,7 @@ public:
   std::size_t coordinator_num = 0;
   std::size_t io_thread_num = 1;
   std::string protocol;
+  std::string repartition_strategy;
   std::string replica_group;
   std::string lock_manager;
   std::size_t batch_size = 240; // star, calvin, dbx batch size

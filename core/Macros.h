@@ -70,6 +70,8 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
 
 
 DEFINE_int32(skew_factor, 0, "workload skew factor");
+DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
+
 
 
 #define SETUP_CONTEXT(context)                                                 \
@@ -121,4 +123,5 @@ DEFINE_int32(skew_factor, 0, "workload skew factor");
   context.lion_with_trace_log = FLAGS_lion_with_trace_log;                     \
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
   context.skew_factor = FLAGS_skew_factor;                                     \
+  context.repartition_strategy = FLAGS_repartition_strategy;                   \
   context.set_star_partitioner();

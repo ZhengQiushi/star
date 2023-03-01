@@ -36,6 +36,9 @@
 #include "protocol/MyClay/MyClayExecutor.h"
 // #include "protocol/MyClay/MyClayManager.h"
 #include "protocol/MyClay/MyClayGenerator.h"
+#include "protocol/MyClay/MyClayMeitsExecutor.h"
+#include "protocol/MyClay/MyClayMetisGenerator.h"
+
 
 #include "protocol/Lion/Lion.h"
 #include "protocol/Lion/LionExecutor.h"
@@ -391,14 +394,26 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
+      int manager_thread_id = context.worker_num;
+      // if(context.lion_with_metis_init){
+        manager_thread_id += 1;
+      // }
+
       auto manager = std::make_shared<group_commit::Manager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+          coordinator_id, manager_thread_id, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<MyClayExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->worker_status,
             manager->n_completed_workers, manager->n_started_workers));
       }
+
+      // if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<MyClayMetisExecutor<WorkloadType>>(
+            coordinator_id, workers.size(), db, context, manager->worker_status,
+            manager->n_completed_workers, manager->n_started_workers));
+      // }
+
       workers.push_back(manager);
     } 
 
@@ -500,14 +515,25 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
+      int manager_thread_id = context.worker_num;
+      // if(context.lion_with_metis_init){
+        manager_thread_id += 1;
+      // }
+
       auto manager = std::make_shared<group_commit::Manager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+          coordinator_id, manager_thread_id, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<group_commit::MyClayGenerator<WorkloadType, Silo<DatabaseType>>>(
+        workers.push_back(std::make_shared<group_commit::MyClayGenerator<WorkloadType, MyClay<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers));
       }
+
+        workers.push_back(std::make_shared<group_commit::MyClayMetisGenerator<WorkloadType, MyClay<DatabaseType>>>(
+              coordinator_id, workers.size(), db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+
+
       workers.push_back(manager);
 
     }

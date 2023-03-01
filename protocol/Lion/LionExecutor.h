@@ -318,7 +318,7 @@ public:
       auto now = std::chrono::steady_clock::now();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -342,7 +342,7 @@ public:
       VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -371,7 +371,7 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] C_phase - local "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -389,7 +389,7 @@ public:
       commit_transactions();
       VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] C_phase router done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -414,7 +414,7 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -423,7 +423,7 @@ public:
       n_complete_workers.fetch_add(1);
       VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] fence "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -438,7 +438,7 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "wait back "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
+                     std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
@@ -1077,7 +1077,7 @@ private:
 
         if(remaster){
           txn.remaster_cnt ++ ;
-          VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
+          VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
         } else {
           txn.migrate_cnt ++ ;
         }

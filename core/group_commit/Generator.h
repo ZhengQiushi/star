@@ -84,6 +84,16 @@ public:
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
 
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+
+      int skew_factor = random.uniform_dist(1, 100);
+      if (context.skew_factor >= skew_factor) {
+        // 0 >= 50 
+        partition_id = 0;
+      } else {
+        // 0 < 50
+        //正常
+      }
+      
       std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
                                   partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);

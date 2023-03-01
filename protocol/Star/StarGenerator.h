@@ -81,6 +81,16 @@ public:
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
 
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+
+      int skew_factor = random.uniform_dist(1, 100);
+      if (context.skew_factor >= skew_factor) {
+        // 0 >= 50 
+        partition_id = 0;
+      } else {
+        // 0 < 50
+        //正常
+      }
+
       std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
                                   partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -251,8 +261,8 @@ public:
 
       LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
+                           .count() * 1.0 / 1000 / 1000;
+      // test = std::chrono::steady_clock::now();
 
       n_complete_workers.fetch_add(1);
       VLOG(DEBUG_V) << "Generator " << id << " finish C_PHASE";
@@ -273,8 +283,8 @@ public:
 
       LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
+                           .count() * 1.0 / 1000 / 1000;
+      // test = std::chrono::steady_clock::now();
 
       flush_async_messages();
 
@@ -285,11 +295,11 @@ public:
       }
 
       VLOG_IF(DEBUG_V, id==0) << "wait back "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
+              << std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - test)
-                     .count()
+                     .count() * 1.0 / 1000 / 1000
               << " milliseconds.";
-      test = std::chrono::steady_clock::now();
+      // test = std::chrono::steady_clock::now();
 
 
       // n_complete_workers has been cleared

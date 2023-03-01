@@ -23,7 +23,7 @@ namespace group_commit {
 #define MAX_COORDINATOR_NUM 20
 
 
-template <class Workload, class Protocol> class LionMetisGenerator : public Worker {
+template <class Workload, class Protocol> class MyClayMetisGenerator : public Worker {
 public:
   using WorkloadType = Workload;
   using ProtocolType = Protocol;
@@ -39,7 +39,7 @@ public:
 
   int pin_thread_id_ = 3;
 
-  LionMetisGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  MyClayMetisGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers)
@@ -57,9 +57,6 @@ public:
     for (auto i = 0u; i <= context.coordinator_num; i++) {
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
-
-      // async_messages.emplace_back(std::make_unique<Message>());
-      // init_message(async_messages[i].get(), i);
 
       metis_async_messages.emplace_back(std::make_unique<Message>());
       init_message(metis_async_messages[i].get(), i);
@@ -146,162 +143,49 @@ public:
    }
 
 
-  int select_best_node(simpleTransaction* t) {
+  // int select_best_node(simpleTransaction* t) {
     
-    int max_node = -1;
-    if(t->is_distributed){
-      std::unordered_map<int, int> result;
-      result = txn_nodes_involved(t, max_node, true);
-    } else {
-      max_node = t->partition_id % context.coordinator_num;
-    }
+  //   int max_node = -1;
+  //   if(t->is_distributed){
+  //     std::unordered_map<int, int> result;
+  //     result = txn_nodes_involved(t, max_node, true);
+  //   } else {
+  //     max_node = t->partition_id % context.coordinator_num;
+  //   }
 
-    DCHECK(max_node != -1);
-    return max_node;
-  }
+  //   DCHECK(max_node != -1);
+  //   return max_node;
+  // }
   
-  struct cmp{
-    bool operator()(simpleTransaction* a, 
-                    simpleTransaction* b){
-      return a->execution_cost < b->execution_cost;
-    }
-  };
+  // struct cmp{
+  //   bool operator()(simpleTransaction* a, 
+  //                   simpleTransaction* b){
+  //     return a->execution_cost < b->execution_cost;
+  //   }
+  // };
 
-  long long cal_load_distribute(int aver_val, 
-                          std::unordered_map<int, long long>& busy_){
-    long long cur_val = 0;
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
-      // 
-      cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
-    }
-    cur_val /= context.coordinator_num;
+  // long long cal_load_distribute(int aver_val, 
+  //                         std::unordered_map<int, long long>& busy_){
+  //   long long cur_val = 0;
+  //   for(int i = 0 ; i < context.coordinator_num; i ++ ){
+  //     // 
+  //     cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
+  //   }
+  //   cur_val /= context.coordinator_num;
 
-    return cur_val;
-  }
+  //   return cur_val;
+  // }
   
-  long long cal_load_average(std::unordered_map<int, long long>& busy_){
-    long long cur_val = 0;
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
-      // 
-      cur_val += busy_[i];
-    }
-    cur_val /= context.coordinator_num;
+  // long long cal_load_average(std::unordered_map<int, long long>& busy_){
+  //   long long cur_val = 0;
+  //   for(int i = 0 ; i < context.coordinator_num; i ++ ){
+  //     // 
+  //     cur_val += busy_[i];
+  //   }
+  //   cur_val /= context.coordinator_num;
 
-    return cur_val;
-  }
-
-  void scheduler_transactions(
-      std::vector<simpleTransaction*>& metis_txns,
-      std::vector<int>& router_send_txn_cnt){    
-        
-    std::vector<simpleTransaction*> txns;
-    std::priority_queue<simpleTransaction*, 
-                        std::vector<simpleTransaction*>, 
-                        cmp> q_;
-
-    std::unordered_map<int, long long> busy_;
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
-      busy_[i] = 0;
-    }
-    
-
-    // find minimal cost routing 
-    for(size_t i = 0; i < metis_txns.size(); i ++ ){
-      simpleTransaction* txn = metis_txns[i];
-
-      // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
-      if(txn->is_distributed){ 
-        // static-distribute
-        // std::unordered_map<int, int> result;
-        txn_nodes_involved(txn, true);
-      } else {
-        DCHECK(txn->is_distributed == 0);
-        txn->destination_coordinator = txn->partition_id % context.coordinator_num;
-      } 
-
-      txns.push_back(txn);
-      q_.push(txn);
-
-      busy_[txn->destination_coordinator] += txn->access_frequency;
-    }
-
-    // int cur_thread_transaction_num = metis_txns.size();
-    
-    long long aver_val = cal_load_average(busy_);//; cur_thread_transaction_num / context.coordinator_num;
-
-    // LOG(INFO) << "BEFORE";
-    // for(int i = 0; i < txns.size(); i ++ ){
-    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
-    // }
-    // 100 * 110 workload * average 
-    int weight = 30000;
-    long long threshold = weight / (context.coordinator_num / 2) * weight / (context.coordinator_num / 2); // 2200 - 2800
-
-    long long cur_val = cal_load_distribute(aver_val, busy_);
-
-    if(cur_val > threshold){
-      // start tradeoff for balancing
-      int batch_num = 50; // 
-
-      bool is_ok = true;
-      do {
-        
-        for(int i = 0 ; i < batch_num && q_.size() > 0; i ++ ){
-
-          std::unordered_map<int, int> overload_node;
-          std::unordered_map<int, int> idle_node;
-
-          for(int j = 0 ; j < context.coordinator_num; j ++ ){
-            if((long long) (busy_[j] - aver_val) * (busy_[j] - aver_val) > threshold){
-              if((busy_[j] - aver_val) > 0){
-                overload_node[j] = busy_[j] - aver_val;
-              } else {
-                idle_node[j] = aver_val - busy_[j];
-              } 
-            }
-          }
-          if(overload_node.size() == 0 || idle_node.size() == 0){
-            is_ok = false;
-            break;
-          }
-          simpleTransaction* t = q_.top();
-          q_.pop();
-
-          if(overload_node.count(t->destination_coordinator)){
-            for(auto& idle: idle_node){
-              // 
-              busy_[t->destination_coordinator] -= t->access_frequency;
-              overload_node[t->destination_coordinator] -= t->access_frequency;
-              if(overload_node[t->destination_coordinator] <= 0){
-                overload_node.erase(t->destination_coordinator);
-              }
-
-              t->destination_coordinator = idle.first;
-              busy_[t->destination_coordinator] += t->access_frequency;
-              idle.second -= t->access_frequency;
-              if(idle.second <= 0){
-                idle_node.erase(idle.first);
-              }
-              break;
-            }
-          }
-
-          if(overload_node.size() == 0 || idle_node.size() == 0){
-            break;
-          }
-
-        }
-        
-      } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
-    }
-
-
-    // LOG(INFO) << "NEW";
-    // for(int i = 0; i < txns.size(); i ++ ){
-    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
-    // }
-  }
-
+  //   return cur_val;
+  // }
 
   int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
@@ -340,6 +224,7 @@ public:
       
       auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
       metis_new_txn->access_frequency = cur_move->access_frequency;
+      metis_new_txn->destination_coordinator = cur_move->dest_coordinator_id;
 
       for(auto move_record: cur_move->records){
           metis_new_txn->keys.push_back(move_record.record_key_);
@@ -349,29 +234,9 @@ public:
 
       metis_txns.push_back(metis_new_txn);
       cur_moves.push_back(cur_move);
-      // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
-
-      // auto new_txn = new_transmit_generate(transmit_idx ++ );
-      // for(auto move_record: cur_move->records){
-      //     new_txn->keys.push_back(move_record.record_key_);
-      //     new_txn->update.push_back(true);
-      //     new_txn->destination_coordinator = coordinator_id_dst;
-      //     new_txn->metis_idx_ = metis_new_txn->idx_;
-
-      //     if(new_txn->keys.size() > transmit_block_size){
-      //       // added to the router
-      //       transmit_requests.push_back(new_txn);
-      //       new_txn = new_transmit_generate(transmit_idx ++ );
-      //     }
-      // }
-
-      // if(new_txn->keys.size() > 0){
-      //   transmit_requests.push_back(new_txn); // 
-      // }
     }
 
-    scheduler_transactions(metis_txns, router_send_txn_cnt);
-
+    // scheduler_transactions(metis_txns, router_send_txn_cnt);
 
     // pull request
     std::vector<simpleTransaction*> transmit_requests;
@@ -400,14 +265,30 @@ public:
 
 
     my_clay->move_plans.clear();
-
     
+    // 
+    auto router_request = [&](simpleTransaction* txn) {
+      size_t coordinator_id_dst = txn->destination_coordinator;
+      // router transaction to coordinators
+      messages_mutex[coordinator_id_dst]->lock();
+      size_t router_size = ControlMessageFactory::new_router_transaction_message(
+          *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
+          context.coordinator_id);
+      flush_message(metis_async_messages, coordinator_id_dst);
+      messages_mutex[coordinator_id_dst]->unlock();
+
+      router_send_txn_cnt[coordinator_id_dst]++;
+      n_network_size.fetch_add(router_size);
+      router_transactions_send.fetch_add(1);
+    };
+
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
       // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
-      outfile_excel << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      outfile_excel << "Send MyClay Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
-      metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
+      router_request(transmit_requests[i]);
+      // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
       // }
@@ -418,36 +299,22 @@ public:
   }
 
 
-  // void router_request(std::vector<int>& router_send_txn_cnt, size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
+  // void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
   //   // router transaction to coordinators
+  //   uint64_t coordinator_id_dst = txn->destination_coordinator;
   //   messages_mutex[coordinator_id_dst]->lock();
-  //   size_t router_size = ControlMessageFactory::new_router_transaction_message(
-  //       *async_messages[coordinator_id_dst].get(), 0, *txn, 
+  //   size_t router_size = LionMessageFactory::metis_migration_transaction_message(
+  //       *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
   //       context.coordinator_id);
-  //   flush_message(async_messages, coordinator_id_dst);
+  //   flush_message(metis_async_messages, coordinator_id_dst);
   //   messages_mutex[coordinator_id_dst]->unlock();
 
-  //   router_send_txn_cnt[coordinator_id_dst]++;
   //   n_network_size.fetch_add(router_size);
-  //   router_transactions_send.fetch_add(1);
   // };
-
-  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
-    // router transaction to coordinators
-    uint64_t coordinator_id_dst = txn->destination_coordinator;
-    messages_mutex[coordinator_id_dst]->lock();
-    size_t router_size = LionMessageFactory::metis_migration_transaction_message(
-        *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
-        context.coordinator_id);
-    flush_message(metis_async_messages, coordinator_id_dst);
-    messages_mutex[coordinator_id_dst]->unlock();
-
-    n_network_size.fetch_add(router_size);
-  };
 
   void start() override {
 
-    LOG(INFO) << "LionMetisGenerator " << id << " starts.";
+    LOG(INFO) << "MyClayMetisGenerator " << id << " starts.";
     start_time = std::chrono::steady_clock::now();
     workload.start_time = start_time;
     
@@ -464,22 +331,11 @@ public:
 
     std::unordered_map<int, std::string> map_;
 
-    if(context.repartition_strategy == "lion"){
-      map_[0] = context.data_src_path_dir + "resultss_partition_30_60.xls";
-      map_[1] = context.data_src_path_dir + "resultss_partition_60_90.xls";
-      map_[2] = context.data_src_path_dir + "resultss_partition_90_120.xls";
-      map_[3] = context.data_src_path_dir + "resultss_partition_0_30.xls";
-    } else if(context.repartition_strategy == "clay"){
-      map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls";
-      map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls";
-      map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls";
-      map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls";
-    } else if(context.repartition_strategy == "metis"){
-      map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
-      map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
-      map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
-      map_[3] = context.data_src_path_dir + "metis_resultss_partition_90_120.xls";
-    }
+    map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls";
+    map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls";
+    map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls";
+    map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls";
+
     // transmiter: do the transfer for the clay and whole system
     // std::vector<std::thread> transmiter;
     // transmiter.emplace_back([&]() {
@@ -494,7 +350,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 10 * 1000;
+        int start_offset = 10 * 1000; // debug
         // 
         int cur_workload = 0;
 
@@ -545,7 +401,7 @@ public:
           std::string file_name_ = map_[cur_workload];
 
           LOG(INFO) << "start read from file";
-          my_clay->metis_partiion_read_from_file(file_name_.c_str());
+          my_clay->clay_partiion_read_from_file(file_name_.c_str());
           LOG(INFO) << "read from file done";
 
           latency = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -730,7 +586,7 @@ public:
     //   auto test = std::chrono::steady_clock::now();
     //   VLOG(DEBUG_V) << "Generator " << id << " ready to process_request";
 
-    //   // thread to router the transaction generated by LionMetisGenerator
+    //   // thread to router the transaction generated by MyClayMetisGenerator
     //   // std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];
     //   // for(int i = 0 ; i < MAX_COORDINATOR_NUM; i ++ ){
     //   //   coordinator_send[i] = 0;
@@ -940,6 +796,57 @@ public:
     return message;
   }
 
+  // std::size_t process_request() {
+
+  //   std::size_t size = 0;
+
+  //   while (!in_queue.empty()) {
+  //     std::unique_ptr<Message> message(in_queue.front());
+  //     bool ok = in_queue.pop();
+  //     CHECK(ok);
+
+  //     for (auto it = message->begin(); it != message->end(); it++) {
+
+  //       MessagePiece messagePiece = *it;
+  //       auto type = messagePiece.get_message_type();
+  //       DCHECK(type < messageHandlers.size());
+  //       ITable *table = db.find_table(messagePiece.get_table_id(),
+  //                                     messagePiece.get_partition_id());
+
+  //       if(type < controlMessageHandlers.size()){
+  //         // transaction router from MyClayMetisGenerator
+  //         controlMessageHandlers[type](
+  //           messagePiece,
+  //           *sync_messages[message->get_source_node_id()], db,
+  //           &router_transactions_queue,
+  //           &router_stop_queue
+  //         );
+  //       } else if(type < messageHandlers.size()){
+  //         // transaction from LionExecutor
+  //         messageHandlers[type](messagePiece,
+  //                               *sync_messages[message->get_source_node_id()], 
+  //                               sync_messages,
+  //                               db, context, partitioner.get(),
+  //                               transaction.get(), 
+  //                               &router_transactions_queue,
+  //                               &migration_transactions_queue);
+  //       }
+  //       message_stats[type]++;
+  //       message_sizes[type] += messagePiece.get_message_length();
+  //     }
+
+  //     size += message->get_message_count();
+  //     flush_sync_messages();
+  //   }
+  //   return size;
+  // }
+
+  // void setupHandlers(TransactionType &txn){
+  //   txn.remote_request_handler = [this]() { return this->process_request(); };
+  //   txn.message_flusher = [this]() { this->flush_sync_messages(); };
+  // };
+
+
   std::size_t process_request() {
 
     std::size_t size = 0;
@@ -958,23 +865,23 @@ public:
                                       messagePiece.get_partition_id());
 
         if(type < controlMessageHandlers.size()){
-          // transaction router from LionMetisGenerator
+          // transaction router from Generator
           controlMessageHandlers[type](
             messagePiece,
             *sync_messages[message->get_source_node_id()], db,
             &router_transactions_queue,
             &router_stop_queue
           );
-        } else if(type < messageHandlers.size()){
-          // transaction from LionExecutor
+        } else {
+          // messageHandlers[type](messagePiece,
+          //                     *sync_messages[message->get_source_node_id()], 
+          //                     *table, transaction.get());
           messageHandlers[type](messagePiece,
-                                *sync_messages[message->get_source_node_id()], 
-                                sync_messages,
-                                db, context, partitioner.get(),
-                                transaction.get(), 
-                                &router_transactions_queue,
-                                &migration_transactions_queue);
+                              *sync_messages[message->get_source_node_id()], 
+                              db, context, partitioner.get(),
+                              transaction.get());
         }
+
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
       }
@@ -1076,12 +983,19 @@ protected:
 
   std::deque<int> router_stop_queue;
 
-  std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
-                                 DatabaseType &, const ContextType &, Partitioner *, // add partitioner
-                                 TransactionType *, 
-                                 std::deque<simpleTransaction>*,
-                                 group_commit::ShareQueue<simpleTransaction>*)>>
-      messageHandlers;
+  // std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
+  //                                DatabaseType &, const ContextType &, Partitioner *, // add partitioner
+  //                                TransactionType *, 
+  //                                std::deque<simpleTransaction>*,
+  //                                group_commit::ShareQueue<simpleTransaction>*)>>
+  //     messageHandlers;
+
+  // std::vector<
+  //     std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
+  //     messageHandlers;
+  std::vector<
+      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
+      messageHandlers;      
 
   std::vector<
     std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>

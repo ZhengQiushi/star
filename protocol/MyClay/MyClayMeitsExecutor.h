@@ -17,7 +17,7 @@
 #include <chrono>
 
 namespace star {
-template <class Workload> class MyClayExecutor : public Worker {
+template <class Workload> class MyClayMetisExecutor : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
@@ -32,7 +32,7 @@ public:
   using MessageFactoryType = MyClayMessageFactory;
   using MessageHandlerType = MyClayMessageHandler<DatabaseType>;
 
-  MyClayExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  MyClayMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers)
@@ -68,10 +68,9 @@ public:
   void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
                                 std::deque<simpleTransaction>& router_transactions_queue_,
                                 std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_, 
-                                std::deque<std::unique_ptr<TransactionType>>& t_transactions_queue_,
-                                int router_recv_txn_num){
+                                std::deque<std::unique_ptr<TransactionType>>& t_transactions_queue_){
     
-    while(!router_transactions_queue_.empty() && router_recv_txn_num > 0){
+    while(!router_transactions_queue_.empty()){
       simpleTransaction simple_txn = router_transactions_queue_.front();
       router_transactions_queue_.pop_front();
       
@@ -83,7 +82,7 @@ public:
       } else {
         r_transactions_queue_.push_back(std::move(p));
       }
-      router_recv_txn_num -- ;
+      // router_recv_txn_num -- ;
     }
   }
 
@@ -139,7 +138,7 @@ public:
             // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
           }
         } else {
-          LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
+          // LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
         }
 
         if (result == TransactionResult::READY_TO_COMMIT) {
@@ -150,8 +149,6 @@ public:
           if (commit) {
             n_commit.fetch_add(1);
             retry_transaction = false;
-
-            q.push(std::move(transaction));
           } else {
             if (transaction->abort_lock) {
               n_abort_lock.fetch_add(1);
@@ -186,134 +183,65 @@ public:
     LOG(INFO) << "single_txn_num: " << single_txn_num << " " << " cross_txn_num: " << cross_txn_num;
   }
 
-  bool is_router_stopped(int& router_recv_txn_num){
-    bool ret = false;
-    if(router_stop_queue.size() < context.coordinator_num){
-      ret = false;
-    } else {
-      //
-      int i = context.coordinator_num;
-      while(i > 0){
-        i --;
-        DCHECK(router_stop_queue.size() > 0);
-        int recv_txn_num = router_stop_queue.front();
-        router_stop_queue.pop_front();
-        router_recv_txn_num += recv_txn_num;
-        VLOG(DEBUG_V14) << " RECV : " << recv_txn_num << " cur total : " << router_recv_txn_num;
-      }
-      ret = true;
-    }
-    return ret;
-  }
+  // bool is_router_stopped(int& router_recv_txn_num){
+  //   bool ret = false;
+  //   if(router_stop_queue.size() < context.coordinator_num){
+  //     ret = false;
+  //   } else {
+  //     //
+  //     int i = context.coordinator_num;
+  //     while(i > 0){
+  //       i --;
+  //       DCHECK(router_stop_queue.size() > 0);
+  //       int recv_txn_num = router_stop_queue.front();
+  //       router_stop_queue.pop_front();
+  //       router_recv_txn_num += recv_txn_num;
+  //       VLOG(DEBUG_V14) << " RECV : " << recv_txn_num << " cur total : " << router_recv_txn_num;
+  //     }
+  //     ret = true;
+  //   }
+  //   return ret;
+  // }
 
-
-  void commit_transactions() {
-    while (!q.empty()) {
-      auto &ptr = q.front();
-      auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
-                         std::chrono::steady_clock::now() - ptr->startTime)
-                         .count();
-      percentile.add(latency);
-      q.pop();
-    }
-  }
 
 
   void start() override {
 
     LOG(INFO) << "Executor " << id << " starts.";
 
+    // C-Phase to S-Phase, to C-phase ...
     StorageType storage;
-    uint64_t last_seed = 0;
+    int times = 0;
+    ExecutorStatus status;
 
-    // transaction only commit in a single group
-    std::size_t count = 0;
-    std::size_t becth_milli_window = 10; // milisecond
-    
-    for (;;) {
-      auto begin = std::chrono::steady_clock::now();
-      ExecutorStatus status;
-      do {
-        status = static_cast<ExecutorStatus>(worker_status.load());
-
-        if (status == ExecutorStatus::EXIT) {
-          LOG(INFO) << "Executor " << id << " exits.";
-          return;
-        }
-      } while (status != ExecutorStatus::START);
-
-      commit_transactions();
-
-      n_started_workers.fetch_add(1);
-      
+    // simpleTransaction t;
+    while(status != ExecutorStatus::EXIT){
+      status = static_cast<ExecutorStatus>(worker_status.load());
+      // process_metis_request();
       process_request();
 
       auto now = std::chrono::steady_clock::now();
 
-      int router_recv_txn_num = 0;
-      LOG(INFO) << " wait for stop";
-      while(!is_router_stopped(router_recv_txn_num)){
-        process_request();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
-
       unpack_route_transaction(workload, storage, router_transactions_queue, 
-                               r_transactions_queue, t_transactions_queue, router_recv_txn_num); // 
+                               r_transactions_queue, t_transactions_queue); // 
 
       size_t r_size = r_transactions_queue.size() + t_transactions_queue.size();
-
+      if(r_size <= 0) {
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      }
       VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size() << " " << t_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
+                     std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
       
-      run_transaction(context, partitioner.get(), r_transactions_queue); // 
-      // run_transaction(context, partitioner.get(), t_transactions_queue); // 
-      // while(!t_transactions_queue.empty()){
-      //   t_transactions_queue.pop_front();
-      // }
 
-      VLOG_IF(DEBUG_V, id==0) << "run_transaction "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-
-      for(size_t r = 0; r < r_size; r ++ ){
-        // 发回原地...
-        size_t generator_id = context.coordinator_num;
-        // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-        ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
-        flush_messages(async_messages);
-      }
-
-      status = static_cast<ExecutorStatus>(worker_status.load());
-
-      flush_async_messages();
-
-      n_complete_workers.fetch_add(1);
-
-
-      VLOG_IF(DEBUG_V, id==0) << "whole batch "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-
-      // once all workers are stop, we need to process the replication
-      // requests
-
-      while (static_cast<ExecutorStatus>(worker_status.load()) !=
-             ExecutorStatus::CLEANUP) {
-        process_request();
-      }
-
-      process_request();
-      n_complete_workers.fetch_add(1);
+      // run_metis_transaction(ExecutorStatus::C_PHASE);
+      run_transaction(context, partitioner.get(), t_transactions_queue); // 
     }
+    LOG(INFO) << "transmiter " << " exits.";
   }
 
   void onExit() override {
@@ -454,6 +382,15 @@ public:
       } else {
         remaster = table->contains(key); // current coordniator
         VLOG(DEBUG_V14) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+
+        if(txn.is_transmit_requests()){
+          if(remaster){
+            txn.remaster_cnt ++ ;
+          } else {
+            txn.migrate_cnt ++ ;
+          }
+        }
+
       }
 
       if (local_index_read || local_read) {
@@ -556,8 +493,5 @@ protected:
 
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *> in_queue, out_queue;
-
-  std::queue<std::unique_ptr<TransactionType>> q;
-  Percentile<int64_t> percentile;
 };
 } // namespace star

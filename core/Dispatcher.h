@@ -23,12 +23,14 @@ class IncomingDispatcher {
 
 public:
   IncomingDispatcher(std::size_t id, std::size_t group_id,
-                     std::size_t io_thread_num, std::vector<Socket> &sockets,
+                     std::size_t io_thread_num, 
+                     std::vector<std::string> &peers_ip, 
+                     std::vector<Socket> &sockets,
                      const std::vector<std::shared_ptr<Worker>> &workers,
                      LockfreeQueue<Message *> &coordinator_queue,
                      std::atomic<bool> &stopFlag)
       : id(id), group_id(group_id), io_thread_num(io_thread_num),
-        network_size(0), workers(workers), coordinator_queue(coordinator_queue),
+        network_size(0), peers_ip(peers_ip), workers(workers), coordinator_queue(coordinator_queue),
         stopFlag(stopFlag) {
 
     for (auto i = 0u; i < sockets.size(); i++) {
@@ -117,6 +119,7 @@ private:
   std::size_t io_thread_num;
   std::size_t network_size;
   std::vector<BufferedReader> buffered_readers;
+  std::vector<std::string> peers_ip;
   std::vector<std::shared_ptr<Worker>> workers;
   LockfreeQueue<Message *> &coordinator_queue;
   std::atomic<bool> &stopFlag;
@@ -125,12 +128,14 @@ private:
 class OutgoingDispatcher {
 public:
   OutgoingDispatcher(std::size_t id, std::size_t group_id,
-                     std::size_t io_thread_num, std::vector<Socket> &sockets,
+                     std::size_t io_thread_num, 
+                     std::vector<std::string> &peers_ip,
+                     std::vector<Socket> &sockets,
                      const std::vector<std::shared_ptr<Worker>> &workers,
                      LockfreeQueue<Message *> &coordinator_queue,
                      std::atomic<bool> &stopFlag)
       : id(id), group_id(group_id), io_thread_num(io_thread_num),
-        network_size(0), sockets(sockets), workers(workers),
+        network_size(0), peers_ip(peers_ip), sockets(sockets), workers(workers),
         coordinator_queue(coordinator_queue), stopFlag(stopFlag) {}
 
   void start() {
@@ -168,10 +173,16 @@ public:
   }
 
   void sendMessage(Message *message) {
+    auto src_node_id = message->get_source_node_id();
     auto dest_node_id = message->get_dest_node_id();
     DCHECK(dest_node_id >= 0 && dest_node_id < sockets.size() &&
            dest_node_id != id);
 
+
+    if(peers_ip[src_node_id] == peers_ip[dest_node_id]){
+      // same node, simulate latency
+      std::this_thread::sleep_for(std::chrono::nanoseconds(5));
+    }
 
     MessagePiece messagePiece = *(message->begin());
     auto message_type = static_cast<int>(messagePiece.get_message_type());
@@ -228,6 +239,7 @@ private:
   std::size_t group_id;
   std::size_t io_thread_num;
   std::size_t network_size;
+  std::vector<std::string> peers_ip;
   std::vector<Socket> &sockets;
   std::vector<std::shared_ptr<Worker>> workers;
   LockfreeQueue<Message *> &coordinator_queue;

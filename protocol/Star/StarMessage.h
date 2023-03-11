@@ -192,7 +192,7 @@ public:
                                                       Message &responseMessage,
                                                       Database &db,
                                                       Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue) {
+                                      ShareQueue<simpleTransaction>* router_txn_queue) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::ASYNC_VALUE_REPLICATION_REQUEST));
@@ -251,7 +251,7 @@ public:
                                                      Message &responseMessage,
                                                      Database &db,
                                                      Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue) {
+                                      ShareQueue<simpleTransaction>* router_txn_queue) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::SYNC_VALUE_REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
@@ -320,7 +320,7 @@ public:
                                                       Message &responseMessage,
                                                       Database &db,
                                                       Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue) {
+                                      ShareQueue<simpleTransaction>* router_txn_queue) {
     return ;
     // DCHECK(false);
     // never come in
@@ -346,7 +346,7 @@ public:
                                                     Message &responseMessage,
                                                     Database &db,
                                                     Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue) {
+                                      ShareQueue<simpleTransaction>* router_txn_queue) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::OPERATION_REPLICATION_REQUEST));
@@ -370,7 +370,7 @@ public:
   static void router_transaction_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
                                       Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue
+                                      ShareQueue<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::ROUTER_TRANSACTION_REQUEST));
@@ -408,13 +408,15 @@ public:
 
     new_router_txn.op = static_cast<RouterTxnOps>(op);
     new_router_txn.size = inputPiece.get_message_length();
-    router_txn_queue->push_back(new_router_txn);
+    
+    bool success = router_txn_queue->push_no_wait(new_router_txn);
+    DCHECK(success == true);
 
   }
   static void router_transaction_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
                                       Transaction *txn,
-                                      std::deque<simpleTransaction>* router_txn_queue
+                                      ShareQueue<simpleTransaction>* router_txn_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(StarMessage::ROUTER_TRANSACTION_RESPONSE));
@@ -422,10 +424,10 @@ public:
 
 }
   static std::vector<
-      std::function<void(MessagePiece, Message &, Database &, Transaction *, std::deque<simpleTransaction>* )>>
+      std::function<void(MessagePiece, Message &, Database &, Transaction *, ShareQueue<simpleTransaction>* )>>
   get_message_handlers() {
     std::vector<
-        std::function<void(MessagePiece, Message &, Database &, Transaction *, std::deque<simpleTransaction>* )>>
+        std::function<void(MessagePiece, Message &, Database &, Transaction *, ShareQueue<simpleTransaction>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(StarMessageHandler::async_value_replication_request_handler);

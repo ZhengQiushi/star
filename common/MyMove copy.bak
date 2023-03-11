@@ -1525,9 +1525,9 @@ namespace star
         DatabaseType& db;
         std::atomic<uint32_t> &worker_status;
         // std::vector<myMove<WorkloadType>> moves_last_round;
-        group_commit::ShareQueue<std::shared_ptr<simpleTransaction>, 4096> transactions_queue;
+        ShareQueue<std::shared_ptr<simpleTransaction>, 4096> transactions_queue;
     public:
-        group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>> move_plans;
+        ShareQueue<std::shared_ptr<myMove<WorkloadType>>> move_plans;
         
         std::atomic<bool> movable_flag;
 

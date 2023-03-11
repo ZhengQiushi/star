@@ -28,8 +28,6 @@ namespace star {
 class Coordinator {
 public:
 
-
-
   template <class Database, class Context>
   Coordinator(std::size_t id, Database &db, const Context &context)
       : id(id), coordinator_num(context.peers.size()), peers(context.peers),
@@ -53,6 +51,18 @@ public:
       inSockets[i].resize(peers.size());
       outSockets[i].resize(peers.size());
     }
+    
+    auto getAddressPort = [](const std::string &addressPort) {
+      std::vector<std::string> result;
+      boost::algorithm::split(result, addressPort, boost::is_any_of(":"));
+      return result;
+    };
+
+    for (auto i = 0u; i < context.peers.size(); i++) {
+      std::vector<std::string> addressPort = getAddressPort(peers[i]);
+      peers_ip.push_back(addressPort[0]);
+    }
+
   }
 
   ~Coordinator() = default;
@@ -70,10 +80,10 @@ public:
     for (auto i = 0u; i < context.io_thread_num; i++) {
 
       iDispatchers[i] = std::make_unique<IncomingDispatcher>(
-          id, i, context.io_thread_num, inSockets[i], workers, in_queue,
+          id, i, context.io_thread_num, peers_ip, inSockets[i], workers, in_queue,
           ioStopFlag);
       oDispatchers[i] = std::make_unique<OutgoingDispatcher>(
-          id, i, context.io_thread_num, outSockets[i], workers, out_queue,
+          id, i, context.io_thread_num, peers_ip, outSockets[i], workers, out_queue,
           ioStopFlag);
 
       iDispatcherThreads.emplace_back(&IncomingDispatcher::start,
@@ -118,11 +128,11 @@ public:
 
     std::ofstream outfile_excel;
     char output[256];
-    sprintf(output, "/home/star/data/commits_%d.xls", id);
+    sprintf(output, "/home/star/data/commits_%d.xls", (int)id);
     outfile_excel.open(output, std::ios::trunc); // ios::trunc
 
     outfile_excel << "n_commit" << "\t" << "metis_commit" << "\t" << "n_remaster" << "\t" << "n_migrate" << "\t" 
-                  << "metis_remaster" << "\t" << "metis_migrate" << "\t" << "n_network_size" << "\t" << "abort" << "\n";
+                  << "metis_remaster" << "\t" << "metis_migrate" << "\t" << "n_network_size" << "\t" << "metis_n_network_size" << "\t" << "abort" << "\n";
 
     do {
       LOG(INFO) << "SLEEP : " << std::to_string(context.sample_time_interval);
@@ -133,7 +143,8 @@ public:
                metis_remaster = 0, metis_migrate = 0, // 
                n_abort_no_retry = 0, n_abort_lock = 0,
                n_abort_read_validation = 0, n_local = 0,
-               n_si_in_serializable = 0, n_network_size = 0;
+               n_si_in_serializable = 0, n_network_size = 0, 
+               metis_n_network_size = 0;
 
       // switch type in every 10 second;
       int cur_workload_type = std::chrono::duration_cast<std::chrono::seconds>(
@@ -150,6 +161,9 @@ public:
 
           metis_migrate += workers[i]->n_migrate.load();
           workers[i]->n_migrate.store(0);
+
+          metis_n_network_size += workers[i]->n_network_size.load();
+          workers[i]->n_network_size.store(0);
           continue;
         }
         n_commit += workers[i]->n_commit.load();
@@ -183,7 +197,7 @@ public:
       }
 
       outfile_excel << n_commit << "\t" << metis_commit << "\t" << n_remaster << "\t" << n_migrate << "\t" 
-                  << metis_remaster << "\t" << metis_migrate << "\t" << 1.0 * n_network_size / n_commit << "\t" << abort << "\n";
+                  << metis_remaster << "\t" << metis_migrate << "\t" << 1.0 * n_network_size / n_commit << "\t" <<  1.0 * metis_n_network_size / metis_commit << "\t" << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\n";
 
       LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit 
                 << " metis_commit: " << metis_commit
@@ -196,6 +210,8 @@ public:
                 << n_abort_read_validation
                 << "), network size: " << n_network_size
                 << ", avg network size: " << 1.0 * n_network_size / n_commit
+                << ", metis_n_network_size : " << metis_n_network_size 
+                << ", avg metis_n_network_size : " << 1.0 * metis_n_network_size / metis_commit
                 << ", si_in_serializable: " << n_si_in_serializable << " "
                 << 100.0 * n_si_in_serializable / n_commit << " %"
                 << ", local: " << 100.0 * n_local / n_commit << " %";
@@ -426,6 +442,8 @@ private:
 
   std::size_t id, coordinator_num;
   const std::vector<std::string> &peers; // ip and port ?
+  std::vector<std::string> peers_ip; // ip and port ?
+
   const Context &context;
   std::vector<std::vector<Socket>> inSockets, outSockets;
   std::atomic<bool> workerStopFlag, ioStopFlag;

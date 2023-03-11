@@ -74,6 +74,19 @@ public:
     generator_core_id.resize(context.coordinator_num);
 
     generator_num = 1;
+
+    generator_core_id.resize(context.coordinator_num);
+    sender_core_id.resize(context.coordinator_num);
+
+    for(int i = 0 ; i < generator_num; i ++ ){
+      generator_core_id[i] = pin_thread_id_ ++ ;
+    }
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      sender_core_id[i] = pin_thread_id_ ++ ;
+    }
+
+    txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
+    
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage){
@@ -84,7 +97,7 @@ public:
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
-      int skew_factor = random.uniform_dist(1, 100);
+      size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         partition_id = 0;
@@ -159,21 +172,21 @@ public:
      return from_nodes_id;
    }
 
-  int select_best_node(simpleTransaction* t) {
+  // int select_best_node(simpleTransaction* t) {
     
-    int max_node = -1;
-    // if(t->is_distributed){
-      std::unordered_map<int, int> result;
-      result = txn_nodes_involved(t, max_node, true);
-    // } else {
-    //   max_node = t->partition_id % context.coordinator_num;
-    // }
+  //   int max_node = -1;
+  //   // if(t->is_distributed){
+  //     std::unordered_map<int, int> result;
+  //     result = txn_nodes_involved(t, max_node, true);
+  //   // } else {
+  //   //   max_node = t->partition_id % context.coordinator_num;
+  //   // }
 
-    DCHECK(max_node != -1);
-    return max_node;
-  }
+  //   DCHECK(max_node != -1);
+  //   return max_node;
+  // }
   
-  // int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+  // int router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
   //   // transmit_request_queue
   //   auto new_transmit_generate = [&](int n){
   //     simpleTransaction* s = new simpleTransaction();
@@ -278,6 +291,94 @@ public:
 
   int pin_thread_id_ = 3;
 
+  void txn_nodes_involved(simpleTransaction* t, bool is_dynamic) {
+    
+      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
+      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
+      // std::unordered_map<int, int> nodes_cost;              // cost on each node
+      std::vector<int> coordi_nums_;
+
+      
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto query_keys = t->keys;
+
+
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        size_t secondary_c_ids;
+        if(is_dynamic){
+          // look-up the dynamic router to find-out where
+          auto router_table = db.find_router_table(ycsbTableID);// , master_coordinator_id);
+          auto tab = static_cast<RouterValue*>(router_table->search_value((void*) &query_keys[j]));
+
+          cur_c_id = tab->get_dynamic_coordinator_id();
+          secondary_c_ids = tab->get_secondary_coordinator_id();
+        } else {
+          // cal the partition to figure out the coordinator-id
+          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        }
+        if(!from_nodes_id.count(cur_c_id)){
+          from_nodes_id[cur_c_id] = 1;
+          // 
+          coordi_nums_.push_back(cur_c_id);
+        } else {
+          from_nodes_id[cur_c_id] += 1;
+        }
+
+        // key on which node
+        for(size_t i = 0; i <= context.coordinator_num; i ++ ){
+            if(secondary_c_ids & 1 && i != cur_c_id){
+                from_nodes_id_secondary[i] += 1;
+            }
+            secondary_c_ids = secondary_c_ids >> 1;
+        }
+      }
+
+      int max_cnt = INT_MIN;
+      int max_node = -1;
+
+      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
+        int cur_score = 0;
+        size_t cnt_master = from_nodes_id[cur_c_id];
+        size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
+        if(cnt_master == query_keys.size()){
+          cur_score = 100 * (int)query_keys.size();
+        // } else if(cnt_secondary + cnt_master == query_keys.size()){
+        //   cur_score = 50 * cnt_master;// + 25 * cnt_secondary;
+        } else {
+          cur_score = 25 * cnt_master;// + 15 * cnt_secondary;
+        }
+        if(cur_score > max_cnt){
+          max_node = cur_c_id;
+          max_cnt = cur_score;
+        }
+        txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+      }
+
+
+      if(context.random_router > 0){
+        // 
+        int coords_num = (int)coordi_nums_.size();
+        size_t random_value = random.uniform_dist(0, 100);
+        if(random_value > context.random_router){
+          size_t random_coord_id = random.uniform_dist(0, coords_num - 1);
+          if(random_coord_id > context.coordinator_num){
+            VLOG(DEBUG_V8) << "bad  " << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << coordi_nums_[random_coord_id] << " " << from_nodes_id[coordi_nums_[random_coord_id]];
+          }
+          max_node = coordi_nums_[random_coord_id];
+        }
+      } 
+
+
+      t->destination_coordinator = max_node;
+      t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
+
+     return;
+   }
+
+
   void start() override {
 
     LOG(INFO) << "MyClayGenerator " << id << " starts.";
@@ -315,8 +416,7 @@ public:
       }, n);
 
       if (context.cpu_affinity) {
-        ControlMessageFactory::pin_thread_to_core(context, generators[n], pin_thread_id_);
-        generator_core_id[n] = pin_thread_id_ ++ ;
+        ControlMessageFactory::pin_thread_to_core(context, generators[n], generator_core_id[n]);
       }
     }
     // wait 
@@ -385,12 +485,6 @@ public:
           for (auto &t : generators) {
             t.join();
           }
-          // for (auto &t : clay) {
-          //   t.join();
-          // }
-          // for (auto &t : transmiter) {
-          //   t.join();
-          // }
           return;
         }
       } while (status != ExecutorStatus::START);
@@ -439,9 +533,6 @@ public:
             router_transactions_send.fetch_add(1);
           };
 
-          // debug
-          int cnt1 = 0;
-          int cnt2 = 0;
 
           // real transactions
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
@@ -449,43 +540,11 @@ public:
             bool success = false;
             std::shared_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success));
             DCHECK(success == true);
-            // 
-            //   int max_node = -1;
-            //   auto result = txn_nodes_involved(txn.get(), max_node, true);
-            //   if(result.size() > 1){
-            // my_clay->push_txn(txn);
-            //   }
-            // }
-            // 
 
-            int coordinator_id_dst = -1;
-            std::unordered_map<int, int> result = txn_nodes_involved(txn.get(), coordinator_id_dst, true);
-            
-            cnt1 ++ ;
-            router_request(coordinator_id_dst, txn);
-
-            // if(txn->keys[0] > 2800000 && txn->keys[0] < 2801547){
-            //   LOG(INFO) << "DEBUG";
-            //   LOG(INFO) << " txn : " << txn->keys[0] << " " << txn->keys[1] << " -> " << coordinator_id_dst;
-            // }
-            
+            txn_nodes_involved(txn.get(), true);
+            router_request(txn->destination_coordinator, txn); 
           }
 
-          // transfer clay move
-          // size_t transmit_batch_size = (size_t)transmit_request_queue.size();
-          // for(size_t i = 0; i < transmit_batch_size / context.coordinator_num; i ++ ){
-          //   bool success = false;
-          //   std::shared_ptr<simpleTransaction> txn(transmit_request_queue.pop_no_wait(success));
-          //   if(success == false){
-          //     break;
-          //   }
-          //   // size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
-          //   if(txn->is_transmit_request){
-          //     VLOG(DEBUG_V14) << " TRANSMIT " << txn->keys[0] << " " << txn->keys[1] << " -> " << txn->destination_coordinator;
-          //   }
-          //   cnt2 ++ ;
-          //   router_request(txn->destination_coordinator, txn);
-          // }
           is_full_signal.store(0);
           VLOG(DEBUG_V14) << "Generator " << n << " send router " << router_send_txn_cnt[0] << " " << router_send_txn_cnt[1];
           // after router all txns, send the stop-SIGNAL
@@ -502,8 +561,7 @@ public:
         }, n);
 
         if (context.cpu_affinity) {
-          ControlMessageFactory::pin_thread_to_core(context, threads[n], pin_thread_id_); // , generator_core_id[n]);
-          pin_thread_id_ ++;
+          ControlMessageFactory::pin_thread_to_core(context, threads[n], sender_core_id[n]); // , generator_core_id[n]);
         }
       }
 
@@ -736,6 +794,7 @@ protected:
   std::atomic<uint32_t> is_full_signal;// [20];
 
   std::vector<int> generator_core_id;
+  std::vector<int> sender_core_id;
   std::mutex mm;
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
@@ -754,7 +813,7 @@ protected:
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   // std::deque<simpleTransaction> transmit_request_queue;
 
   std::deque<int> router_stop_queue;
@@ -764,11 +823,13 @@ protected:
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>*)>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>*)>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *, 10086> in_queue, out_queue;
+
+  std::vector<std::vector<int>> txns_coord_cost;
 };
 } // namespace group_commit
 

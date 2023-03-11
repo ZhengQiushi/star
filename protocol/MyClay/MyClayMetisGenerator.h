@@ -187,7 +187,7 @@ public:
   //   return cur_val;
   // }
 
-  int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+  int router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
 
@@ -241,7 +241,7 @@ public:
     // pull request
     std::vector<simpleTransaction*> transmit_requests;
     // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
-    for(int i = 0 ; i < metis_txns.size(); i ++ ){
+    for(size_t i = 0 ; i < metis_txns.size(); i ++ ){
       // split into sub_transactions
       auto new_txn = new_transmit_generate(transmit_idx ++ );
 
@@ -312,6 +312,33 @@ public:
   //   n_network_size.fetch_add(router_size);
   // };
 
+  void migration(std::string file_name_){
+     
+
+    LOG(INFO) << "start read from file";
+    my_clay->clay_partiion_read_from_file(file_name_.c_str());
+    LOG(INFO) << "read from file done";
+
+    auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - begin)
+                            .count();
+    LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
+
+
+    // my_clay->metis_partition_graph();
+
+    latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - begin)
+                        .count();
+    LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
+    
+    // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
+    int num = router_transmit_request(my_clay->move_plans);
+    if(num > 0){
+      LOG(INFO) << "router transmit request " << num; 
+    }    
+  }
+
   void start() override {
 
     LOG(INFO) << "MyClayMetisGenerator " << id << " starts.";
@@ -327,14 +354,25 @@ public:
     std::size_t count = 0;
 
     // 
-    auto trace_log = std::chrono::steady_clock::now();
+    // auto trace_log = std::chrono::steady_clock::now();
 
     std::unordered_map<int, std::string> map_;
 
-    map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls";
-    map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls";
-    map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls";
-    map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls";
+    map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls_0";
+    map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls_0";
+    map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_0";
+    map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_0";
+
+
+
+    std::unordered_map<int, std::string> map_2;
+
+    map_2[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls_1";
+    map_2[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls_1";
+    map_2[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_1";
+    map_2[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_1";
+
+
 
     // transmiter: do the transfer for the clay and whole system
     // std::vector<std::thread> transmiter;
@@ -350,7 +388,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 10 * 1000; // debug
+        int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
         // 
         int cur_workload = 0;
 
@@ -384,46 +422,30 @@ public:
             continue;
           }
           // directly jump into first phase
-          auto begin = std::chrono::steady_clock::now();
+          begin = std::chrono::steady_clock::now();
           
-          // my_clay->init_with_history("/home/star/data/result_test.xls", last_timestamp_int, last_timestamp_int + trigger_time_interval);
-          // char file_name_[256] = {0};
-
-          // 30_60
-          // 60_90
-          // 90_120
-          //  0_30
-
-          // int time_begin = (last_timestamp_int + trigger_time_interval) / 1000 % total_time;
-          // int time_end   = (last_timestamp_int + trigger_time_interval) / 1000 % total_time + context.workload_time;
-
-          // sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", time_begin, time_end);
-          std::string file_name_ = map_[cur_workload];
-
-          LOG(INFO) << "start read from file";
-          my_clay->clay_partiion_read_from_file(file_name_.c_str());
-          LOG(INFO) << "read from file done";
-
-          latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                  std::chrono::steady_clock::now() - begin)
-                                  .count();
-          LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
+          migration(map_[cur_workload]);
 
           last_timestamp_ = begin;
           last_timestamp_int += trigger_time_interval;
           begin = std::chrono::steady_clock::now();
-          // my_clay->metis_partition_graph();
 
-          latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              std::chrono::steady_clock::now() - begin)
-                              .count();
-          LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
-        
-          // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-          int num = router_transmit_request(my_clay->move_plans);
-          if(num > 0){
-            LOG(INFO) << "router transmit request " << num; 
-          }
+          
+          // latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+          //                         std::chrono::steady_clock::now() - last_timestamp_)
+          //                         .count();
+          // while (latency < start_offset / 2 && status != ExecutorStatus::EXIT){
+          //   status = static_cast<ExecutorStatus>(worker_status.load());
+          //   process_request();
+          //   std::this_thread::sleep_for(std::chrono::microseconds(5));
+          //   latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+          //                           std::chrono::steady_clock::now() - last_timestamp_)
+          //                           .count();
+          //   continue;
+          // }
+          // migration(map_2[cur_workload]);
+
+
           cur_workload = (cur_workload + 1) % workload_num;
           // break; // debug
         }
@@ -978,8 +1000,8 @@ protected:
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, metis_async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  std::deque<simpleTransaction> router_transactions_queue;
-  group_commit::ShareQueue<simpleTransaction> migration_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> migration_transactions_queue;
 
   std::deque<int> router_stop_queue;
 
@@ -987,7 +1009,7 @@ protected:
   //                                DatabaseType &, const ContextType &, Partitioner *, // add partitioner
   //                                TransactionType *, 
   //                                std::deque<simpleTransaction>*,
-  //                                group_commit::ShareQueue<simpleTransaction>*)>>
+  //                                ShareQueue<simpleTransaction>*)>>
   //     messageHandlers;
 
   // std::vector<
@@ -998,7 +1020,7 @@ protected:
       messageHandlers;      
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
@@ -1006,6 +1028,8 @@ protected:
 
   std::ofstream outfile_excel;
   std::mutex out_;
+
+  std::chrono::steady_clock::time_point begin;
 };
 } // namespace group_commit
 

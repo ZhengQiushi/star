@@ -8,7 +8,7 @@
 #include <mutex>          // std::mutex, std::lock_guard
 
 namespace star {
-namespace group_commit {
+// namespace group_commit {
 
 template <class T, std::size_t N = 409600> class ShareQueue {
   public:
@@ -59,6 +59,6 @@ template <class T, std::size_t N = 409600> class ShareQueue {
     std::queue<T> queue;
 };
 
-} // namespace group_commit
+// } // namespace group_commit
 
 } // namespace star

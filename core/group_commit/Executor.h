@@ -61,23 +61,43 @@ public:
     message_sizes.resize(messageHandlers.size(), 0);
   }
 
-
   void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
-                                std::deque<simpleTransaction>& router_transactions_queue_,
-                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_,
-                                int router_recv_txn_num){
+                                ShareQueue<simpleTransaction>& router_transactions_queue_,
+                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_){
 
-    while(!router_transactions_queue_.empty() && router_recv_txn_num > 0){
-      simpleTransaction simple_txn = router_transactions_queue_.front();
-      router_transactions_queue_.pop_front();
+    int size_ = router_transactions_queue_.size();
+    while(size_ > 0){
+      size_ -- ;
+      bool is_ok = false;
+      simpleTransaction simple_txn = router_transactions_queue_.pop_no_wait(is_ok);
+      DCHECK(is_ok == true);
       
       n_network_size.fetch_add(simple_txn.size);
 
       auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
       r_transactions_queue_.push_back(std::move(p));
-      router_recv_txn_num -- ;
     }
   }
+
+
+  // void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
+  //                               ShareQueue<simpleTransaction>& router_transactions_queue_,
+  //                               std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_,
+  //                               int router_recv_txn_num, 
+  //                               int router_recv_txn_num_indeed){
+
+    
+  //   while(!router_transactions_queue_.empty() && router_recv_txn_num > router_recv_txn_num_indeed){
+  //     simpleTransaction simple_txn = router_transactions_queue_.front();
+  //     router_transactions_queue_.pop_front();
+      
+  //     n_network_size.fetch_add(simple_txn.size);
+
+  //     auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
+  //     r_transactions_queue_.push_back(std::move(p));
+  //     router_recv_txn_num -- ;
+  //   }
+  // }
 
     void run_transaction(const ContextType& phase_context,
                          Partitioner *partitioner,
@@ -91,6 +111,10 @@ public:
     WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner, start_time);
 
     uint64_t last_seed = 0;
+    int time_prepare_read = 0;
+    int time_read_remote = 0;
+    int time3 = 0;
+    auto begin = std::chrono::steady_clock::now();
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue.size();    
@@ -114,7 +138,16 @@ public:
           std::size_t partition_id = transaction->get_partition_id();
           setupHandlers(*transaction);
         }
+
+        auto now = std::chrono::steady_clock::now();
+
         auto result = transaction->execute(id);
+
+          time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+
 
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
@@ -138,6 +171,12 @@ public:
           protocol.abort(*transaction, sync_messages, async_messages);
           n_abort_no_retry.fetch_add(1);
         }
+
+          time3 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+
       } while (retry_transaction);
 
       cur_transactions_queue.pop_front();
@@ -149,6 +188,18 @@ public:
     }
     flush_async_messages();
     flush_sync_messages();
+
+    auto total_sec = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count() * 1.0;
+    LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
+
+
+    if(cur_queue_size > 0){
+      LOG(INFO) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size ;// << "  router : " << time1 / cur_queue_size; 
+      // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
+      // remaster_delay_transactions = 0;
+    }
   }
 
   bool is_router_stopped(int& router_recv_txn_num){
@@ -209,27 +260,32 @@ public:
       
       process_request();
 
-      auto now = std::chrono::steady_clock::now();
+      // auto now = std::chrono::steady_clock::now();
 
       int router_recv_txn_num = 0;
+      int router_recv_txn_num_indeed = 0;
       while(!is_router_stopped(router_recv_txn_num)){
         process_request();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        // std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-
-      unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue, router_recv_txn_num); // 
-
-      VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size();
-      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
-      now = std::chrono::steady_clock::now();
-
-      size_t r_size = r_transactions_queue.size();
+      
+      unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
       run_transaction(context, partitioner.get(), r_transactions_queue); // 
-      for(size_t r = 0; r < r_size; r ++ ){
+
+
+      // unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
+
+      // VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size();
+      // VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
+      //                std::chrono::steady_clock::now() - now)
+      //                .count()
+      //         << " milliseconds.";
+      // now = std::chrono::steady_clock::now();
+
+      // size_t r_size = r_transactions_queue.size();
+      // run_transaction(context, partitioner.get(), r_transactions_queue); // 
+      for(int r = 0; r < router_recv_txn_num; r ++ ){
         // 发回原地...
         size_t generator_id = context.coordinator_num;
         // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
@@ -423,10 +479,10 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
-  std::deque<simpleTransaction> router_transactions_queue;           // router
+  ShareQueue<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
 

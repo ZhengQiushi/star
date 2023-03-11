@@ -153,31 +153,6 @@ public:
     router_transactions_send.store(0);
   }
 
-  void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage, int router_recv_txn_num){
-    while(!router_transactions_queue.empty() && router_recv_txn_num > 0){
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
-      n_network_size.fetch_add(simple_txn.size);
-
-      if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
-        auto p = s_workload.unpack_transaction(context, 0, storage, simple_txn);
-        s_transactions_queue.push_back(std::move(p));
-      } else {
-        auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
-        if(simple_txn.is_transmit_request){
-          t_transactions_queue.push_back(std::move(p));
-        } else {
-          int max_node = -1;
-          if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
-            c_transactions_queue.push_back(std::move(p));
-          } else {
-            r_transactions_queue.push_back(std::move(p));
-          }
-        }
-      }
-      router_recv_txn_num -- ;
-    }
-  }
   
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
@@ -968,7 +943,7 @@ public:
             if (commit) {
               size_t ycsbTableID = ycsb::ycsb::tableID;
               if(transaction->readSet.size() > 1)
-                VLOG(DEBUG_V8) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
+                VLOG(DEBUG_V9) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
                          << "   " << *(int*)transaction->readSet[1].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
@@ -1464,22 +1439,22 @@ private:
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *,
                                  TransactionType *, 
-                                 std::deque<simpleTransaction>*,
-                                 group_commit::ShareQueue<simpleTransaction>*)>>
+                                 ShareQueue<simpleTransaction>*,
+                                 ShareQueue<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *, 60086> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 
-  std::deque<simpleTransaction> router_transactions_queue;
-  group_commit::ShareQueue<simpleTransaction> metis_router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> metis_router_transactions_queue;
 
   std::deque<int> router_stop_queue;
 
   // HashMap<9916, std::string, int> &data_pack_map;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 

@@ -170,7 +170,7 @@ public:
   long long cal_load_distribute(int aver_val, 
                           std::unordered_map<int, long long>& busy_){
     long long cur_val = 0;
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       // 
       cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
     }
@@ -181,7 +181,7 @@ public:
   
   long long cal_load_average(std::unordered_map<int, long long>& busy_){
     long long cur_val = 0;
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       // 
       cur_val += busy_[i];
     }
@@ -190,51 +190,13 @@ public:
     return cur_val;
   }
 
-  void scheduler_transactions(
-      std::vector<simpleTransaction*>& metis_txns,
-      std::vector<int>& router_send_txn_cnt){    
-        
-    std::vector<simpleTransaction*> txns;
-    std::priority_queue<simpleTransaction*, 
+  void distributed_transactions(std::priority_queue<simpleTransaction*, 
                         std::vector<simpleTransaction*>, 
-                        cmp> q_;
-
-    std::unordered_map<int, long long> busy_;
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
-      busy_[i] = 0;
-    }
-    
-
-    // find minimal cost routing 
-    for(size_t i = 0; i < metis_txns.size(); i ++ ){
-      simpleTransaction* txn = metis_txns[i];
-
-      // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
-      if(txn->is_distributed){ 
-        // static-distribute
-        // std::unordered_map<int, int> result;
-        txn_nodes_involved(txn, true);
-      } else {
-        DCHECK(txn->is_distributed == 0);
-        txn->destination_coordinator = txn->partition_id % context.coordinator_num;
-      } 
-
-      txns.push_back(txn);
-      q_.push(txn);
-
-      busy_[txn->destination_coordinator] += txn->access_frequency;
-    }
-
-    // int cur_thread_transaction_num = metis_txns.size();
+                        cmp>& q_, 
+                        std::unordered_map<int, long long>& busy_){
     
     long long aver_val = cal_load_average(busy_);//; cur_thread_transaction_num / context.coordinator_num;
-
-    // LOG(INFO) << "BEFORE";
-    // for(int i = 0; i < txns.size(); i ++ ){
-    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
-    // }
-    // 100 * 110 workload * average 
-    int weight = 30000;
+    int weight = 300;
     long long threshold = weight / (context.coordinator_num / 2) * weight / (context.coordinator_num / 2); // 2200 - 2800
 
     long long cur_val = cal_load_distribute(aver_val, busy_);
@@ -250,8 +212,8 @@ public:
 
           std::unordered_map<int, int> overload_node;
           std::unordered_map<int, int> idle_node;
-
-          for(int j = 0 ; j < context.coordinator_num; j ++ ){
+          aver_val = cal_load_average(busy_);
+          for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
             if((long long) (busy_[j] - aver_val) * (busy_[j] - aver_val) > threshold){
               if((busy_[j] - aver_val) > 0){
                 overload_node[j] = busy_[j] - aver_val;
@@ -291,19 +253,92 @@ public:
           }
 
         }
+        if(q_.empty()){
+          is_ok = false;
+        }
         
       } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
     }
+  }
 
+  void scheduler_transactions(
+      std::vector<simpleTransaction*>& metis_txns,
+      std::vector<int>& router_send_txn_cnt,
+      long long access_freq_aver){    
+        
+    std::vector<simpleTransaction*> txns;
+    std::priority_queue<simpleTransaction*, 
+                        std::vector<simpleTransaction*>, 
+                        cmp> heavy_queue;
 
-    // LOG(INFO) << "NEW";
+    std::priority_queue<simpleTransaction*, 
+                        std::vector<simpleTransaction*>, 
+                        cmp> light_queue;
+
+    std::unordered_map<int, long long> heavy_busy_;
+    std::unordered_map<int, long long> light_busy_;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      heavy_busy_[i] = 0;
+      light_busy_[i] = 0;
+    }
+    
+
+    // find minimal cost routing 
+    for(size_t i = 0; i < metis_txns.size(); i ++ ){
+      simpleTransaction* txn = metis_txns[i];
+      txn_nodes_involved(txn, true);
+      txns.push_back(txn);
+
+      if((long long)txn->access_frequency > access_freq_aver){
+        heavy_queue.push(txn);
+        heavy_busy_[txn->destination_coordinator] += txn->access_frequency;
+      } else {
+        light_queue.push(txn);
+        light_busy_[txn->destination_coordinator] += txn->access_frequency;
+      }
+    }
+
+    LOG(INFO) << " before scheduler_transactions generate : " ;
+    long long aver_val = cal_load_average(heavy_busy_);//; cur_thread_transaction_num / context.coordinator_num;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      // 
+      LOG(INFO) << i << " : " << heavy_busy_[i] << " " << (heavy_busy_[i] - aver_val) * (heavy_busy_[i] - aver_val) << " > ";
+    }
+
+    distributed_transactions(heavy_queue, heavy_busy_);
+    // int cur_thread_transaction_num = metis_txns.size();
+    // LOG(INFO) << "BEFORE";
     // for(int i = 0; i < txns.size(); i ++ ){
     //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
     // }
+    // 100 * 110 workload * average 
+
+
+    LOG(INFO) << " scheduler_transactions generate : " ;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      heavy_busy_[i] += light_busy_[i];
+    }
+    aver_val = cal_load_average(heavy_busy_);
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) << i << " : " << heavy_busy_[i] << " " << (heavy_busy_[i] - aver_val) * (heavy_busy_[i] - aver_val);
+    }
+
+    distributed_transactions(light_queue, heavy_busy_);
+
+    aver_val = cal_load_average(heavy_busy_);
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) << i << " : " << heavy_busy_[i] << " " << (heavy_busy_[i] - aver_val) * (heavy_busy_[i] - aver_val);
+    }
+    
+    LOG(INFO) << "NEW";
+    for(size_t i = 0; i < txns.size(); i ++ ){
+      // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
+      outfile_excel << txns[i]->idx_ << "\t" << txns[i]->destination_coordinator << "\t" << txns[i]->access_frequency << "\n";
+    }
   }
 
 
-  int router_transmit_request(group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+  int router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
 
@@ -322,12 +357,13 @@ public:
     std::vector<std::shared_ptr<myMove<WorkloadType>>> cur_moves;
 
 
-    static int transmit_idx = 0; // split into sub-transactions
-    static int metis_transmit_idx = 0;
+
 
     const int transmit_block_size = 10;
 
     int cur_move_size = my_clay->move_plans.size();
+    long long access_freq_aver = 0;
+
     // pack up move-steps to transmit request
     double thresh_ratio = 1;
     for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
@@ -341,42 +377,26 @@ public:
       auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
       metis_new_txn->access_frequency = cur_move->access_frequency;
 
+      access_freq_aver += cur_move->access_frequency;
+
       for(auto move_record: cur_move->records){
           metis_new_txn->keys.push_back(move_record.record_key_);
           metis_new_txn->update.push_back(true);
       }
       //
-
       metis_txns.push_back(metis_new_txn);
       cur_moves.push_back(cur_move);
-      // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
-
-      // auto new_txn = new_transmit_generate(transmit_idx ++ );
-      // for(auto move_record: cur_move->records){
-      //     new_txn->keys.push_back(move_record.record_key_);
-      //     new_txn->update.push_back(true);
-      //     new_txn->destination_coordinator = coordinator_id_dst;
-      //     new_txn->metis_idx_ = metis_new_txn->idx_;
-
-      //     if(new_txn->keys.size() > transmit_block_size){
-      //       // added to the router
-      //       transmit_requests.push_back(new_txn);
-      //       new_txn = new_transmit_generate(transmit_idx ++ );
-      //     }
-      // }
-
-      // if(new_txn->keys.size() > 0){
-      //   transmit_requests.push_back(new_txn); // 
-      // }
     }
 
-    scheduler_transactions(metis_txns, router_send_txn_cnt);
+    access_freq_aver /= cur_move_size;
+
+    scheduler_transactions(metis_txns, router_send_txn_cnt, access_freq_aver);
 
 
     // pull request
     std::vector<simpleTransaction*> transmit_requests;
     // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
-    for(int i = 0 ; i < metis_txns.size(); i ++ ){
+    for(size_t i = 0 ; i < metis_txns.size(); i ++ ){
       // split into sub_transactions
       auto new_txn = new_transmit_generate(transmit_idx ++ );
 
@@ -405,13 +425,19 @@ public:
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
       // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
-      outfile_excel << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      // outfile_excel << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
       metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
       // }
     }
+
+    outfile_excel << "Done. \n";
+
+    transmit_idx = 0; // split into sub-transactions
+    metis_transmit_idx = 0;
+
     LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
 
     return cur_move_size;
@@ -460,7 +486,7 @@ public:
     std::size_t count = 0;
 
     // 
-    auto trace_log = std::chrono::steady_clock::now();
+    // auto trace_log = std::chrono::steady_clock::now();
 
     std::unordered_map<int, std::string> map_;
 
@@ -494,7 +520,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 10 * 1000;
+        int start_offset = 15 * 1000;
         // 
         int cur_workload = 0;
 
@@ -577,283 +603,6 @@ public:
         process_request();
         status = static_cast<ExecutorStatus>(worker_status.load());
       }
-
-    // ControlMessageFactory::pin_thread_to_core(context, transmiter[0], pin_thread_id_);
-    // pin_thread_id_ ++ ;
-
-
-    // // main loop
-    // for (;;) {
-    //   ExecutorStatus status;
-    //   do {
-    //     // exit 
-    //     status = static_cast<ExecutorStatus>(worker_status.load());
-
-    //     if (status == ExecutorStatus::EXIT) {
-    //       LOG(INFO) << "Metis-Generator-Executor " << id << " exits.";
-
-    //       // for (auto &t : transmiter) {
-    //       //   t.join();
-    //       // }
-    //       return;
-    //     }
-    //   } while (status != ExecutorStatus::C_PHASE);
-
-    //   n_started_workers.fetch_add(1);
-      
-    //   auto test = std::chrono::steady_clock::now();
-    //   VLOG(DEBUG_V) << "Metis-Generator " << id << " ready to process_request";
-    //   // 
-    //     // while(status != ExecutorStatus::EXIT){
-    //       status = static_cast<ExecutorStatus>(worker_status.load());
-
-    //       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                               std::chrono::steady_clock::now() - last_timestamp_)
-    //                               .count();
-    //       if(last_timestamp_int != 0 && latency < trigger_time_interval){
-    //         std::this_thread::sleep_for(std::chrono::microseconds(5));
-    //       } else {
-    //         // directly jump into first phase
-    //         auto begin = std::chrono::steady_clock::now();
-            
-    //         // my_clay->init_with_history("/home/star/data/result_test.xls", last_timestamp_int, last_timestamp_int + trigger_time_interval);
-    //         char file_name_[256] = {0};
-    //         sprintf(file_name_, "/home/star/data/resultss_partition_%d_%d.xls", (last_timestamp_int + trigger_time_interval) / 1000 % 80, (last_timestamp_int + trigger_time_interval * 2) / 1000 % 80);
-    //         LOG(INFO) << "start read from file";
-    //         my_clay->metis_partiion_read_from_file(file_name_);
-    //         LOG(INFO) << "read from file done";
-
-    //         latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                                 std::chrono::steady_clock::now() - begin)
-    //                                 .count();
-    //         LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
-
-    //         last_timestamp_ = begin;
-    //         last_timestamp_int += trigger_time_interval;
-    //         begin = std::chrono::steady_clock::now();
-    //         // my_clay->metis_partition_graph();
-
-    //         latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                             std::chrono::steady_clock::now() - begin)
-    //                             .count();
-    //         LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
-          
-    //         // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    //         int num = router_transmit_request(my_clay->move_plans);
-    //         if(num > 0){
-    //           LOG(INFO) << "router transmit request " << num; 
-    //         }
-    //       }
-
-    //     //   break; // debug
-    //     // }
-    //     // LOG(INFO) << "transmiter " << " exits.";
-
-
-    //   n_complete_workers.fetch_add(1);
-    //   VLOG(DEBUG_V) << "Metis-Generator " << id << " finish C_PHASE";
-
-    //   while (static_cast<ExecutorStatus>(worker_status.load()) !=
-    //     ExecutorStatus::S_PHASE) {
-    //     process_request();
-    //   }
-    //   process_request();
-
-    //   // s-phase
-    //   n_started_workers.fetch_add(1);
-    //   n_complete_workers.fetch_add(1);
-
-    //   VLOG(DEBUG_V) << "Metis-Generator " << id << " finish S_PHASE";
-
-    //   // router_fence(); // wait for coordinator to response
-
-    //   LOG(INFO) << "Metis-Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-    //                        std::chrono::steady_clock::now() - test)
-    //                        .count();
-    //   test = std::chrono::steady_clock::now();
-
-    //   flush_async_messages();
-
-      
-    //   while (static_cast<ExecutorStatus>(worker_status.load()) ==
-    //          ExecutorStatus::S_PHASE) {
-    //     process_request();
-    //   }
-
-    //   VLOG(DEBUG_V) << "wait back "
-    //           << std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                  std::chrono::steady_clock::now() - test)
-    //                  .count()
-    //           << " milliseconds.";
-    //   test = std::chrono::steady_clock::now();
-
-
-    //   // n_complete_workers has been cleared
-    //   process_request();
-    //   n_complete_workers.fetch_add(1);
-    // }
-    // // not end here!
-
-
-
-
-
-
-    // // main loop
-    // for (;;) {
-    //   ExecutorStatus status;
-    //   do {
-    //     // exit 
-    //     status = static_cast<ExecutorStatus>(worker_status.load());
-
-    //     if (status == ExecutorStatus::EXIT) {
-    //       LOG(INFO) << "Executor " << id << " exits.";
-
-    //       for (auto &t : transmiter) {
-    //         t.join();
-    //       }
-    //       return;
-    //     }
-    //   } while (status != ExecutorStatus::C_PHASE);
-
-    //   // while (!q.empty()) {
-    //   //   auto &ptr = q.front();
-    //   //   auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
-    //   //                      std::chrono::steady_clock::now() - ptr->startTime)
-    //   //                      .count();
-    //   //   commit_latency.add(latency);
-    //   //   q.pop();
-    //   // }
-
-    //   n_started_workers.fetch_add(1);
-      
-    //   auto test = std::chrono::steady_clock::now();
-    //   VLOG(DEBUG_V) << "Generator " << id << " ready to process_request";
-
-    //   // thread to router the transaction generated by LionMetisGenerator
-    //   // std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];
-    //   // for(int i = 0 ; i < MAX_COORDINATOR_NUM; i ++ ){
-    //   //   coordinator_send[i] = 0;
-    //   // }
-    //   // std::vector<std::thread> threads;
-    //   // for (auto n = 0u; n < context.coordinator_num; n++) {
-    //   //   threads.emplace_back([&](int n) {
-    //   //     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-        
-    //   //     size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;  
-    //   //     // batch_size = 0; // debug
-    //   //     LOG(INFO) << "batch_size: " << std::to_string(batch_size);
-    //   //     for(size_t i = 0; i < batch_size / context.coordinator_num; i ++ ){
-
-    //   //       bool success = false;
-    //   //       std::shared_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success));
-    //   //       DCHECK(success == true);
-
-    //   //       if(context.lion_with_trace_log){
-    //   //         // 
-    //   //         out_.lock();
-    //   //         auto current_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //   //                   std::chrono::steady_clock::now() - trace_log)
-    //   //                   .count() * 1.0 / 1000;
-    //   //         outfile_excel << current_timestamp << "\t";
-    //   //         for(auto item: txn->keys){
-    //   //           outfile_excel << item << "\t";
-    //   //         }
-    //   //         outfile_excel << "\n";
-    //   //         out_.unlock();
-    //   //       }
-
-
-    //   //       size_t coordinator_id_dst = txn->partition_id % context.coordinator_num;
-    //   //       // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
-    //   //       if(txn->is_distributed){ 
-    //   //         // static-distribute
-    //   //         coordinator_id_dst = select_best_node(txn.get());
-    //   //       } else {
-    //   //         DCHECK(txn->is_distributed == 0);
-    //   //       }
-
-    //   //       coordinator_send[coordinator_id_dst] ++ ;
-    //   //       router_request(router_send_txn_cnt, coordinator_id_dst, txn);            
-    //   //     }
-    //   //     is_full_signal.store(0);
-    //   //     // 
-
-    //   //     for (auto l = 0u; l < context.coordinator_num; l++){
-    //   //       if(l == context.coordinator_id){
-    //   //         continue;
-    //   //       }
-            
-    //   //       // LOG(INFO) << "SEND ROUTER_STOP " << n << " -> " << l;
-    //   //       messages_mutex[l]->lock();
-    //   //       ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
-    //   //       flush_message(async_messages, l);
-    //   //       messages_mutex[l]->unlock();
-    //   //     }
-          
-    //   //   }, n);
-
-    //   //   if (context.cpu_affinity) {
-    //   //     ControlMessageFactory::pin_thread_to_core(context, threads[n], pin_thread_id_);// , generator_core_id[n
-    //   //     pin_thread_id_ ++; 
-    //   //   }
-    //   // }
-
-    //   // for (auto &t : threads) {
-    //   //   t.join();
-    //   // }
-
-    //   // for(int i = 0 ; i < context.coordinator_num; i ++ ){
-    //   //   LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-    //   // }
-
-    //   // LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
-    //   //                      std::chrono::steady_clock::now() - test)
-    //   //                      .count();
-    //   // test = std::chrono::steady_clock::now();
-
-    //   n_complete_workers.fetch_add(1);
-    //   VLOG(DEBUG_V) << "Generator " << id << " finish C_PHASE";
-
-    //   while (static_cast<ExecutorStatus>(worker_status.load()) !=
-    //     ExecutorStatus::S_PHASE) {
-    //     process_request();
-    //   }
-    //   process_request();
-
-    //   // s-phase
-    //   n_started_workers.fetch_add(1);
-    //   n_complete_workers.fetch_add(1);
-
-    //   VLOG(DEBUG_V) << "Generator " << id << " finish S_PHASE";
-
-    //   router_fence(); // wait for coordinator to response
-
-    //   LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-    //                        std::chrono::steady_clock::now() - test)
-    //                        .count();
-    //   test = std::chrono::steady_clock::now();
-
-    //   flush_async_messages();
-
-      
-    //   while (static_cast<ExecutorStatus>(worker_status.load()) ==
-    //          ExecutorStatus::S_PHASE) {
-    //     process_request();
-    //   }
-
-    //   VLOG_IF(DEBUG_V, id==0) << "wait back "
-    //           << std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                  std::chrono::steady_clock::now() - test)
-    //                  .count()
-    //           << " milliseconds.";
-    //   test = std::chrono::steady_clock::now();
-
-
-    //   // n_complete_workers has been cleared
-    //   process_request();
-    //   n_complete_workers.fetch_add(1);
-    // }
     // // not end here!
   }
 
@@ -1071,20 +820,23 @@ protected:
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, metis_async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  std::deque<simpleTransaction> router_transactions_queue;
-  group_commit::ShareQueue<simpleTransaction> migration_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> migration_transactions_queue;
+
+  int transmit_idx = 0; // split into sub-transactions
+  int metis_transmit_idx = 0;
 
   std::deque<int> router_stop_queue;
 
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *, // add partitioner
                                  TransactionType *, 
-                                 std::deque<simpleTransaction>*,
-                                 group_commit::ShareQueue<simpleTransaction>*)>>
+                                 ShareQueue<simpleTransaction>*,
+                                 ShareQueue<simpleTransaction>*)>>
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;

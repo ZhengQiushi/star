@@ -422,6 +422,14 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+
+    if(remaster == false || (remaster == true && context.migration_only > 0)) {
+      // simulate cost of transmit data
+      for (auto i = 0u; i < context.n_nop * 2; i++) {
+        asm("nop");
+      }
+    }
+
     // lock the router_table 
     auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
     auto router_val = (RouterValue*)router_table->search_value(key);
@@ -511,6 +519,14 @@ public:
     auto key = readKey.get_key();
 
     uint64_t last_tid = 0;
+
+
+    if(remaster == false || (remaster == true && context.migration_only > 0)) {
+      // simulate cost of transmit data
+      for (auto i = 0u; i < context.n_nop * 2; i++) {
+        asm("nop");
+      }
+    }
 
     if(success == true){
       // update router 
@@ -879,9 +895,10 @@ public:
     auto stringPiece = inputPiece.toStringPiece();
     const void *key = stringPiece.data();
     std::atomic<uint64_t> &tid = table.search_metadata(key);
-
-    // unlock the key
-    SiloHelper::unlock(tid);
+    if(SiloHelper::is_locked(tid)){
+      // unlock the key
+      SiloHelper::unlock(tid);
+    }
   }
 
   static void write_request_handler(MessagePiece inputPiece,
@@ -961,9 +978,11 @@ public:
     dec >> commit_tid;
 
     DCHECK(dec.size() == 0);
-
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
-
+    bool success = false;
+    std::atomic<uint64_t> &tid = table.search_metadata(key, success);
+    if(!success){
+      return;
+    }
     uint64_t last_tid = SiloHelper::lock(tid);
 
     if (commit_tid > last_tid) {

@@ -290,7 +290,7 @@ public:
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
                                      std::deque<simpleTransaction>* router_txn_queue,
-                                     group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+                                     ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -454,7 +454,7 @@ public:
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
      * @brief 
@@ -595,7 +595,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                       Transaction *txn,
 // std::deque<simpleTransaction>* router_txn_queue,
-// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     /**
 //      * @brief 
@@ -751,7 +751,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                           Database &db, const Context &context,  Partitioner *partitioner, 
                                           Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -822,7 +822,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -857,7 +857,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -939,7 +939,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_ROUTER_ONLY));
@@ -963,7 +963,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
      * @brief directly move the data to the request node!
@@ -1027,7 +1027,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
                                       std::deque<simpleTransaction>* router_txn_queue,
-                                      group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_READ_ONLY));
@@ -1069,7 +1069,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
                                       std::deque<simpleTransaction>* router_txn_queue,
-                                      group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMetisMessage::ROUTER_TRANSACTION));
@@ -1115,7 +1115,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
@@ -1141,7 +1141,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_REQUEST));
@@ -1204,7 +1204,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
 std::deque<simpleTransaction>* router_txn_queue,
-group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_RESPONSE));
@@ -1217,7 +1217,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                      Transaction *txn,
 //                                      std::deque<simpleTransaction>* router_txn_queue,
-//                                      group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+//                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     /**
 //      * @brief directly move the data to the request node!
@@ -1373,7 +1373,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                       Transaction *txn,
 // std::deque<simpleTransaction>* router_txn_queue,
-// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     /**
 //      * @brief 
@@ -1529,7 +1529,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                      Transaction *txn,
 // std::deque<simpleTransaction>* router_txn_queue,
-// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     /**
 //      * @brief directly move the data to the request node!
@@ -1612,7 +1612,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                       Transaction *txn,
 // std::deque<simpleTransaction>* router_txn_queue,
-// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     DCHECK(inputPiece.get_message_type() ==
 //            static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_ROUTER_ONLY));
@@ -1629,7 +1629,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                      Transaction *txn,
 // std::deque<simpleTransaction>* router_txn_queue,
-// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     /**
 //      * @brief directly move the data to the request node!
@@ -1699,7 +1699,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                       Transaction *txn,
 //                                       std::deque<simpleTransaction>* router_txn_queue,
-//                                       group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+//                                       ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     DCHECK(inputPiece.get_message_type() ==
 //            static_cast<uint32_t>(LionMetisMessage::SEARCH_RESPONSE_READ_ONLY) || 
@@ -1749,7 +1749,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //                                            Database &db, const Context &context,  Partitioner *partitioner,
 //                                            Transaction *txn,
 // std::deque<simpleTransaction>* router_txn_queue,
-// group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 
 //     DCHECK(inputPiece.get_message_type() ==
@@ -1782,7 +1782,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                          Database &, const Context &, Partitioner *, 
                          Transaction *, 
                          std::deque<simpleTransaction>*,
-                         group_commit::ShareQueue<simpleTransaction>* )>>
+                         ShareQueue<simpleTransaction>* )>>
   get_message_handlers() {
 
     std::vector<
@@ -1790,7 +1790,7 @@ group_commit::ShareQueue<simpleTransaction>* metis_router_transactions_queue
                            Database &, const Context &, Partitioner *, 
                            Transaction *,
                            std::deque<simpleTransaction>*,
-                           group_commit::ShareQueue<simpleTransaction>* )>>
+                           ShareQueue<simpleTransaction>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(search_request_handler); // SEARCH_REQUEST

@@ -66,13 +66,13 @@ public:
     
     int cross_partition_probalility = context.crossPartitionProbability ; // cur_timestamp / 2;
     
-    int is_init = true;
+    // int is_init = true;
     if(cur_timestamp < context.init_time / 5){
       cross_partition_probalility = 0;
     } else if(cur_timestamp < context.init_time) {
       cross_partition_probalility = (cur_timestamp - context.init_time / 5) * 1.0 / context.init_time * context.crossPartitionProbability;
     } else {
-      is_init = false;
+      // is_init = false;
     }
 
     

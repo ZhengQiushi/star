@@ -66,8 +66,8 @@ public:
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
 
-      record_messages.emplace_back(std::make_unique<Message>());
-      init_message(record_messages[i].get(), i);
+      // record_messages.emplace_back(std::make_unique<Message>());
+      // init_message(record_messages[i].get(), i);
 
       // messages_mutex.emplace_back(std::make_unique<std::mutex>());
 
@@ -169,9 +169,14 @@ public:
   }
 
   void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, StorageType& storage, int router_recv_txn_num){
-    while(!router_transactions_queue.empty() && router_recv_txn_num > 0){
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
+    int size_ = router_transactions_queue.size();
+    
+    while(size_ > 0 && router_recv_txn_num > 0){
+      bool success = false;
+      simpleTransaction simple_txn = router_transactions_queue.pop_no_wait(success);
+      DCHECK(success == true);
+
+      size_ -- ;
       n_network_size.fetch_add(simple_txn.size);
 
       if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
@@ -183,11 +188,11 @@ public:
           t_transactions_queue.push_back(std::move(p));
         } else {
           int max_node = -1;
-          if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
-            c_transactions_queue.push_back(std::move(p));
-          } else {
-            r_transactions_queue.push_back(std::move(p));
-          }
+          // if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
+          c_transactions_queue.push_back(std::move(p));
+          // } else {
+          //   r_transactions_queue.push_back(std::move(p));
+          // }
         }
       }
       router_recv_txn_num -- ;
@@ -315,13 +320,14 @@ public:
       // commit transaction in s_phase;
       commit_transactions();
 
-      auto now = std::chrono::steady_clock::now();
-      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+      // c_phase
+      VLOG_IF(DEBUG_V, id==0) << "wait c_phase "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      
+      n_started_workers.fetch_add(1);
 
       int router_recv_txn_num = 0;
       // 准备transaction
@@ -329,80 +335,63 @@ public:
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-      
-      // VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
-      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                std::chrono::steady_clock::now() - now)
-      //                .count()
-      //         << " milliseconds.";
-      now = std::chrono::steady_clock::now();
 
-      unpack_route_transaction(*c_workload, *s_workload, storage, router_recv_txn_num); // 
-
-      VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
 
-      // c_phase
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " c_phase";
-      
-      n_started_workers.fetch_add(1);
+      unpack_route_transaction(*c_workload, *s_workload, storage, router_recv_txn_num); // 
 
-      size_t r_size = c_transactions_queue.size() + r_transactions_queue.size();;
-      // LOG(INFO) << "c_transactions_queue.size() : " <<  r_size;
-      run_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue ,async_message_num);
-      // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish r_transactions_queue";
+      VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
+
       run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
-      // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish c_transactions_queue";
-      for(size_t r = 0; r < r_size; r ++ ){
-        // 发回原地...
-        size_t generator_id = context.coordinator_num;
-        // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-        ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
-        flush_messages(async_messages);
-      }
-
+    
       n_complete_workers.fetch_add(1);
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " finish run_transaction";
 
       VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] C_phase - local "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
       // wait to s_phase
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
-      
-      while (static_cast<ExecutorStatus>(worker_status.load()) !=
-             ExecutorStatus::S_PHASE) {
-        process_request(); 
-      }
       async_fence(ExecutorStatus::C_PHASE);
       replication_fence(ExecutorStatus::C_PHASE);
 
       // commit transaction in c_phase;
-      commit_transactions();
-      VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] C_phase router done "
+      // commit_transactions();
+      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] C_phase router done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
+
+      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
+      while (static_cast<ExecutorStatus>(worker_status.load()) !=
+             ExecutorStatus::S_PHASE) {
+        process_request(); 
+      }
+
 
       // s_phase
+      VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] wait for s-phase "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
+      // now = std::chrono::steady_clock::now();
 
       n_started_workers.fetch_add(1);
       VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] worker " << id << " ready to run_transaction";
 
-      r_size = s_transactions_queue.size();
+      // r_size = s_transactions_queue.size();
       // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
       run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
-      for(size_t r = 0; r < r_size; r ++ ){
+      for(int r = 0; r < router_recv_txn_num; r ++ ){
         // 发回原地...
         size_t generator_id = context.coordinator_num;
         // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
@@ -417,7 +406,7 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
       
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
@@ -426,7 +415,7 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
 
       // once all workers are stop, we need to process the replication
       // requests
@@ -441,7 +430,7 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
 
 
       // n_complete_workers has been cleared
@@ -532,10 +521,12 @@ public:
       CHECK(false);
     }
 
-    int time1 = 0;
+    auto begin = std::chrono::steady_clock::now();
+    // int time1 = 0;
+    int time_prepare_read = 0;    
     int time_read_remote = 0;
     int time3 = 0;
-    int time_prepare_read = 0;
+
 
     uint64_t last_seed = 0;
 
@@ -572,17 +563,6 @@ public:
 
           auto now = std::chrono::steady_clock::now();
 
-          ///
-          // if(metis_transaction != nullptr){
-          //   auto &readSet = metis_transaction->readSet;
-          //   std::string debug = "";
-          //   for (int i = int(readSet.size()) - 1; i >= 0; i--) {
-          //     debug += " " + std::to_string(*(int*)readSet[i].get_key()) + "(" + std::to_string(readSet[i].get_write_lock_bit()) + "_" + std::to_string(readSet[i].get_read_respond_bit()) + ")";
-          //   }
-          //   VLOG(DEBUG_V14) << "before prepare_read_execute DEBUG TXN READ SET " << debug;
-          //   ///
-          // }
-
           // auto result = transaction->execute(id);
           transaction->prepare_read_execute(id);
 
@@ -592,34 +572,12 @@ public:
           now = std::chrono::steady_clock::now();
           
 
-          time1 += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-          now = std::chrono::steady_clock::now();
+          // time1 += std::chrono::duration_cast<std::chrono::microseconds>(
+          //                                                       std::chrono::steady_clock::now() - now)
+          //     .count();
+          // now = std::chrono::steady_clock::now();
           
-          ///
-          // if(metis_transaction != nullptr){
-          //   auto &readSet = metis_transaction->readSet;
-          //   std::string debug = "";
-          //   for (int i = int(readSet.size()) - 1; i >= 0; i--) {
-          //     debug += " " + std::to_string(*(int*)readSet[i].get_key()) + "(" + std::to_string(readSet[i].get_write_lock_bit()) + "_" + std::to_string(readSet[i].get_read_respond_bit()) + ")";
-          //   }
-          //   VLOG(DEBUG_V14) << "after prepare_read_execute DEBUG TXN READ SET " << debug;
-          //   ///
-          // }
-
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
-
-          ///
-          // if(metis_transaction != nullptr){
-          //   auto &readSet = metis_transaction->readSet;
-          //   std::string debug = "";
-          //   for (int i = int(readSet.size()) - 1; i >= 0; i--) {
-          //     debug += " " + std::to_string(*(int*)readSet[i].get_key()) + "(" + std::to_string(readSet[i].get_write_lock_bit()) + "_" + std::to_string(readSet[i].get_read_respond_bit()) + ")";
-          //   }
-          //   VLOG(DEBUG_V14) << "read_execute DEBUG TXN READ SET " << debug;
-          //   ///
-          // }
           
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
@@ -629,7 +587,7 @@ public:
           } else {
             result = transaction->prepare_update_execute(id);
           }
-          // auto result = transaction->execute(id);
+
           time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - now)
               .count();
@@ -687,18 +645,24 @@ public:
       if (i % context.batch_flush == 0) {
         flush_async_messages(); 
         flush_sync_messages();
-        flush_record_messages();
+        // flush_record_messages();
         
       }
     }
     flush_messages(messages); 
     flush_async_messages();
-    flush_record_messages();
+    // flush_record_messages();
     flush_sync_messages();
+
+    auto total_sec = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count() * 1.0;
+    LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
+
     if(cur_queue_size > 0){
-      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
-      LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
-      remaster_delay_transactions = 0;
+      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size; // << "  router : " << time1 / cur_queue_size; 
+      // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
+      // remaster_delay_transactions = 0;
     }
       
 
@@ -994,8 +958,8 @@ private:
                      uint32_t key_offset, const void *key, void *value,
                      bool local_index_read, bool &success) -> uint64_t {
       bool local_read = false;
-
       auto &readKey = txn.readSet[key_offset];
+      ITable *table = this->db.find_table(table_id, partition_id);
       // master-replica
       size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
       uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
@@ -1004,18 +968,11 @@ private:
         LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
         coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
       }
-
-      if(coordinatorID == context.coordinator_num){
-        success = false;
-        return 0;
-      }
       // sec keys replicas
       readKey.set_dynamic_coordinator_id(coordinatorID);
       readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
 
       bool remaster = false;
-
-      ITable *table = this->db.find_table(table_id, partition_id);
       if (coordinatorID == coordinator_id) {
         // master-replica is at local node 
         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
@@ -1240,7 +1197,7 @@ private:
 
   void flush_async_messages() { flush_messages(async_messages); }
 
-  void flush_record_messages() { flush_messages(record_messages); }
+  // void flush_record_messages() { flush_messages(record_messages); }
 
   void init_message(Message *message, std::size_t dest_node_id) {
     message->set_source_node_id(coordinator_id);
@@ -1283,7 +1240,7 @@ private:
 
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
-  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages, 
+  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, // record_messages, 
                                         metis_sync_messages;
   // std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
   //                                TransactionType *, std::deque<simpleTransaction>*)>>
@@ -1291,22 +1248,22 @@ private:
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *,
                                  TransactionType *, 
-                                 std::deque<simpleTransaction>*,
-                                 group_commit::ShareQueue<simpleTransaction>*)>>
+                                 ShareQueue<simpleTransaction>*,
+                                 ShareQueue<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *, 10086> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 
-  std::deque<simpleTransaction> router_transactions_queue;
-  group_commit::ShareQueue<simpleTransaction> metis_router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> metis_router_transactions_queue;
 
   std::deque<int> router_stop_queue;
 
   // HashMap<9916, std::string, int> &data_pack_map;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
   std::size_t remaster_delay_transactions;

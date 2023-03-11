@@ -85,7 +85,7 @@ public:
     return p;
   }
 
-  std::chrono::steady_clock::time_point start_time;
+  
   
 private:
   std::size_t coordinator_id;
@@ -93,6 +93,8 @@ private:
   DatabaseType &db;
   RandomType &random;
   Partitioner &partitioner;
+public:
+  std::chrono::steady_clock::time_point start_time;
   
 };
 template <class Transaction>

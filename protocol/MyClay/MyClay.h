@@ -63,7 +63,9 @@ public:
       if (coordinatorID == context.coordinator_id) {
         auto key = readKey.get_key();
         std::atomic<uint64_t> &tid = table->search_metadata(key);
-        SiloHelper::unlock(tid);
+        if(SiloHelper::is_locked(tid)){
+          SiloHelper::unlock(tid);
+        }
       } else {
         
         txn.network_size += MessageFactoryType::new_abort_message(
@@ -109,6 +111,9 @@ private:
     for (auto i = 0u; i < readSet.size(); i++) {
       auto &readKey = readSet[i];
       if(!readKey.get_write_request_bit()){
+        continue;
+      }
+      if(readKey.get_read_respond_bit()){ // already locked beforehand
         continue;
       }
       auto tableId = readKey.get_table_id();

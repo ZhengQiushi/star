@@ -388,6 +388,10 @@ namespace star
             LOG(INFO) << "history init done";
             auto start_time = std::chrono::steady_clock::now();
             init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts - 1);
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
 
             auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::steady_clock::now() - start_time)
@@ -408,35 +412,62 @@ namespace star
         }
 
         void run_clay_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
+            
             LOG(INFO) << "history init done";
+
             auto start_time = std::chrono::steady_clock::now();
             init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts);
-            // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
-            // my_clay->my_find_clump(context.data_src_path_dir + "test_resultss_partition_30_60.xls");
-            
             auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::steady_clock::now() - start_time)
                                         .count();
-
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
+            LOG(INFO) << "  load : ";
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+                LOG(INFO) << i << " : " << node_load[i];
+            }
             LOG(INFO) << "[done] init time: " << latency * 1.0 / 1000 << " s";
 
+
+            start_time = std::chrono::steady_clock::now();
             find_clump();
             implement_clump();
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+            LOG(INFO) << "[done] take time: " << latency * 1.0 / 1000 << " s";
+            save_clay_moves(context.data_src_path_dir + dst_file + "_0");
+            
+            LOG(INFO) << "first round done";
+            clear_graph();
 
-            // LOG(INFO) << "first round done";
-            // clear_graph();
-            // init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts);
-            // // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
-            // // my_clay->my_find_clump(context.data_src_path_dir + "test_resultss_partition_30_60.xls");
-            // find_clump();
-            // implement_clump();
+            start_time = std::chrono::steady_clock::now();
+            init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts);
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
+            LOG(INFO) << "  load : ";
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+                LOG(INFO) << i << " : " << node_load[i];
+            }
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+            LOG(INFO) << "[done] init time: " << latency * 1.0 / 1000 << " s";
+
+            start_time = std::chrono::steady_clock::now();
+            find_clump();
+            implement_clump();
             
             latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::steady_clock::now() - start_time)
                                         .count();
 
             LOG(INFO) << "[done] take time: " << latency * 1.0 / 1000 << " s";
-            save_clay_moves(context.data_src_path_dir + dst_file);
+            save_clay_moves(context.data_src_path_dir + dst_file + "_1");
             clear_graph();
         }
 
@@ -608,7 +639,6 @@ namespace star
         bool push_txn(std::shared_ptr<simpleTransaction> txn){
             return transactions_queue.push_no_wait(txn);
         }
-
         size_t get_file_size(const char* file_name) {
             struct stat st;
             stat(file_name, &st);
@@ -870,14 +900,14 @@ namespace star
                 }
                 
                 int col_cnt_ = 0;
-                int row_id = 0;
+                // int row_id = 0;
                 int access_frequency = 0;
 
                 auto metis_move = std::make_shared<myMove<WorkloadType>>();
                 char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
                 while(per_key_ != NULL){
                     if(col_cnt_ == 0){
-                        row_id = atoi(per_key_);
+                        // row_id = atoi(per_key_);
                     } else if(col_cnt_ == 1){
                         metis_move->access_frequency = atoi(per_key_);
                     } else {
@@ -943,14 +973,14 @@ namespace star
                 }
                 
                 int col_cnt_ = 0;
-                int row_id = 0;
+                // int row_id = 0;
                 int access_frequency = 0;
 
                 auto metis_move = std::make_shared<myMove<WorkloadType>>();
                 char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
                 while(per_key_ != NULL){
                     if(col_cnt_ == 0){
-                        row_id = atoi(per_key_);
+                        // row_id = atoi(per_key_);
                     } else if(col_cnt_ == 1){
                         metis_move->dest_coordinator_id = atoi(per_key_);
                     } else {
@@ -1034,7 +1064,7 @@ namespace star
             int big_node_size = big_node_heap[overloaded_coordinator_id].size();
             int cur_node_used_size = 0;
 
-            LOG(INFO) << "BEFORE SIZE: " << big_node_heap[overloaded_coordinator_id].size();
+            // LOG(INFO) << "BEFORE SIZE: " << big_node_heap[overloaded_coordinator_id].size();
 
             int32_t look_ahead = find_clump_look_ahead;
 
@@ -1141,7 +1171,7 @@ namespace star
                 }
             }
 
-            LOG(INFO) << "AFTER SIZE: " << big_node_heap[overloaded_coordinator_id].size();
+            // LOG(INFO) << "AFTER SIZE: " << big_node_heap[overloaded_coordinator_id].size();
 
             return new_plans_cnt;
         }
@@ -1222,7 +1252,7 @@ namespace star
                 
                 if(new_plans_cnt == 0){
                     // break;
-                    LOG(INFO) << "overloaded_coordinator_id : " << overloaded_coordinator_id << " DONE ";
+                    // LOG(INFO) << "overloaded_coordinator_id : " << overloaded_coordinator_id << " DONE ";
                 }
                 // }
             }
@@ -1292,7 +1322,7 @@ namespace star
                     outpartition << j << "\t"; // id
                     outpartition << metis_moves[j]->access_frequency << "\t"; // weight
 
-                    for(int i = 0 ; i < metis_moves[j]->records.size(); i ++ ){
+                    for(size_t i = 0 ; i < metis_moves[j]->records.size(); i ++ ){
                         outpartition << metis_moves[j]->records[i].record_key_ << "\t";
                     }
                     outpartition << "\n";
@@ -1319,7 +1349,7 @@ namespace star
                     outpartition << j << "\t"; // id
                     outpartition << cur_move->dest_coordinator_id << "\t"; // 
 
-                    for(int i = 0 ; i < cur_move->records.size(); i ++ ){
+                    for(size_t i = 0 ; i < cur_move->records.size(); i ++ ){
                         outpartition << cur_move->records[i].record_key_ << "\t";
                     }
                     outpartition << "\n";
@@ -1341,6 +1371,7 @@ namespace star
              * @param record_keys 递增的key
              * @note 双向图
             */
+           
             auto select_tpcc = [&](myKeyType key){
                 // only transform STOCK_TABLE
                 bool is_jumped = false;
@@ -1427,6 +1458,8 @@ namespace star
                     Node& cur_node = (*it)[key_two];
 //                    VLOG(DEBUG_V12) <<"   CLAY UPDATE: " << cur_node.from << " " << cur_node.to << " " << cur_node.degree;
                     cur_node.degree += (cur_node.on_same_coordi == 1? 0: cross_txn_weight);
+                    
+
                     // if(cur_node.on_same_coordi == 0 && test_debug == 1){
                     //     LOG(INFO) << " TEST distributed " << key_one << " " << key_two;
                     // }
@@ -1439,6 +1472,11 @@ namespace star
 
                     if(j > i){
                         update_node_load(cur_node);
+                        if(cur_node.on_same_coordi == 0){
+                            distributed_edges ++;
+                            distributed_edges_on_coord[cur_node.from_c_id] ++ ;
+                            distributed_edges_on_coord[cur_node.to_c_id] ++ ;
+                        }
                     }
                 }
 
@@ -1476,6 +1514,10 @@ namespace star
             init_metis_file_ = nullptr;
             file_row_cnt_ = 0;
             test_debug ++ ;
+
+            distributed_edges = 0;
+            distributed_edges_on_coord.clear();
+            edge_nums = 0;
         }
     
     private:
@@ -1875,11 +1917,11 @@ namespace star
         DatabaseType& db;
         std::atomic<uint32_t> &worker_status;
         // std::vector<myMove<WorkloadType>> moves_last_round;
-        group_commit::ShareQueue<std::shared_ptr<simpleTransaction>, 4096> transactions_queue;
+        ShareQueue<std::shared_ptr<simpleTransaction>, 4096> transactions_queue;
     public:
-        group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>> move_plans;
+        ShareQueue<std::shared_ptr<myMove<WorkloadType>>> move_plans;
 
-        group_commit::ShareQueue<std::shared_ptr<myMove<WorkloadType>>> total_move_plans;
+        ShareQueue<std::shared_ptr<myMove<WorkloadType>>> total_move_plans;
         
         std::atomic<bool> movable_flag;
 
@@ -1925,5 +1967,7 @@ namespace star
 
         // std::set<uint64_t> record_key_set_;
         int64_t edge_nums;
+        int distributed_edges = 0;
+        std::map<int, int> distributed_edges_on_coord;
     };
 }

@@ -179,7 +179,7 @@ public:
       readSet[i].clear_read_request_bit();
       readSet[i].set_tid(tid);
     }
-
+    // LOG(INFO) << "pendingResponses: " << pendingResponses;
     if (pendingResponses > 0) {
       message_flusher();
       while (pendingResponses > 0) {

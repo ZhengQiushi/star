@@ -66,13 +66,16 @@ public:
 
 
   void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
-                                std::deque<simpleTransaction>& router_transactions_queue_,
+                                ShareQueue<simpleTransaction>& router_transactions_queue_,
                                 std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_, 
                                 std::deque<std::unique_ptr<TransactionType>>& t_transactions_queue_){
-    
-    while(!router_transactions_queue_.empty()){
-      simpleTransaction simple_txn = router_transactions_queue_.front();
-      router_transactions_queue_.pop_front();
+    int size_ = router_transactions_queue_.size();
+
+    while(size_ > 0){
+      size_ -- ;
+      bool success = false;
+      simpleTransaction simple_txn = router_transactions_queue_.pop_no_wait(success);
+      DCHECK(success == true);
       
       n_network_size.fetch_add(simple_txn.size);
       auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
@@ -125,21 +128,21 @@ public:
           setupHandlers(*transaction);
         }
         auto result = transaction->execute(id);
-        if(!transaction->is_transmit_requests()){
-          if(transaction->distributed_transaction){
-            cross_txn_num ++ ;
-            if(i < 5){
-              LOG(INFO) << "cross_txn_num ++ : " << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
-            }
-          } else {
-            single_txn_num ++ ;
+        // if(!transaction->is_transmit_requests()){
+        //   if(transaction->distributed_transaction){
+        //     cross_txn_num ++ ;
+        //     if(i < 5){
+        //       LOG(INFO) << "cross_txn_num ++ : " << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
+        //     }
+        //   } else {
+        //     single_txn_num ++ ;
 
-            // debug
-            // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
-          }
-        } else {
+        //     // debug
+        //     // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
+        //   }
+        // } else {
           // LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
-        }
+        // }
 
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
@@ -180,7 +183,7 @@ public:
     flush_sync_messages();
 
 
-    LOG(INFO) << "single_txn_num: " << single_txn_num << " " << " cross_txn_num: " << cross_txn_num;
+    LOG(INFO) << "cur_queue_size: " << cur_queue_size; //  << " " << " cross_txn_num: " << cross_txn_num;
   }
 
   // bool is_router_stopped(int& router_recv_txn_num){
@@ -380,16 +383,16 @@ public:
            )) {
         local_read = true;
       } else {
-        remaster = table->contains(key); // current coordniator
-        VLOG(DEBUG_V14) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+        // remaster = table->contains(key); // current coordniator
+        // VLOG(DEBUG_V14) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
 
-        if(txn.is_transmit_requests()){
-          if(remaster){
-            txn.remaster_cnt ++ ;
-          } else {
+        // if(txn.is_transmit_requests()){
+        //   if(remaster){
+        //     txn.remaster_cnt ++ ;
+        //   } else {
             txn.migrate_cnt ++ ;
-          }
-        }
+          // }
+        // }
 
       }
 
@@ -484,10 +487,10 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
-  std::deque<simpleTransaction> router_transactions_queue;           // router
+  ShareQueue<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue, t_transactions_queue; // to transaction
 

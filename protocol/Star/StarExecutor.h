@@ -128,9 +128,13 @@ public:
 
   void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, 
                                 StorageType& storage, int router_recv_txn_num){
-    while(!router_transactions_queue.empty() && router_recv_txn_num > 0){
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
+    int size_ = router_transactions_queue.size();
+
+    while(size_ > 0){ // && router_recv_txn_num > 0
+      size_ -- ;
+      bool success = false;
+      simpleTransaction simple_txn = router_transactions_queue.pop_no_wait(success);
+      DCHECK(success == true);
       
       n_network_size.fetch_add(simple_txn.size);
 
@@ -214,8 +218,10 @@ public:
       // 准备transaction
       while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
         process_request();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        // std::this_thread::sleep_for(std::chrono::microseconds(5));
+        unpack_route_transaction(c_workload, s_workload, storage, router_recv_txn_num); // 
       }
+      unpack_route_transaction(c_workload, s_workload, storage, router_recv_txn_num); // 
 
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -224,7 +230,6 @@ public:
               << " milliseconds.";
       now = std::chrono::steady_clock::now();
 
-      unpack_route_transaction(c_workload, s_workload, storage, router_recv_txn_num); // 
 
       VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << s_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
@@ -240,16 +245,16 @@ public:
         VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
 
-        size_t r_size = c_transactions_queue.size();
+        // size_t r_size = c_transactions_queue.size();
         // LOG(INFO) << "c_transactions_queue.size() : " <<  r_size;
         run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
-        for(size_t r = 0; r < r_size; r ++ ){
-          // 发回原地...
-          size_t generator_id = context.coordinator_num;
-          // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-          ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
-          flush_messages(async_messages);
-        }
+        // for(size_t r = 0; r < r_size; r ++ ){
+        //   // 发回原地...
+        //   size_t generator_id = context.coordinator_num;
+        //   // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+        //   ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
+        //   flush_messages(async_messages);
+        // }
 
         n_complete_workers.fetch_add(1);
         VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish run_transaction";
@@ -301,10 +306,10 @@ public:
       n_started_workers.fetch_add(1);
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to run_transaction";
 
-      size_t r_size = s_transactions_queue.size();
+      // size_t r_size = s_transactions_queue.size();
       // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
       run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
-      for(size_t r = 0; r < r_size; r ++ ){
+      for(int r = 0; r < router_recv_txn_num; r ++ ){
         // 发回原地...
         size_t generator_id = context.coordinator_num;
         // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
@@ -728,16 +733,16 @@ private:
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
-                                 TransactionType *, std::deque<simpleTransaction>*)>>
+                                 TransactionType *, ShareQueue<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue, 
                            sync_queue; // for value sync when phase switching occurs
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 

@@ -195,6 +195,7 @@ public:
 
     if (pendingResponses > 0) {
       message_flusher();
+      // LOG(INFO) << "txn.pendingResponses " << pendingResponses;
       while (pendingResponses > 0) {
         remote_request_handler();
         // 

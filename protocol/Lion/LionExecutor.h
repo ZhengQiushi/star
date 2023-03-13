@@ -135,7 +135,7 @@ public:
     }
   }
 
-  void async_fence(ExecutorStatus status){
+  void async_fence(){
     while(async_pend_num.load() != async_respond_num.load()){
       int a = async_pend_num.load();
       int b = async_respond_num.load();
@@ -358,7 +358,7 @@ public:
               << " milliseconds.";
       // now = std::chrono::steady_clock::now();
       // wait to s_phase
-      async_fence(ExecutorStatus::C_PHASE);
+      // async_fence();
       replication_fence(ExecutorStatus::C_PHASE);
 
       // commit transaction in c_phase;
@@ -1024,7 +1024,7 @@ private:
               txn.network_size += MessageFactoryType::new_async_search_router_only_message(
                   *(this->messages[i]), *table, key, key_offset, false);
             }   
-            // VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+            VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
             // txn.asyncPendingResponses++;
             this->async_pend_num.fetch_add(1);
           }
@@ -1059,6 +1059,7 @@ private:
                 *(this->messages[i]), *table, key, key_offset, false);
           }            
           txn.pendingResponses++;
+          // LOG(INFO) << "txn.pendingResponses: " << txn.pendingResponses << " " << readKey.get_write_lock_bit();
         }
         txn.distributed_transaction = true;
         return 0;

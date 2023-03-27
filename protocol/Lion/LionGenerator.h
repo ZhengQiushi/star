@@ -507,7 +507,7 @@ public:
             // find minial cost in idle_node
             int idle_coord_id = find_idle_node(idle_node, 
                                                txns_coord_cost[thread_id][t->idx_], 
-                                               (workload_type == 1));
+                                               (workload_type == 1 || context.lion_with_metis_init == 0));
             if(idle_coord_id == -1){
               continue;
             }
@@ -880,7 +880,7 @@ public:
                                 sync_messages,
                                 db, context, partitioner.get(),
                                 transaction.get(), 
-                                &router_transactions_queue,
+                                // &router_transactions_queue,
                                 &migration_transactions_queue);
         }
         message_stats[type]++;
@@ -957,7 +957,6 @@ protected:
   std::unique_ptr<Clay<WorkloadType>> my_clay;
   
   ShareQueue<simpleTransaction*, 54096> transactions_queue;// [20];// [20];
-  ShareQueue<simpleTransaction*, 14096> transmit_request_queue;
 
   size_t generator_num;
   std::atomic<uint32_t> is_full_signal;// [20];
@@ -985,7 +984,7 @@ protected:
 
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  ShareQueue<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> router_transactions_queue;
   ShareQueue<simpleTransaction> migration_transactions_queue;
 
   std::deque<int> router_stop_queue;
@@ -993,16 +992,16 @@ protected:
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *, // add partitioner
                                  TransactionType *, 
-                                 ShareQueue<simpleTransaction>*,
+                                //  ShareQueue<simpleTransaction>*,
                                  ShareQueue<simpleTransaction>*)>>
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *, 10086> in_queue, out_queue;
+  LockfreeQueue<Message *, 50086> in_queue, out_queue;
 
   std::ofstream outfile_excel;
 

@@ -132,9 +132,10 @@ public:
 
     while(size_ > 0){ // && router_recv_txn_num > 0
       size_ -- ;
-      bool success = false;
-      simpleTransaction simple_txn = router_transactions_queue.pop_no_wait(success);
-      DCHECK(success == true);
+      // bool success = false;
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      router_transactions_queue.pop_front();
+      // DCHECK(success == true);
       
       n_network_size.fetch_add(simple_txn.size);
 
@@ -592,15 +593,17 @@ public:
           // // LOG(INFO) << "recv : " << ++total_async;
           // async_message_num.fetch_sub(1);
           async_message_respond_num.fetch_add(1);
-        } else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_RESPONSE)){
-          static int router_done = 0;
+        } 
+        // else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_RESPONSE)){
+        //   static int router_done = 0;
           
-          // // LOG(INFO) << "recv : " << ++router_done;
-          router_transaction_done.fetch_add(1);
-        } else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_REQUEST)){
-           static int router_recv = 0;
-          // // LOG(INFO) << "recv ROUTER_TRANSACTION_REQUEST : " << ++ router_recv;
-        }
+        //   // // LOG(INFO) << "recv : " << ++router_done;
+        //   router_transaction_done.fetch_add(1);
+        // } 
+        // else if (message_type == static_cast<int>(StarMessage::ROUTER_TRANSACTION_REQUEST)){
+        //    static int router_recv = 0;
+        //   // // LOG(INFO) << "recv ROUTER_TRANSACTION_REQUEST : " << ++ router_recv;
+        // }
       }
 
     in_queue.push(message);
@@ -653,8 +656,7 @@ private:
         } else {
           messageHandlers[type](messagePiece,
                                 *sync_messages[message->get_source_node_id()], db,
-                                transaction.get(),
-                                &router_transactions_queue);
+                                transaction.get());
         }
 
         if (logger) {
@@ -733,16 +735,16 @@ private:
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, record_messages;
   std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
-                                 TransactionType *, ShareQueue<simpleTransaction>*)>>
+                                 TransactionType *)>>
       messageHandlers;
   LockfreeQueue<Message *> in_queue, out_queue, 
                            sync_queue; // for value sync when phase switching occurs
 
-  ShareQueue<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 

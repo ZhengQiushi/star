@@ -508,7 +508,7 @@ protected:
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  ShareQueue<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   std::vector<
@@ -516,7 +516,7 @@ protected:
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;

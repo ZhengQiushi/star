@@ -34,7 +34,7 @@ enum class LionMessage {
   SEARCH_RESPONSE_ROUTER_ONLY,
   SEARCH_REQUEST_READ_ONLY,
   SEARCH_RESPONSE_READ_ONLY,
-  ROUTER_TRANSACTION,
+  // ROUTER_TRANSACTION,
   IGNORE,
   //
   METIS_MIGRATION_TRANSACTION_REQUEST,
@@ -329,33 +329,33 @@ public:
   }
 
 
-  static std::size_t new_router_transaction_message(Message &message, int table_id, 
-                                                    Transaction *txn, uint64_t op){
-    // 
-    auto update_ = txn->get_query_update();
-    auto key_ = txn->get_query();
-    uint64_t txn_size = (uint64_t)key_.size();
-    auto key_size = sizeof(uint64_t);
+//   static std::size_t new_router_transaction_message(Message &message, int table_id, 
+//                                                     Transaction *txn, uint64_t op){
+//     // 
+//     auto update_ = txn->get_query_update();
+//     auto key_ = txn->get_query();
+//     uint64_t txn_size = (uint64_t)key_.size();
+//     auto key_size = sizeof(uint64_t);
     
-    auto message_size =
-        MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION), message_size,
-        table_id, 0);
+//     auto message_size =
+//         MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
+//     auto message_piece_header = MessagePiece::construct_message_piece_header(
+//         static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION), message_size,
+//         table_id, 0);
 
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder << op << txn_size;
-    for(size_t i = 0 ; i < txn_size; i ++ ){
-      uint64_t key = key_[i];
-      bool update = update_[i];
-      encoder.write_n_bytes((void*) &key, key_size);
-      encoder.write_n_bytes((void*) &update, sizeof(bool));
-//      LOG(INFO) <<  key_[i] << " " << update_[i];
-    }
-    message.flush();
-    return message_size;
-  }
+//     Encoder encoder(message.data);
+//     encoder << message_piece_header;
+//     encoder << op << txn_size;
+//     for(size_t i = 0 ; i < txn_size; i ++ ){
+//       uint64_t key = key_[i];
+//       bool update = update_[i];
+//       encoder.write_n_bytes((void*) &key, key_size);
+//       encoder.write_n_bytes((void*) &update, sizeof(bool));
+// //      LOG(INFO) <<  key_[i] << " " << update_[i];
+//     }
+//     message.flush();
+//     return message_size;
+//   }
 
     static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
                                                     simpleTransaction& txn, uint64_t op){
@@ -417,7 +417,7 @@ public:
   static void search_request_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-                                     ShareQueue<simpleTransaction>* router_txn_queue,
+                                     // ShareQueue<simpleTransaction>* router_txn_queue,
                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -583,7 +583,7 @@ public:
   static void search_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -730,7 +730,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 //   static void search_response_handler(MessagePiece inputPiece,
 //                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
 //                                       Transaction *txn,
-// ShareQueue<simpleTransaction>* router_txn_queue,
+// // ShareQueue<simpleTransaction>* router_txn_queue,
 // ShareQueue<simpleTransaction>* metis_router_transactions_queue
 // ) {
 //     /**
@@ -886,7 +886,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                           Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, 
                                           Database &db, const Context &context,  Partitioner *partitioner, 
                                           Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
@@ -957,7 +957,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, 
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
@@ -992,7 +992,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void search_request_router_only_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -1079,7 +1079,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void search_response_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -1103,7 +1103,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void search_request_original_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -1167,7 +1167,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void search_response_original_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-                                      ShareQueue<simpleTransaction>* router_txn_queue,
+                                      // ShareQueue<simpleTransaction>* router_txn_queue,
                                       ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -1206,58 +1206,58 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   }
 
 
-  static void router_transaction_handler(MessagePiece inputPiece,
-                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn,
-                                      ShareQueue<simpleTransaction>* router_txn_queue,
-                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
-) {
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION));
+//   static void router_transaction_handler(MessagePiece inputPiece,
+//                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
+//                                       Transaction *txn,
+//                                       // ShareQueue<simpleTransaction>* router_txn_queue,
+//                                       ShareQueue<simpleTransaction>* metis_router_transactions_queue
+// ) {
+//     DCHECK(inputPiece.get_message_type() ==
+//            static_cast<uint32_t>(LionMessage::ROUTER_TRANSACTION));
 
-    auto stringPiece = inputPiece.toStringPiece();
-    uint64_t txn_size, op;
-    simpleTransaction new_router_txn;
+//     auto stringPiece = inputPiece.toStringPiece();
+//     uint64_t txn_size, op;
+//     simpleTransaction new_router_txn;
 
-    // get op
-    op = *(uint64_t*)stringPiece.data();
-    stringPiece.remove_prefix(sizeof(op));
+//     // get op
+//     op = *(uint64_t*)stringPiece.data();
+//     stringPiece.remove_prefix(sizeof(op));
 
-    // get key_size
-    txn_size = *(uint64_t*)stringPiece.data();
-    stringPiece.remove_prefix(sizeof(txn_size));
+//     // get key_size
+//     txn_size = *(uint64_t*)stringPiece.data();
+//     stringPiece.remove_prefix(sizeof(txn_size));
 
-    DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + 
-           (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
+//     DCHECK(inputPiece.get_message_length() ==
+//            MessagePiece::get_header_size() + sizeof(op) + sizeof(txn_size) + 
+//            (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
 
-    star::Decoder dec(stringPiece);
-    for(uint64_t i = 0 ; i < txn_size; i ++ ){
-      uint64_t key;
-      bool update;
+//     star::Decoder dec(stringPiece);
+//     for(uint64_t i = 0 ; i < txn_size; i ++ ){
+//       uint64_t key;
+//       bool update;
 
-      key = *(uint64_t*)stringPiece.data();
-      stringPiece.remove_prefix(sizeof(key));
+//       key = *(uint64_t*)stringPiece.data();
+//       stringPiece.remove_prefix(sizeof(key));
 
-      update = *(bool*)stringPiece.data();
-      stringPiece.remove_prefix(sizeof(update));
+//       update = *(bool*)stringPiece.data();
+//       stringPiece.remove_prefix(sizeof(update));
 
-      new_router_txn.keys.push_back(key);
-      new_router_txn.update.push_back(update);
-    }
+//       new_router_txn.keys.push_back(key);
+//       new_router_txn.update.push_back(update);
+//     }
 
-    new_router_txn.op = static_cast<RouterTxnOps>(op);
-    bool success = router_txn_queue->push_no_wait(new_router_txn);
-    DCHECK(success == true);
+//     new_router_txn.op = static_cast<RouterTxnOps>(op);
+//     bool success = router_txn_queue->push_no_wait(new_router_txn);
+//     DCHECK(success == true);
     
-  }
+//   }
 
 
   static void ignore_handler(MessagePiece inputPiece,
                                            Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, 
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
 
@@ -1283,7 +1283,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, 
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -1346,7 +1346,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
                                            Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, 
                                            Database &db, const Context &context,  Partitioner *partitioner,
                                            Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -1359,7 +1359,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void async_search_request_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-                                     ShareQueue<simpleTransaction>* router_txn_queue,
+                                     // ShareQueue<simpleTransaction>* router_txn_queue,
                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -1532,7 +1532,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void async_search_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -1695,7 +1695,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void async_search_request_router_only_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -1784,7 +1784,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void async_search_response_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -1809,7 +1809,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void metis_search_request_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-                                     ShareQueue<simpleTransaction>* router_txn_queue,
+                                     // ShareQueue<simpleTransaction>* router_txn_queue,
                                      ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -1975,7 +1975,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void metis_search_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -2122,7 +2122,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void metis_search_request_router_only_handler(MessagePiece inputPiece,
                                      Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                      Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     /**
@@ -2209,7 +2209,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
   static void metis_search_response_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, std::vector<std::unique_ptr<Message>> &messages, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn,
-ShareQueue<simpleTransaction>* router_txn_queue,
+// ShareQueue<simpleTransaction>* router_txn_queue,
 ShareQueue<simpleTransaction>* metis_router_transactions_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -2237,7 +2237,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
       std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                          Database &, const Context &, Partitioner *, 
                          Transaction *, 
-                         ShareQueue<simpleTransaction>*,
+                        //  ShareQueue<simpleTransaction>*,
                          ShareQueue<simpleTransaction>* )>>
   get_message_handlers() {
 
@@ -2245,7 +2245,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                            Database &, const Context &, Partitioner *, 
                            Transaction *,
-                           ShareQueue<simpleTransaction>*,
+                          //  ShareQueue<simpleTransaction>*,
                            ShareQueue<simpleTransaction>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
@@ -2257,7 +2257,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
     v.push_back(search_response_router_only_handler); // SEARCH_RESPONSE_ROUTER_ONLY
     v.push_back(search_request_original_handler); // SEARCH_REQUEST_READ_ONLY
     v.push_back(search_response_original_handler); // SEARCH_RESPONSE_READ_ONLY
-    v.push_back(router_transaction_handler); // ROUTER_TRANSACTION
+    // v.push_back(router_transaction_handler); // ROUTER_TRANSACTION
     v.push_back(ignore_handler); // IGNORE
     // 
     v.push_back(metis_migration_transaction_handler);

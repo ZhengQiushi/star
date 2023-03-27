@@ -35,7 +35,7 @@ public:
   using MessageFactoryType = LionMessageFactory;
   using MessageHandlerType = LionMessageHandler<DatabaseType>;
 
-  int pin_thread_id_ = 5;
+  int pin_thread_id_ = 8;
 
   LionExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context, uint32_t &batch_size,
@@ -172,9 +172,11 @@ public:
     int size_ = router_transactions_queue.size();
     
     while(size_ > 0 && router_recv_txn_num > 0){
-      bool success = false;
-      simpleTransaction simple_txn = router_transactions_queue.pop_no_wait(success);
-      DCHECK(success == true);
+      // bool success = false;
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      router_transactions_queue.pop_front();
+
+      // DCHECK(success == true);
 
       size_ -- ;
       n_network_size.fetch_add(simple_txn.size);
@@ -887,7 +889,7 @@ private:
                                 sync_messages,
                                 db, context, partitioner,
                                 transaction.get(), 
-                                &router_transactions_queue,
+                                // &router_transactions_queue,
                                 &metis_router_transactions_queue);
 
           if(type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE) || 
@@ -1031,7 +1033,9 @@ private:
           // this->flush_messages(messages);
           
         }
-
+        if(!context.read_on_replica){
+          remaster = false;
+        }
         if(remaster){
           txn.remaster_cnt ++ ;
           VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
@@ -1249,14 +1253,13 @@ private:
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *,
                                  TransactionType *, 
-                                 ShareQueue<simpleTransaction>*,
                                  ShareQueue<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *, 10086> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 
-  ShareQueue<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> router_transactions_queue;
   ShareQueue<simpleTransaction> metis_router_transactions_queue;
 
   std::deque<int> router_stop_queue;
@@ -1264,7 +1267,7 @@ private:
   // HashMap<9916, std::string, int> &data_pack_map;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
   std::size_t remaster_delay_transactions;

@@ -1098,7 +1098,7 @@ private:
                                 sync_messages,
                                 db, context, partitioner,
                                 transaction.get(), 
-                                &router_transactions_queue,
+                                // &router_transactions_queue,
                                 &metis_router_transactions_queue);
         }
 
@@ -1439,14 +1439,14 @@ private:
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *,
                                  TransactionType *, 
-                                 ShareQueue<simpleTransaction>*,
+                                //  ShareQueue<simpleTransaction>*,
                                  ShareQueue<simpleTransaction>*)>>
       messageHandlers;
   LockfreeQueue<Message *, 60086> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 
-  ShareQueue<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> router_transactions_queue;
   ShareQueue<simpleTransaction> metis_router_transactions_queue;
 
   std::deque<int> router_stop_queue;
@@ -1454,7 +1454,7 @@ private:
   // HashMap<9916, std::string, int> &data_pack_map;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 

@@ -721,7 +721,7 @@ public:
                                 sync_messages,
                                 db, context, partitioner.get(),
                                 transaction.get(), 
-                                &router_transactions_queue,
+                                // &router_transactions_queue,
                                 &migration_transactions_queue);
         }
         message_stats[type]++;
@@ -820,7 +820,7 @@ protected:
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, metis_async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  ShareQueue<simpleTransaction> router_transactions_queue;
+  std::deque<simpleTransaction> router_transactions_queue;
   ShareQueue<simpleTransaction> migration_transactions_queue;
 
   int transmit_idx = 0; // split into sub-transactions
@@ -831,12 +831,12 @@ protected:
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *, // add partitioner
                                  TransactionType *, 
-                                 ShareQueue<simpleTransaction>*,
+                                //  ShareQueue<simpleTransaction>*,
                                  ShareQueue<simpleTransaction>*)>>
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;

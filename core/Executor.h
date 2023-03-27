@@ -61,21 +61,20 @@ public:
   ~Executor() = default;
 
 
-  void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
-                                ShareQueue<simpleTransaction>& router_transactions_queue_,
-                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_){
+  void unpack_route_transaction(WorkloadType& workload, StorageType& storage){
 
-    int size_ = router_transactions_queue_.size();
+    int size_ = router_transactions_queue.size();
     while(size_ > 0){
       size_ -- ;
-      bool is_ok = false;
-      simpleTransaction simple_txn = router_transactions_queue_.pop_no_wait(is_ok);
-      DCHECK(is_ok == true);
+      // bool is_ok = false;
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      router_transactions_queue.pop_front();
+      // DCHECK(is_ok == true);
       
       n_network_size.fetch_add(simple_txn.size);
 
       auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
-      r_transactions_queue_.push_back(std::move(p));
+      r_transactions_queue.push_back(std::move(p));
     }
   }
 
@@ -170,7 +169,7 @@ public:
     do {
       process_request();
 
-      unpack_route_transaction(workload, storage, router_transactions_queue, r_transactions_queue); // 
+      unpack_route_transaction(workload, storage); // 
       if(r_transactions_queue.size() > 0){
         size_t r_size = r_transactions_queue.size();
         run_transaction(context, partitioner.get(), r_transactions_queue); // 
@@ -349,10 +348,10 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
-  ShareQueue<simpleTransaction> router_transactions_queue;           // router
+  std::deque<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
 

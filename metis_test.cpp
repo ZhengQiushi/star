@@ -112,17 +112,17 @@ int main(int argc, char *argv[]) {
   std::string src_file = "resultss.xls";
   std::string dst_file = "resultss_partition_30_60.xls"; 
 
-  dst_file = "resultss_partition_0_30.xls"; 
-  my_clay->my_run_offline(src_file, dst_file, 0, 60);
+  // dst_file = "resultss_partition_0_30.xls"; 
+  // my_clay->my_run_offline(src_file, dst_file, 0, 60);
 
-  dst_file = "resultss_partition_30_60.xls"; 
-  my_clay->my_run_offline(src_file, dst_file, 60, 120);
+  // dst_file = "resultss_partition_30_60.xls"; 
+  // my_clay->my_run_offline(src_file, dst_file, 60, 120);
 
-  dst_file = "resultss_partition_60_90.xls"; 
-  my_clay->my_run_offline(src_file, dst_file, 120, 180);
+  // dst_file = "resultss_partition_60_90.xls"; 
+  // my_clay->my_run_offline(src_file, dst_file, 120, 180);
 
-  dst_file = "resultss_partition_90_120.xls"; 
-  my_clay->my_run_offline(src_file, dst_file, 180, 240);
+  // dst_file = "resultss_partition_90_120.xls"; 
+  // my_clay->my_run_offline(src_file, dst_file, 180, 240);
 
   // dst_file = "clay_resultss_partition_90_120.xls"; 
 
@@ -131,8 +131,7 @@ int main(int argc, char *argv[]) {
 
   // std::string src_file = "resultss.xls";
   // std::string dst_file = "resultss_partition_30_60.xls"; 
-  // my_clay->run_clay_offline(src_file, dst_file, 0, 30);
-  // my_clay->my_run_offline(src_file, dst_file, 30, 60);
+  my_clay->run_clay_offline(src_file, dst_file, 0, 30);
 
   // dst_file = "clay_resultss_partition_30_60.xls"; 
   // my_clay->run_clay_offline(src_file, dst_file, 30, 60);

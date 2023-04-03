@@ -256,6 +256,11 @@ public:
     };
   }
 
+  bool process_remaster_requests(std::size_t worker_id) {
+    DCHECK(false);
+    return true;
+  }
+  
   bool process_local_requests(std::size_t worker_id){
     // 
     DCHECK(false);

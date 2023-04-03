@@ -195,7 +195,10 @@ public:
       return true;
     }
   }
-
+  bool process_remaster_requests(std::size_t worker_id) {
+    DCHECK(false);
+    return true;
+  }
 
   bool process_read_only_requests(std::size_t worker_id) {
     /**

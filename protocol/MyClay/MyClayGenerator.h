@@ -78,10 +78,10 @@ public:
     generator_core_id.resize(context.coordinator_num);
     sender_core_id.resize(context.coordinator_num);
 
-    for(int i = 0 ; i < generator_num; i ++ ){
+    for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       sender_core_id[i] = pin_thread_id_ ++ ;
     }
 

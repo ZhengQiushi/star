@@ -207,6 +207,11 @@ public:
         ret = TransactionResult::ABORT;
       }
       break;
+    case ReadMethods::REMASTER_ONLY:
+      if (this->process_remaster_requests(worker_id)) {
+        ret = TransactionResult::ABORT;
+      }
+      break;
     default:
       DCHECK(false);
       break;

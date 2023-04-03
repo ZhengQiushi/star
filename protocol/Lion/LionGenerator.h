@@ -85,10 +85,10 @@ public:
     generator_core_id.resize(context.coordinator_num);
     sender_core_id.resize(context.coordinator_num);
 
-    for(int i = 0 ; i < generator_num; i ++ ){
+    for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       sender_core_id[i] = pin_thread_id_ ++ ;
     }
 
@@ -276,7 +276,7 @@ public:
 
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
-
+      t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
 
       size_t cnt_master = from_nodes_id[max_node];
       size_t cnt_secondary = from_nodes_id_secondary[max_node];
@@ -351,7 +351,7 @@ public:
   }
   
 
-  int find_idle_node(const std::unordered_map<size_t, int>& idle_node,
+  std::pair<int, int> find_idle_node(const std::unordered_map<size_t, int>& idle_node,
                      std::vector<int>& q_costs,
                      bool is_init){
     int idle_coord_id = -1;                        
@@ -370,7 +370,7 @@ public:
         }
       }
     }
-    return idle_coord_id;
+    return std::make_pair(idle_coord_id, min_cost);
   }
   void scheduler_transactions(std::vector<int>& router_send_txn_cnt, int thread_id){    
     size_t batch_size = std::min((size_t)transactions_queue.size(),  // [thread_id]
@@ -505,7 +505,7 @@ public:
 
           if(overload_node.count(t->destination_coordinator)){
             // find minial cost in idle_node
-            int idle_coord_id = find_idle_node(idle_node, 
+            auto [idle_coord_id, min_cost] = find_idle_node(idle_node, 
                                                txns_coord_cost[thread_id][t->idx_], 
                                                (workload_type == 1 || context.lion_with_metis_init == 0));
             if(idle_coord_id == -1){
@@ -518,6 +518,7 @@ public:
               overload_node.erase(t->destination_coordinator);
             }
             // add dest busy
+            t->is_real_distributed = true;
             t->destination_coordinator = idle_coord_id;
             busy_[t->destination_coordinator] += 1;
             idle_node[idle_coord_id] -= 1;

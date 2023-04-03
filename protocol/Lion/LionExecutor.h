@@ -186,15 +186,19 @@ public:
         s_transactions_queue.push_back(std::move(p));
       } else {
         auto p = c_workload.unpack_transaction(context, 0, storage, simple_txn);
+        
+
         if(simple_txn.is_transmit_request){
           t_transactions_queue.push_back(std::move(p));
         } else {
           int max_node = -1;
-          // if(txn_nodes_involved(&simple_txn, max_node, true).size() > 1){
-          c_transactions_queue.push_back(std::move(p));
-          // } else {
-          //   r_transactions_queue.push_back(std::move(p));
-          // }
+
+          if(simple_txn.is_real_distributed){
+            cur_real_distributed_cnt += 1;
+            r_transactions_queue.push_back(std::move(p));
+          } else {
+            c_transactions_queue.push_back(std::move(p));
+          }
         }
       }
       router_recv_txn_num -- ;
@@ -347,7 +351,13 @@ public:
 
       unpack_route_transaction(*c_workload, *s_workload, storage, router_recv_txn_num); // 
 
-      VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size();
+      VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " " << r_transactions_queue.size() << " "  << s_transactions_queue.size() << "OMG : " << cur_real_distributed_cnt;
+
+      if(cur_real_distributed_cnt > 0){
+        do_remaster_transaction(ExecutorStatus::C_PHASE, &r_transactions_queue ,async_message_num);
+        async_fence();
+      }
+
 
       run_transaction(ExecutorStatus::C_PHASE, &c_transactions_queue ,async_message_num);
     
@@ -360,7 +370,7 @@ public:
               << " milliseconds.";
       // now = std::chrono::steady_clock::now();
       // wait to s_phase
-      // async_fence();
+      
       replication_fence(ExecutorStatus::C_PHASE);
 
       // commit transaction in c_phase;
@@ -484,7 +494,7 @@ public:
 
     return partition_id;
   }
-
+  
   bool async_remaster_fence(){
       if(transaction->asyncPendingResponses > 0){
         remaster_delay_transactions ++ ;
@@ -500,7 +510,7 @@ public:
       }
     return true;
   }
-  
+
   void run_transaction(ExecutorStatus status, 
                        std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue,
                        std::atomic<uint32_t>& async_message_num,
@@ -597,9 +607,9 @@ public:
 
           if (result == TransactionResult::READY_TO_COMMIT) {
             ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "commit" << i;
-            if(!async_remaster_fence()){
-              break;
-            }
+            // if(!async_remaster_fence()){
+            //   break;
+            // }
 
             bool commit = protocol->commit(*transaction, messages, async_message_num, false);
             
@@ -670,6 +680,126 @@ public:
 
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
+
+  void do_remaster_transaction(ExecutorStatus status, 
+                       std::deque<std::unique_ptr<TransactionType>>* cur_transactions_queue,
+                       std::atomic<uint32_t>& async_message_num,
+                       bool naive_router = false,
+                       bool reset_time = false) {
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    ProtocolType* protocol;
+
+    if (status == ExecutorStatus::C_PHASE) {
+      protocol = c_protocol;
+      partitioner = l_partitioner.get();
+    } else if (status == ExecutorStatus::S_PHASE) {
+      protocol = s_protocol;
+      partitioner = s_partitioner.get();
+    } else {
+      CHECK(false);
+    }
+
+    auto begin = std::chrono::steady_clock::now();
+    // int time1 = 0;
+    int time_prepare_read = 0;    
+    int time_read_remote = 0;
+    int time3 = 0;
+
+
+    // uint64_t last_seed = 0;
+
+    auto i = 0u;
+    size_t cur_queue_size = cur_transactions_queue->size();
+    int router_txn_num = 0;
+
+    // while(!cur_transactions_queue->empty()){ // 为什么不能这样？ 不是太懂
+    for (auto i = 0u; i < cur_queue_size; i++) {
+      if(cur_transactions_queue->empty()){
+        break;
+      }
+
+      transaction =
+              std::move(cur_transactions_queue->front());
+      transaction->startTime = std::chrono::steady_clock::now();
+
+      if(false){ // naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
+        // pass
+        router_txn_num++;
+      } else {
+        bool retry_transaction = false;
+
+        do {
+          ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
+          process_request();
+          // last_seed = random.get_seed();
+
+          if (retry_transaction) {
+            transaction->reset();
+          } else {
+            setupHandlers(*transaction, *protocol);
+          }
+
+          auto now = std::chrono::steady_clock::now();
+
+          // auto result = transaction->execute(id);
+          transaction->prepare_read_execute(id);
+
+          time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+          
+
+          auto result = transaction->read_execute(id, ReadMethods::REMASTER_ONLY);
+          
+          if(result != TransactionResult::READY_TO_COMMIT){
+            retry_transaction = false;
+            protocol->abort(*transaction, messages);
+            n_abort_no_retry.fetch_add(1);
+          }
+
+        } while (retry_transaction);
+      }
+
+      cur_transactions_queue->pop_front();
+
+      transaction->reset();
+      c_transactions_queue.push_back(std::move(transaction));
+
+      flush_messages(messages); 
+
+      if (i % context.batch_flush == 0) {
+        flush_async_messages(); 
+        flush_sync_messages();
+        // flush_record_messages();
+      }
+    }
+    flush_messages(messages); 
+    flush_async_messages();
+    // flush_record_messages();
+    flush_sync_messages();
+
+    auto total_sec = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count() * 1.0;
+    LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
+
+    if(cur_queue_size > 0){
+      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size; // << "  router : " << time1 / cur_queue_size; 
+      // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
+      // remaster_delay_transactions = 0;
+    }
+
+
+      
+
+    ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
+  }
+
 
 
   // void run_metis_transaction(ExecutorStatus status, 
@@ -1070,6 +1200,123 @@ private:
       }
     };
 
+    txn.remasterOnlyReadRequestHandler =
+        [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
+                     uint32_t key_offset, const void *key, void *value,
+                     bool local_index_read, bool &success) -> uint64_t {
+      bool local_read = false;
+      auto &readKey = txn.readSet[key_offset];
+      ITable *table = this->db.find_table(table_id, partition_id);
+      // master-replica
+      size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
+      if(readKey.get_write_lock_bit()){
+        // write key, the find all its replica
+        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
+        coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
+      }
+      // sec keys replicas
+      readKey.set_dynamic_coordinator_id(coordinatorID);
+      readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
+
+      bool remaster = false;
+      if (coordinatorID == coordinator_id) {
+        // master-replica is at local node 
+        std::atomic<uint64_t> &tid = table->search_metadata(key, success);
+        if(success == false){
+          return 0;
+        }
+        // immediatly lock local record 赶快本地lock
+        // if(readKey.get_write_lock_bit()){
+        //   TwoPLHelper::write_lock(tid, success);
+        //   // VLOG(DEBUG_V14) << "LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid;
+        // } else {
+        //   TwoPLHelper::read_lock(tid, success);
+        //   // VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
+        // }
+        // // 
+        // txn.tids[key_offset] = &tid;
+
+        if(success){
+          // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
+          readKey.set_read_respond_bit();
+        } else {
+          return 0;
+        }
+        local_read = true;
+      } else {
+        // master not at local, but has a secondary one. need to be remastered
+        // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
+        remaster = table->contains(key); // current coordniator
+        if(remaster && context.read_on_replica && !readKey.get_write_lock_bit()){
+          
+          std::atomic<uint64_t> &tid = table->search_metadata(key, success);
+          // TwoPLHelper::read_lock(tid, success);
+          // txn.tids[key_offset] = &tid;
+          // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+          readKey.set_read_respond_bit();
+          local_read = true;
+          
+          for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+            // also send to generator to update the router-table
+            if(i == coordinator_id){
+              continue; // local
+            }
+            if(i == coordinatorID){
+              // target
+              txn.network_size += MessageFactoryType::new_async_search_message(
+                  *(this->messages[i]), *table, key, key_offset, remaster, false);
+            } else {
+              // others, only change the router
+              txn.network_size += MessageFactoryType::new_async_search_router_only_message(
+                  *(this->messages[i]), *table, key, key_offset, false);
+            }   
+            VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+            // txn.asyncPendingResponses++;
+            this->async_pend_num.fetch_add(1);
+          }
+          // this->flush_messages(messages);
+          
+        }
+        if(!context.read_on_replica){
+          remaster = false;
+        }
+        if(remaster){
+          txn.remaster_cnt ++ ;
+          VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
+        } else {
+          txn.migrate_cnt ++ ;
+        }
+      }
+
+      if (local_index_read || local_read) {
+        auto ret = protocol.search(table_id, partition_id, key, value, success);
+        return ret;
+      } else {
+        // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+        //   // also send to generator to update the router-table
+        //   if(i == coordinator_id){
+        //     continue; // local
+        //   }
+        //   if(i == coordinatorID){
+        //     // target
+        //     txn.network_size += MessageFactoryType::new_search_message(
+        //         *(this->messages[i]), *table, key, key_offset, remaster, false);
+        //   } else {
+        //     // others, only change the router
+        //     txn.network_size += MessageFactoryType::new_search_router_only_message(
+        //         *(this->messages[i]), *table, key, key_offset, false);
+        //   }            
+        //   txn.pendingResponses++;
+        //   // LOG(INFO) << "txn.pendingResponses: " << txn.pendingResponses << " " << readKey.get_write_lock_bit();
+        // }
+        // txn.distributed_transaction = true;
+        return 0;
+      }
+    };
+
+
+
     txn.remote_request_handler = [this]() { return this->process_request(); };
     txn.message_flusher = [this]() { this->flush_messages(messages); };
   }
@@ -1218,6 +1465,7 @@ private:
   Partitioner* partitioner;
   Partitioner* metis_partitioner;
 
+  int cur_real_distributed_cnt = 0;
   RandomType random;
   RandomType metis_random;
 

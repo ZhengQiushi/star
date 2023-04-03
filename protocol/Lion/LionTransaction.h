@@ -217,6 +217,51 @@ public:
     }
   }
 
+  bool process_remaster_requests(std::size_t worker_id) {
+    /**
+     * @brief calling functions inited by handle
+     * 
+     * @param i 
+     */
+    bool success = true;
+    // 
+    tids.resize(readSet.size(), nullptr);
+
+    // cannot use unsigned type in reverse iteration
+    for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+      // early return
+      if (!readSet[i].get_read_request_bit()) {
+        break;
+      }
+
+      const LionRWKey &readKey = readSet[i];
+      auto tid =
+          remasterOnlyReadRequestHandler(readKey.get_table_id(), readKey.get_partition_id(),
+                             i, readKey.get_key(), readKey.get_value(),
+                             readKey.get_local_index_read_bit(), success);
+      if(success == false){
+        break;
+      }
+      readSet[i].clear_read_request_bit();
+      readSet[i].set_tid(tid);
+    }
+
+    if (pendingResponses > 0) {
+      DCHECK(false);
+    }
+    if(is_abort()){
+      success = false;
+    }
+    if(success == true){
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  // 
+
+
 
   bool process_read_only_requests(std::size_t worker_id) {
     /**
@@ -346,6 +391,11 @@ public:
                          const void *, void *, 
                          bool, bool&)>
       readRequestHandler;
+  
+    std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
+                         const void *, void *, 
+                         bool, bool&)>
+      remasterOnlyReadRequestHandler;
   
   std::function<uint64_t(std::size_t, std::size_t, uint32_t, 
                        const void *, void *, 

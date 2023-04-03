@@ -50,7 +50,8 @@ enum class TransactionResult { COMMIT, READY_TO_COMMIT, ABORT, ABORT_NORETRY, NO
 enum class ReadMethods {
   REMOTE_READ_WITH_TRANSFER,
   LOCAL_READ,
-  REMOTE_READ_ONLY
+  REMOTE_READ_ONLY,
+  REMASTER_ONLY
 };
 
 enum class RouterTxnOps {
@@ -84,7 +85,8 @@ struct simpleTransaction {
   RouterTxnOps op;
   uint64_t size;
   uint64_t partition_id;    // for clay, it means the destination coordinator_id
-  bool is_distributed;
+  bool is_distributed;      // for generator
+  bool is_real_distributed; // for executor
   bool is_transmit_request; // only for clay
   uint64_t destination_coordinator;
   int execution_cost;

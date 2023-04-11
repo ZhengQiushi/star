@@ -144,12 +144,11 @@ public:
         // } else {
           // LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
         // }
-
+        
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
 
           bool commit = protocol.commit(*transaction, sync_messages, async_messages);
-          n_network_size.fetch_add(transaction->network_size);
           if (commit) {
             n_commit.fetch_add(1);
             retry_transaction = false;
@@ -165,12 +164,15 @@ public:
           }
         } else if(result == TransactionResult::TRANSMIT_REQUEST){
           // pass
+          n_commit.fetch_add(1);
           n_migrate.fetch_add(transaction->migrate_cnt);
           n_remaster.fetch_add(transaction->remaster_cnt);
         } else {
           protocol.abort(*transaction, sync_messages, async_messages);
           n_abort_no_retry.fetch_add(1);
         }
+        n_network_size.fetch_add(transaction->network_size);
+        // LOG(INFO) << transaction->network_size;
       } while (retry_transaction);
 
       cur_transactions_queue.pop_front();

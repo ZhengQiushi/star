@@ -55,12 +55,14 @@ public:
       n_started_workers.store(0);
       n_completed_workers.store(0);
       signal_worker(ExecutorStatus::Analysis);
+      LOG(INFO) << "Analysis start"; 
       // Allow each worker to analyse the read/write set
       // each worker analyse i, i + n, i + 2n transaction
       wait_all_workers_start();
       wait_all_workers_finish();
 
       // wait for all machines until they finish the analysis phase.
+      LOG(INFO) << "Analysis finish, wait ack";
       wait4_ack();
 
       // Allow each worker to run transactions
@@ -72,9 +74,12 @@ public:
       n_completed_workers.store(0);
       clear_lock_manager_status();
       signal_worker(ExecutorStatus::Execute);
+      LOG(INFO) << "Execute start";
       wait_all_workers_start();
+      LOG(INFO) << "Execute all work started";
       wait_all_workers_finish();
       // wait for all machines until they finish the execution phase.
+      LOG(INFO) << "Execute finish, wait ack";
       wait4_ack();
     }
 
@@ -103,13 +108,15 @@ public:
       n_started_workers.store(0);
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::Analysis);
+      LOG(INFO) << "Analysis start"; 
       wait_all_workers_start();
       wait_all_workers_finish();
-
+      LOG(INFO) << "Analysis finish, send ack";
       send_ack();
 
       status = wait4_signal();
       DCHECK(status == ExecutorStatus::Execute);
+      LOG(INFO) << "Execute start";
       // Allow each worker to run transactions
       // DB is partitioned by the number of lock managers.
       // The first k workers act as lock managers to grant locks to other
@@ -121,6 +128,7 @@ public:
       set_worker_status(ExecutorStatus::Execute);
       wait_all_workers_start();
       wait_all_workers_finish();
+      LOG(INFO) << "Execute finish, send ack";
       send_ack();
     }
   }

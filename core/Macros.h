@@ -89,7 +89,7 @@ DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
   context.batch_flush = FLAGS_batch_flush;                                     \
   context.sleep_time = FLAGS_sleep_time;                                       \
   context.protocol = FLAGS_protocol;                                           \
-  context.replica_group = FLAGS_replica_group;                                 \
+  context.replica_group = std::to_string(context.coordinator_num);             \
   context.lock_manager = FLAGS_lock_manager;                                   \
   context.read_on_replica = FLAGS_read_on_replica;                             \
   context.local_validation = FLAGS_local_validation;                           \

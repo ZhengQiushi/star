@@ -79,7 +79,7 @@ public:
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
     dec >> tid >> key_offset;
-    DCHECK(tid < txns.size());
+    DCHECK(tid < txns.size()) << tid << " " << txns.size();
     DCHECK(key_offset < txns[tid]->readSet.size());
     CalvinRWKey &readKey = txns[tid]->readSet[key_offset];
     dec.read_n_bytes(readKey.get_value(), value_size);

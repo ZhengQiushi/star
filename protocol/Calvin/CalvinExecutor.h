@@ -49,7 +49,8 @@ public:
                  std::atomic<uint32_t> &n_complete_workers,
                  std::atomic<uint32_t> &n_started_workers)
       : Worker(coordinator_id, id), db(db), context(context),
-        transactions(transactions), storages(storages),
+        transactions(transactions), 
+        storages(storages),
         lock_manager_status(lock_manager_status), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -74,10 +75,24 @@ public:
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
+    controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
+
     CHECK(n_workers > 0 && n_workers % n_lock_manager == 0);
   }
 
   ~CalvinExecutor() = default;
+
+  bool is_router_stopped(int& router_recv_txn_num){
+    bool ret = false;
+    if(!router_stop_queue.empty()){
+      int recv_txn_num = router_stop_queue.front();
+      router_stop_queue.pop_front();
+      router_recv_txn_num += recv_txn_num;
+      VLOG(DEBUG_V8) << " RECV : " << recv_txn_num;
+      ret = true;
+    }
+    return ret;
+  }
 
   void start() override {
     LOG(INFO) << "CalvinExecutor " << id << " started. ";
@@ -95,7 +110,9 @@ public:
       } while (status != ExecutorStatus::Analysis);
 
       n_started_workers.fetch_add(1);
-      generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
+      if (id < n_lock_manager) {
+        my_generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
+      }
       n_complete_workers.fetch_add(1);
 
       // wait to Execute
@@ -110,10 +127,19 @@ public:
       if (id < n_lock_manager) {
         // schedule transactions
         schedule_transactions();
+        for(int r = 0; r < router_recv_txn_num; r ++ ){
+          // 发回原地...
+          size_t generator_id = context.coordinator_num;
+          // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+          ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
+          flush_messages();
+        }
       } else {
         // work as executor
         run_transactions();
       }
+
+      LOG(INFO) << "done, send: " << router_recv_txn_num;
 
       n_complete_workers.fetch_add(1);
 
@@ -121,6 +147,10 @@ public:
 
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Execute) {
+        status = static_cast<ExecutorStatus>(worker_status.load());
+        if (status == ExecutorStatus::EXIT) {
+          break;
+        }
         process_request();
       }
     }
@@ -176,26 +206,66 @@ public:
     message->set_worker_id(id);
   }
 
-  void generate_transactions() {
-    if (!context.calvin_same_batch || !init_transaction) {
-      init_transaction = true;
-      for (auto i = id; i < transactions.size(); i += context.worker_num) {
-        // generate transaction
-        auto partition_id = random.uniform_dist(0, context.partition_num - 1);
-        transactions[i] =
-            workload.next_transaction(context, partition_id, storages[i]);
-        transactions[i]->set_id(i);
-        prepare_transaction(*transactions[i]);
-      }
-    } else {
-      for (auto i = id; i < transactions.size(); i += context.worker_num) {
-        // a soft reset
-        transactions[i]->network_size.store(0);
-        transactions[i]->load_read_count();
-        transactions[i]->clear_execution_bit();
-      }
+  void unpack_route_transaction(){
+    int s = router_transactions_queue.size();
+    DCHECK(s == router_recv_txn_num);
+    transactions.clear();
+
+    while(s -- > 0){
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      router_transactions_queue.pop_front();
+
+      n_network_size.fetch_add(simple_txn.size);
+      size_t t_id = transactions.size();
+      auto p = workload.unpack_transaction(context, 0, storages[t_id], simple_txn);
+      p->set_id(t_id);
+      prepare_transaction(*p);
+      // LOG(INFO) << *(int*) p->readSet[0].get_key() << " " << *(int*) p->readSet[1].get_key();
+      transactions.push_back(std::move(p));
     }
   }
+
+  void my_generate_transactions() {
+      router_recv_txn_num = 0;
+      // 准备transaction
+      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
+        process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
+
+      // VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
+      //                std::chrono::steady_clock::now() - begin)
+      //                .count()
+      //         << " milliseconds.";
+      // now = std::chrono::steady_clock::now();
+
+      unpack_route_transaction(); // 
+
+      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction : " << transactions.size();
+
+  }
+
+  // void generate_transactions() {
+  //   if (!context.calvin_same_batch || !init_transaction) {
+  //     init_transaction = true;
+  //     for (auto i = id; i < transactions.size(); i += context.worker_num) {
+  //       // generate transaction
+  //       auto partition_id = random.uniform_dist(0, context.partition_num - 1);
+  //       transactions[i] =
+  //           workload.next_transaction(context, partition_id, storages[i]);
+  //       transactions[i]->set_id(i);
+  //       prepare_transaction(*transactions[i]);
+  //     }
+  //   } else {
+  //     for (auto i = id; i < transactions.size(); i += context.worker_num) {
+  //       // a soft reset
+  //       transactions[i]->network_size.store(0);
+  //       transactions[i]->load_read_count();
+  //       transactions[i]->clear_execution_bit();
+  //     }
+  //   }
+  // }
 
   void prepare_transaction(TransactionType &txn) {
     /**
@@ -250,7 +320,9 @@ public:
     // a worker thread in a round-robin manner.
 
     std::size_t request_id = 0;
-
+    int skip_num = 0;
+    int real_num = 0;
+    
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
       if (!transactions[i]->abort_no_retry) {
@@ -284,15 +356,23 @@ public:
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           if (readKey.get_write_lock_bit()) {
             CalvinHelper::write_lock(tid);
+            // LOG(INFO) << "TXN[" << transactions[i]->id << "] wLOCK : " << *(int*)key;
           } else if (readKey.get_read_lock_bit()) {
             CalvinHelper::read_lock(tid);
+            // LOG(INFO) << "TXN[" << transactions[i]->id << "] rLOCK : " << *(int*)key;
           } else {
             CHECK(false);
           }
+          
         }
         if (grant_lock) {
           auto worker = get_available_worker(request_id++);
+          // LOG(INFO) << "TXN[" << transactions[i]->id << "] router to : " << worker;
           all_executors[worker]->transaction_queue.push(transactions[i].get());
+          real_num += 1;
+          // LOG(INFO) << all_executors[worker]->transaction_queue.size();
+        } else {
+          skip_num += 1;
         }
         // only count once
         if (i % n_lock_manager == id) {
@@ -305,10 +385,12 @@ public:
         }
       }
     }
+    LOG(INFO) << " transaction recv : " << transactions.size() << " " << real_num << " " << skip_num;
     set_lock_manager_bit(id);
   }
 
   void run_transactions() {
+    size_t generator_id = context.coordinator_num;
 
     while (!get_lock_manager_bit(lock_manager_id) ||
            !transaction_queue.empty()) {
@@ -334,6 +416,11 @@ public:
       } else {
         CHECK(false) << "abort no retry transaction should not be scheduled.";
       }
+      
+      // // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+      // ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
+      // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
+      // flush_messages();
     }
   }
 
@@ -442,9 +529,19 @@ public:
         DCHECK(type < messageHandlers.size());
         ITable *table = db.find_table(messagePiece.get_table_id(),
                                       messagePiece.get_partition_id());
-        messageHandlers[type](messagePiece,
-                              *messages[message->get_source_node_id()], *table,
-                              transactions);
+        if(type < controlMessageHandlers.size()){
+          // transaction router from Generator
+          controlMessageHandlers[type](
+            messagePiece,
+            *messages[message->get_source_node_id()], db,
+            &router_transactions_queue, 
+            &router_stop_queue
+          );
+        } else {
+          messageHandlers[type](messagePiece,
+                                *messages[message->get_source_node_id()], *table,
+                                transactions);
+        }
       }
 
       size += message->get_message_count();
@@ -456,7 +553,7 @@ public:
 private:
   DatabaseType &db;
   const ContextType &context;
-  std::vector<std::unique_ptr<TransactionType>> &transactions;
+  std::vector<std::unique_ptr<TransactionType>>& transactions;
   std::vector<StorageType> &storages;
   std::atomic<uint32_t> &lock_manager_status, &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
@@ -473,8 +570,17 @@ private:
       std::function<void(MessagePiece, Message &, ITable &,
                          std::vector<std::unique_ptr<TransactionType>> &)>>
       messageHandlers;
-  LockfreeQueue<Message *> in_queue, out_queue;
+  std::vector<
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      controlMessageHandlers;
+  
+  LockfreeQueue<Message *, 10086> in_queue, out_queue;
   LockfreeQueue<TransactionType *> transaction_queue;
   std::vector<CalvinExecutor *> all_executors;
+
+  std::deque<simpleTransaction> router_transactions_queue;
+  std::deque<int> router_stop_queue;
+
+  int router_recv_txn_num = 0; // generator router from 
 };
 } // namespace star

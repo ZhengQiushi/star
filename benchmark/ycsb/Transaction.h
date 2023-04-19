@@ -60,7 +60,8 @@ public:
            * @brief convert from the generated txns
            * 
            */
-          is_transmit_request = simple_txn.is_transmit_request;    
+          is_transmit_request = simple_txn.is_transmit_request;
+          on_replica_id = simple_txn.on_replica_id;
         }
 
   virtual ~ReadModifyWrite() override = default;
@@ -381,6 +382,7 @@ private:
   std::size_t partition_id;
   YCSBQuery query;
   bool is_transmit_request;
+  int on_replica_id; // only for hermes
 };
 } // namespace ycsb
 

@@ -58,9 +58,14 @@ public:
     uint64_t is_distributed = txn.is_distributed;
     uint64_t is_real_distributed = txn.is_real_distributed;
     uint64_t is_transmit_request = txn.is_transmit_request;
+    int on_replica_id = txn.on_replica_id;
 
     auto message_size =
-        MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(is_real_distributed) + sizeof(is_transmit_request) + 
+        MessagePiece::get_header_size() + sizeof(op) + 
+                      sizeof(is_distributed) + 
+                      sizeof(is_real_distributed) + 
+                      sizeof(is_transmit_request) + 
+                      sizeof(on_replica_id) + 
                       sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_REQUEST), message_size,
@@ -68,7 +73,11 @@ public:
 
     Encoder encoder(message.data);
     encoder << message_piece_header;
-    encoder << op << is_distributed << is_real_distributed << is_transmit_request << txn_size;
+    encoder << op << is_distributed << 
+                     is_real_distributed << 
+                     is_transmit_request << 
+                     on_replica_id << 
+                     txn_size;
     for(size_t i = 0 ; i < txn_size; i ++ ){
       uint64_t key = key_[i];
       bool update = update_[i];
@@ -280,6 +289,7 @@ public:
 
     auto stringPiece = inputPiece.toStringPiece();
     uint64_t txn_size, op, is_distributed, is_real_distributed, is_transmit_request;
+    int on_replica_id;
     simpleTransaction new_router_txn;
 
     // get op
@@ -296,12 +306,20 @@ public:
     is_transmit_request = *(uint64_t*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(is_transmit_request));
 
+    on_replica_id = *(int*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(on_replica_id));
     // get key_size
     txn_size = *(uint64_t*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(txn_size));
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(is_real_distributed) + sizeof(is_transmit_request) + sizeof(txn_size) + 
+           MessagePiece::get_header_size() + 
+           sizeof(op) + 
+           sizeof(is_distributed) + 
+           sizeof(is_real_distributed) + 
+           sizeof(is_transmit_request) + 
+           sizeof(on_replica_id) + 
+           sizeof(txn_size) + 
            (sizeof(uint64_t) + sizeof(bool)) * txn_size) ;
 
     star::Decoder dec(stringPiece);
@@ -324,7 +342,12 @@ public:
     new_router_txn.is_distributed = is_distributed;
     new_router_txn.is_real_distributed = is_real_distributed;
     new_router_txn.is_transmit_request = is_transmit_request;
-    VLOG(DEBUG_V14) << " GET ROUTER " << is_transmit_request << " " << is_distributed << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
+    new_router_txn.on_replica_id = on_replica_id;
+    VLOG(DEBUG_V14) << " GET ROUTER " << is_transmit_request << " " << 
+                                         is_distributed      << " " << 
+                                         on_replica_id       << " " <<
+                                         new_router_txn.keys[0] << " " << 
+                                         new_router_txn.keys[1];
     router_txn_queue->push_back(new_router_txn);
     // DCHECK(ok == true);
 

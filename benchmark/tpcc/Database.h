@@ -47,6 +47,23 @@ public:
     return tbl_vecs_router[table_id]; // [coordinator_id];
   }
 
+  ITable *find_table(std::size_t table_id, std::size_t partition_id, std::size_t replica_id) {
+    DCHECK(false) << "todo";
+    // DCHECK(table_id < tbl_vecs.size());
+    // if(partition_id >= tbl_vecs[table_id].size()){
+    //   LOG(INFO) << partition_id <<" " << tbl_vecs[table_id].size();
+    //   DCHECK(partition_id < tbl_vecs[table_id].size());
+    // }
+    return tbl_vecs[table_id][partition_id];
+  }
+
+  ITable *find_router_table(std::size_t table_id, std::size_t replica_id) { // , std::size_t coordinator_id
+    DCHECK(false) << "todo";
+    // DCHECK(table_id < tbl_vecs.size());
+    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
+    return tbl_vecs_router[table_id]; // [coordinator_id];
+  }
+
   ITable *tbl_warehouse(std::size_t partition_id) {
     DCHECK(partition_id < tbl_warehouse_vec.size());
     return tbl_warehouse_vec[partition_id].get();
@@ -543,6 +560,14 @@ public:
     ITable* tab = find_router_table(table_id); // , coordinator_id);
     auto router_val = (RouterValue*)(tab->search_value(key));
     return router_val->get_dynamic_coordinator_id();
+  }
+
+  std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key, int replica_id){
+    DCHECK(false) << " todo";
+    // ITable* tab = find_router_table(table_id); // , coordinator_id);
+    // auto router_val = (RouterValue*)(tab->search_value(key));
+    // return router_val->get_dynamic_coordinator_id();
+    return 0;
   }
 
   std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){

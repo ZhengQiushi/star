@@ -750,6 +750,7 @@ private:
   std::size_t partition_id;
   NewOrderQuery query;
   bool is_transmit_request;
+  int on_replica_num; // only for hermes
 };
 
 template <class Transaction> class Payment : public Transaction {
@@ -998,6 +999,7 @@ private:
   std::size_t partition_id;
   PaymentQuery query;
   bool is_transmit_request;
+  int on_replica_num; // only for hermes
 };
 
 } // namespace tpcc

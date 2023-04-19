@@ -51,6 +51,9 @@ public:
   virtual std::size_t master_coordinator(int table_id, int partition_id, const void* key) const = 0;
   virtual std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const = 0;
 
+  virtual std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const = 0;
+  virtual std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const = 0;
+
   // check if the replica of `key` is on Node `coordinator_id` or not
   virtual bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const = 0;
@@ -121,13 +124,20 @@ public:
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
     // DCHECK(false);
     return master_coordinator(partition_id); // false;
-
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
     return secondary_coordinator(partition_id); // false;
-
   }
   
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
+
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     // DCHECK(false);
@@ -187,6 +197,14 @@ public:
 
   }
   
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(false);
@@ -268,6 +286,14 @@ public:
 
   }
   
+    std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(false);
@@ -335,7 +361,14 @@ public:
     return secondary_coordinator(partition_id); // false;
 
   }
-  
+    std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(false);
@@ -428,7 +461,14 @@ public:
 
   }
 
-  
+    std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(false);
@@ -505,6 +545,14 @@ public:
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
     // the static replica is master at initial state
     return (partition_id) % coordinator_num;
+  }
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
@@ -584,6 +632,14 @@ public:
     // the static replica is master at initial state
     DCHECK(false);
     return 0; // (partition_id) % coordinator_num;
+  }
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
@@ -667,7 +723,14 @@ public:
     DCHECK(false);
     return secondary_coordinator(partition_id); // false;
   }
-  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(false);
@@ -737,22 +800,26 @@ public:
 
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
     return db.get_dynamic_coordinator_id(coordinator_num, table_id, key);
 
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
     auto master_coordinator_id = master_coordinator(table_id, partition_id, key);
-    // auto static_coordinator_id = secondary_coordinator(partition_id);
-
-    // if(master_coordinator_id != static_coordinator_id){
-    //   return static_coordinator_id;
-    // } else {
-      auto router_table = db.find_router_table(table_id, master_coordinator_id);
-      size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
-      return secondary_coordinator_id;
-    // }
+    auto router_table = db.find_router_table(table_id, master_coordinator_id);
+    size_t secondary_coordinator_id = *(size_t*)router_table->search_value(key);
+    return secondary_coordinator_id;
   }
   
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    return db.get_dynamic_coordinator_id(coordinator_num, table_id, key, replica_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
+
   bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
                                   std::size_t coordinator_id) const override {
     DCHECK(coordinator_id <= coordinator_num);

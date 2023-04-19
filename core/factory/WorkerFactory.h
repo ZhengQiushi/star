@@ -60,11 +60,11 @@
 #include "protocol/Calvin/CalvinTransaction.h"
 #include "protocol/Calvin/CalvinGenerator.h"
 
-// #include "protocol/Hermes/Hermes.h"
-// #include "protocol/Hermes/HermesExecutor.h"
-// #include "protocol/Hermes/HermesManager.h"
-// #include "protocol/Hermes/HermesTransaction.h"
-
+#include "protocol/Hermes/Hermes.h"
+#include "protocol/Hermes/HermesExecutor.h"
+#include "protocol/Hermes/HermesManager.h"
+#include "protocol/Hermes/HermesTransaction.h"
+#include "protocol/Hermes/HermesGenerator.h"
 
 #include <unordered_set>
 
@@ -353,40 +353,40 @@ public:
             ->set_all_executors(all_executors);
       }
     } 
-    // else if (context.protocol == "Hermes") {
+    else if (context.protocol == "Hermes") {
 
-    //   using TransactionType = star::HermesTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
+      using TransactionType = star::HermesTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
 
-    //   // create manager
+      // create manager
 
-    //   auto manager = std::make_shared<HermesManager<WorkloadType>>(
-    //       coordinator_id, context.worker_num, db, context, stop_flag);
+      auto manager = std::make_shared<HermesManager<WorkloadType>>(
+          coordinator_id, context.worker_num, db, context, stop_flag);
 
-    //   // create worker
+      // create worker
 
-    //   std::vector<HermesExecutor<WorkloadType> *> all_executors;
+      std::vector<HermesExecutor<WorkloadType> *> all_executors;
 
-    //   for (auto i = 0u; i < context.worker_num; i++) {
+      for (auto i = 0u; i < context.worker_num; i++) {
 
-    //     auto w = std::make_shared<HermesExecutor<WorkloadType>>(
-    //         coordinator_id, i, db, context, manager->transactions,
-    //         manager->storages, manager->lock_manager_status,
-    //         manager->worker_status, manager->n_completed_workers,
-    //         manager->n_started_workers);
-    //     workers.push_back(w);
-    //     manager->add_worker(w);
-    //     all_executors.push_back(w.get());
-    //   }
-    //   // push manager to workers
-    //   workers.push_back(manager);
+        auto w = std::make_shared<HermesExecutor<WorkloadType>>(
+            coordinator_id, i, db, context, manager->transactions,
+            manager->storages, manager->lock_manager_status,
+            manager->worker_status, manager->n_completed_workers,
+            manager->n_started_workers);
+        workers.push_back(w);
+        manager->add_worker(w);
+        all_executors.push_back(w.get());
+      }
+      // push manager to workers
+      workers.push_back(manager);
 
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     static_cast<HermesExecutor<WorkloadType> *>(workers[i].get())
-    //         ->set_all_executors(all_executors);
-    //   }
-    // }
+      for (auto i = 0u; i < context.worker_num; i++) {
+        static_cast<HermesExecutor<WorkloadType> *>(workers[i].get())
+            ->set_all_executors(all_executors);
+      }
+    }
     else if (context.protocol == "MyClay") {
       CHECK(context.partition_num %
                 (context.worker_num * context.coordinator_num) ==
@@ -637,25 +637,26 @@ public:
       // push manager to workers
       workers.push_back(manager);
     } 
-    // else if (context.protocol == "Hermes") {
+    else if (context.protocol == "Hermes") {
 
-    //   using TransactionType = star::HermesTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
+      using TransactionType = star::HermesTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+      // create manager
 
-    //   // create manager
+      auto manager = std::make_shared<HermesManager<WorkloadType>>(
+          coordinator_id, context.worker_num, db, context, stop_flag);
 
-    //   auto manager = std::make_shared<HermesManager<WorkloadType>>(
-    //       coordinator_id, context.worker_num, db, context, stop_flag);
-
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
-    //           coordinator_id, i, db, context, manager->worker_status,
-    //           manager->n_completed_workers, manager->n_started_workers));
-    //   }
-    //   // push manager to workers
-    //   workers.push_back(manager);
-    // }
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<group_commit::HermesGenerator<WorkloadType, Hermes<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      }
+      // push manager to workers
+      workers.push_back(manager);
+    }
 
 
     return workers;

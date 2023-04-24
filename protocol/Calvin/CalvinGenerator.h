@@ -251,7 +251,7 @@ public:
 
     // transaction only commit in a single group
 
-    std::queue<std::unique_ptr<TransactionType>> q;
+    std::queue<std::unique_ptr<simpleTransaction>> q;
     std::size_t count = 0;
 
 
@@ -307,10 +307,11 @@ public:
 
       while (!q.empty()) {
         auto &ptr = q.front();
-        auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - ptr->startTime)
-                           .count();
-        commit_latency.add(latency);
+        // auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
+        //                    std::chrono::steady_clock::now() - ptr->startTime)
+        //                    .count();
+        // commit_latency.add(latency);
+        n_commit.fetch_add(1);
         q.pop();
       }
 
@@ -348,7 +349,7 @@ public:
               // txn_nodes_involved(txn.get(), false);
               // txn->destination_coordinator = coordinator_id_dst;
               router_request(router_send_txn_cnt, txn.get());            
-
+              q.push(std::move(txn));
             }
             is_full_signal.store(0);
             // after router all txns, send the stop-SIGNAL

@@ -310,7 +310,7 @@ public:
     auto ycsbTableID = ycsb::tableID;
     for (auto partitionID = 0u; partitionID < partitionNum; partitionID++) {
       tbl_ycsb_vec.push_back(
-          std::make_unique<Table<9973, ycsb::key, ycsb::value>>(ycsbTableID,
+          std::make_unique<Table<100860, ycsb::key, ycsb::value>>(ycsbTableID,
                                                                 partitionID));
     }
 
@@ -331,7 +331,7 @@ public:
     
     // initalize_router_table
     // quick look-up for certain-key on which node, pre-allocate space
-    tbl_ycsb_vec_router = (std::make_unique<Table<9973, ycsb::key, RouterValue>>(ycsbTableID, 0));
+    tbl_ycsb_vec_router = (std::make_unique<Table<100860, ycsb::key, RouterValue>>(ycsbTableID, 0));
     tbl_vecs_router.resize(1);
     tbl_vecs_router[0] = tbl_ycsb_vec_router.get();
 
@@ -342,7 +342,7 @@ public:
       for(size_t i = 0; i < replica_num; i ++ ){
         for (auto partitionID = 0u; partitionID < partitionNum; partitionID++) {
           tbl_ycsb_vec_[i].push_back(
-              std::make_unique<Table<9973, ycsb::key, ycsb::value>>(ycsbTableID,
+              std::make_unique<Table<100860, ycsb::key, ycsb::value>>(ycsbTableID,
                                                                     partitionID));
         }
       }
@@ -364,7 +364,7 @@ public:
                   partitionNum, threadsNum, partitioner.get(), i);
       }
       for(size_t i = 0; i < replica_num; i ++ ){
-        tbl_ycsb_vec_router_[i] = (std::make_unique<Table<9973, ycsb::key, RouterValue>>(ycsbTableID, 0));
+        tbl_ycsb_vec_router_[i] = (std::make_unique<Table<100860, ycsb::key, RouterValue>>(ycsbTableID, 0));
 
         std::vector<ITable *> tt;
         tbl_vecs_router_[i].resize(1);

@@ -253,24 +253,24 @@ public:
       }
 
       message_flusher(worker_id);
+      return false;
+      // if (active_coordinators[coordinator_id]) {
+      //   auto tmp = get_query();
+      //   if(remote_read.load() > 0){
+      //     // LOG(INFO) << "remote_read.load(): " << *(int*)& tmp[0] << " " << *(int*)& tmp[1];
+      //   }
+      //   VLOG(DEBUG_V12) << "remote_request_handler : " << id << " " << local_read.load() << " " << remote_read.load();
+      //   // spin on local & remote read
+      //   while (local_read.load() > 0 || remote_read.load() > 0) {
+      //     // process remote reads for other workers
+      //     remote_request_handler(worker_id);
+      //   }
 
-      if (active_coordinators[coordinator_id]) {
-        auto tmp = get_query();
-        if(remote_read.load() > 0){
-          // LOG(INFO) << "remote_read.load(): " << *(int*)& tmp[0] << " " << *(int*)& tmp[1];
-        }
-        VLOG(DEBUG_V12) << "remote_request_handler : " << id << " " << local_read.load() << " " << remote_read.load();
-        // spin on local & remote read
-        while (local_read.load() > 0 || remote_read.load() > 0) {
-          // process remote reads for other workers
-          remote_request_handler(worker_id);
-        }
-
-        return false;
-      } else {
-        // abort if not active
-        return true;
-      }
+      //   return false;
+      // } else {
+      //   // abort if not active
+      //   return true;
+      // }
     };
   }
 

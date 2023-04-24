@@ -97,7 +97,7 @@ public:
     LOG(INFO) << "CalvinExecutor " << id << " started. ";
 
     for (;;) {
-
+      auto begin = std::chrono::steady_clock::now();
       ExecutorStatus status;
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
@@ -110,7 +110,28 @@ public:
 
       n_started_workers.fetch_add(1);
       if (id < n_lock_manager) {
-        my_generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
+        // my_generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
+      router_recv_txn_num = 0;
+      // 准备transaction
+      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
+        process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
+      VLOG_IF(DEBUG_V, id==0) << "Unpack start time: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
+
+      unpack_route_transaction(); // 
+
+      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction : " << transactions.size();
+
+      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
       }
       n_complete_workers.fetch_add(1);
 
@@ -120,12 +141,23 @@ public:
              ExecutorStatus::Analysis) {
         std::this_thread::yield();
       }
+      
+      VLOG_IF(DEBUG_V, id==0) << "Analysis time: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
 
       n_started_workers.fetch_add(1);
       // work as lock manager
       if (id < n_lock_manager) {
         // schedule transactions
         schedule_transactions();
+        VLOG(DEBUG_V) << "Schedule time: "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
         for(int r = 0; r < router_recv_txn_num; r ++ ){
           // 发回原地...
           size_t generator_id = context.coordinator_num;
@@ -133,11 +165,21 @@ public:
           ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
           flush_messages();
         }
+        VLOG(DEBUG_V) << "Route back time: "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
       } else {
         // work as executor
         run_transactions();
+        VLOG(DEBUG_V) << "Run time: "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
       }
-      LOG(INFO) << "done, send: " << router_recv_txn_num;
+      LOG(INFO) << "done, send: " << router_recv_txn_num << " " << need_remote_read_num;
 
       n_complete_workers.fetch_add(1);
 
@@ -151,6 +193,7 @@ public:
         }
         process_request();
       }
+
     }
   }
 
@@ -426,6 +469,7 @@ public:
               *worker->messages[i], *table, id, key_offset, value);
           txn.network_size.fetch_add(sz);
           txn.distributed_transaction = true;
+          need_remote_read_num += 1;
         }
         txn.local_read.fetch_add(-1);
       }
@@ -556,5 +600,7 @@ private:
   std::deque<int> router_stop_queue;
 
   int router_recv_txn_num = 0; // generator router from 
+
+  int need_remote_read_num = 0;
 };
 } // namespace star

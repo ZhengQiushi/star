@@ -80,6 +80,13 @@ public:
 
     generator_num = 1;
     txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
+
+    replica_num = partitioner.replica_num();
+
+    ycsbTableID = ycsb::ycsb::tableID;
+    // for(int i = 0; i < replica_num; i ++ ){
+    //   router_table_vec.push_back(db.find_router_table(ycsbTableID, i));
+    // }
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage){
@@ -131,59 +138,110 @@ public:
     router_transactions_send.store(0);
   }
 
+  void txn_replica_involved(simpleTransaction* t, int replica_id) {
+    auto query_keys = t->keys;
+    // 
+    int replica_master_coordinator[2] = {0};
+  
+    int max_cnt = 0;
+    int replica_destination = -1;
+    
+    // check master num at this replica on each node
+    int from_nodes_id[20] = {0};
+    int master_max_cnt = 0;
+    for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+      // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+      // look-up the dynamic router to find-out where
+      size_t cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                            ycsbTableID, 
+                                            (void*)& query_keys[j], replica_id);
+
+      from_nodes_id[cur_c_id] += 1;
+
+      if(from_nodes_id[cur_c_id] > master_max_cnt){
+        master_max_cnt = from_nodes_id[cur_c_id];
+        replica_destination = cur_c_id;
+      }
+    }
+
+    t->on_replica_id = replica_id;
+    t->destination_coordinator = replica_destination;
+    // LOG(INFO) << t->idx_ << " " << t->keys[0] << " " << t->keys[1] << " " << replica_id;
+    return;
+   }
+
+  // void txn_nodes_involved(simpleTransaction* txn) {
+  //     int from_nodes_id[20] = {0};
+  //     size_t ycsbTableID = ycsb::ycsb::tableID;
+  //     auto query_keys = txn->keys;
+  //     int max_cnt = 0;
+  //     txn->destination_coordinator = -1;
+  //     for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+  //       // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+  //       // look-up the dynamic router to find-out where
+  //       size_t cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+  //                                             ycsbTableID, 
+  //                                             (void*)& query_keys[j], 
+  //                                             txn->on_replica_id);
+
+  //       from_nodes_id[cur_c_id] += 1;
+
+  //       if(from_nodes_id[cur_c_id] > max_cnt){
+  //         max_cnt = from_nodes_id[cur_c_id];
+  //         txn->destination_coordinator = cur_c_id;
+  //       }
+  //     }
+  //    return;
+  //  }
+
+  /// @brief pick the ideal destination for migration
+  // void router_planning(simpleTransaction* txn){
+  //   // for (size_t i = 0; i < transactions.size(); i ++) {
+  //     // generate transaction
+  //     // auto& txn = transactions[i];
+  //     auto all_coords = txn_nodes_involved(txn);
+  //     DCHECK(all_coords.size() > 0);
+  //     // simply choose one
+  //     //!TODO planning  
+  //     DCHECK(0 <= txn->destination_coordinator && 
+  //                 txn->destination_coordinator < context.coordinator_num);
+  //   // }
+  // }
+
   int pin_thread_id_ = 3;
   void router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
   // auto router_request = [&]( std::shared_ptr<simpleTransaction> txn) {
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      if(i == context.coordinator_id) continue;
-      size_t coordinator_id_dst = i; // txn->destination_coordinator;
-      
-      txn_replica_involved(txn, i);
+    for(size_t r = 0 ; r < replica_num; r ++ ){
+    
+      txn_replica_involved(txn, r);
+
+      t_1 += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - t_start)
+                           .count();
+      t_start = std::chrono::steady_clock::now();
+
+      int i = txn->destination_coordinator;
       // router transaction to coordinators
-      messages_mutex[coordinator_id_dst]->lock();
+      messages_mutex[i]->lock();
       size_t router_size = ControlMessageFactory::new_router_transaction_message(
-          *async_messages[coordinator_id_dst].get(), 0, *txn, 
+          *async_messages[i].get(), 0, *txn, 
           context.coordinator_id);
-      flush_message(async_messages, coordinator_id_dst);
-      messages_mutex[coordinator_id_dst]->unlock();
+      flush_message(async_messages, i);
+    messages_mutex[i]->unlock();
       // LOG(INFO) << "TXN : " << txn->keys[0] << " " << txn->keys[1] << " -> " << coordinator_id_dst;
-      router_send_txn_cnt[coordinator_id_dst]++;
+      router_send_txn_cnt[i]++;
       n_network_size.fetch_add(router_size);
       router_transactions_send.fetch_add(1);
+
+      t_3 += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - t_start)
+                           .count();
+      t_start = std::chrono::steady_clock::now();
     }
   };
 
 
-  void txn_replica_involved(simpleTransaction* t, int coordinator_id) {
-    // on_replica_id
-    int replica_num = partitioner.replica_num();
-    size_t ycsbTableID = ycsb::ycsb::tableID;
-    auto query_keys = t->keys;
-    // 
-    std::vector<int> replica_master_coordinator(replica_num, 0);
-    int max_cnt = 0;
-    int replica_id = -1;
 
-    for(int i = 0 ; i < replica_num; i ++ ){
-      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-        // look-up the dynamic router to find-out where
-        auto router_table = db.find_router_table(ycsbTableID, i);// , master_coordinator_id);
-        auto tab = static_cast<RouterValue*>(router_table->search_value((void*) &query_keys[j]));
-
-        int cur_c_id = tab->get_dynamic_coordinator_id();
-        if(cur_c_id == coordinator_id){
-          // update
-          if(++ replica_master_coordinator[i] > max_cnt){
-            max_cnt = replica_master_coordinator[i];
-            replica_id = i;
-          }
-        }
-      }
-    }
-    t->on_replica_id = replica_id;
-    // LOG(INFO) << t->idx_ << " " << t->keys[0] << " " << t->keys[1] << " " << replica_id;
-    return;
-   }
 
 
   void start() override {
@@ -197,7 +255,7 @@ public:
 
     // transaction only commit in a single group
 
-    std::queue<std::unique_ptr<TransactionType>> q;
+    std::queue<std::unique_ptr<simpleTransaction>> q;
     std::size_t count = 0;
 
 
@@ -253,10 +311,11 @@ public:
 
       while (!q.empty()) {
         auto &ptr = q.front();
-        auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - ptr->startTime)
-                           .count();
-        commit_latency.add(latency);
+        // auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
+        //                    std::chrono::steady_clock::now() - ptr->startTime)
+        //                    .count();
+        // commit_latency.add(latency);
+        n_commit.fetch_add(1);
         q.pop();
       }
 
@@ -287,14 +346,21 @@ public:
           // threads.emplace_back([&](int n) {
             std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
             size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
+
+            t_start = std::chrono::steady_clock::now();
+            t_1 = 0;
+            t_2 = 0;
+            t_3 = 0;
             for(size_t i = 0; i < batch_size; i ++ ){
               bool success = false;
               std::unique_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success));
               DCHECK(success == true);
               // txn->destination_coordinator = coordinator_id_dst;
               router_request(router_send_txn_cnt, txn.get());            
-
+              q.push(std::move(txn));
             }
+
+            LOG(INFO) << 1.0 * t_1 / 1000 / 1000 << " " << 1.0 * t_2 / 1000 / 1000 << " " << 1.0 * t_3 / 1000 / 1000;
             is_full_signal.store(0);
             // after router all txns, send the stop-SIGNAL
             for (auto l = 0u; l < context.coordinator_num; l++){
@@ -545,6 +611,16 @@ protected:
   }
 
 protected:
+  std::chrono::steady_clock::time_point t_start;
+  int t_1;
+  int t_2;
+  int t_3;
+
+  int replica_num;
+  size_t ycsbTableID;
+
+  // vector<ITable *> router_table_vec;
+
   ShareQueue<simpleTransaction*, 14096> transactions_queue;// [20];
   size_t generator_num;
   std::atomic<uint32_t> is_full_signal;// [20];

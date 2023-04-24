@@ -766,7 +766,7 @@ public:
 
   ~HermesPartitioner() override = default;
 
-  std::size_t replica_num() const override { return replica_group_size; }
+  std::size_t replica_num() const override { return 2; }
 
   bool is_replicated() const override {
     // replica group in calvin is independent

@@ -36,7 +36,7 @@ public:
     /*
      * The structure of a read request: (tid, key offset, value)
      */
-
+    DCHECK(false);
     auto value_size = table.value_size();
 
     auto message_size = MessagePiece::get_header_size() + sizeof(tid) +
@@ -76,7 +76,11 @@ public:
     VLOG(DEBUG_V8) << "HermesMessage::ASYNC_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
 
     auto message_size =
-        MessagePiece::get_header_size() + sizeof(tid) + sizeof(key_offset) + sizeof(replica_id);
+        MessagePiece::get_header_size() 
+        + sizeof(tid) 
+        + sizeof(key_offset) 
+        + sizeof(replica_id)
+        + key_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(message_type), message_size,
         table.tableID(), table.partitionID());
@@ -84,6 +88,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder << tid << key_offset << replica_id;
+    encoder.write_n_bytes(key, key_size);
     message.flush();
     return message_size;
   }
@@ -324,24 +329,18 @@ public:
     uint32_t txn_id;
     int replica_id;
 
-    DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + 
-           sizeof(txn_id) + 
-           sizeof(key_offset) + 
-           sizeof(replica_id));
-
     star::Decoder dec(stringPiece);
     dec >> txn_id >> key_offset >> replica_id; // index offset in the readSet from source request node
 
-    DCHECK(dec.size() == 0);
+    DCHECK(dec.size() > 0);
 
-    DCHECK(txn_id < txns.size());
-    DCHECK(key_offset < txns[txn_id]->readSet.size());
+    // DCHECK(txn_id < txns.size());
+    // DCHECK(key_offset < txns[txn_id]->readSet.size());
 
-    auto &txn = txns[txn_id];
-    auto &readKey = txn->readSet[key_offset];
+    // auto &txn = txns[txn_id];
+    // auto &readKey = txn->readSet[key_offset];
     // key && value
-    auto key = readKey.get_key();
+    // auto key = readKey.get_key();
     // auto value = readKey.get_value();
 
     ITable &table = *db.find_table(table_id, partition_id, replica_id);
@@ -354,7 +353,14 @@ public:
            MessagePiece::get_header_size() + 
            sizeof(txn_id)     + 
            sizeof(key_offset) + 
-           sizeof(replica_id));
+           sizeof(replica_id) + 
+           key_size);
+
+    auto stringPieceKey = inputPiece.toStringPiece();
+    stringPieceKey.remove_prefix(sizeof(txn_id)     + 
+                                 sizeof(key_offset) + 
+                                 sizeof(replica_id));
+    const void *key = stringPieceKey.data();
 
     bool success = table.contains(key);
     uint64_t latest_tid;

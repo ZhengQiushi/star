@@ -104,6 +104,17 @@ public:
 
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "CalvinExecutor " << id << " exits. ";
+          LOG(INFO) << " router : " << router_percentile.nth(50) << " " <<
+          router_percentile.nth(80) << " " << router_percentile.nth(95) << " " << 
+          router_percentile.nth(99);
+
+          LOG(INFO) << " analysis : " << analyze_percentile.nth(50) << " " <<
+          analyze_percentile.nth(80) << " " << analyze_percentile.nth(95) << " " << 
+          analyze_percentile.nth(99);
+
+          LOG(INFO) << " execution : " << execute_latency.nth(50) << " " <<
+          execute_latency.nth(80) << " " << execute_latency.nth(95) << " " << 
+          execute_latency.nth(99);
           return;
         }
       } while (status != ExecutorStatus::Analysis);
@@ -117,21 +128,20 @@ public:
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-      VLOG_IF(DEBUG_V, id==0) << "Unpack start time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
 
+      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
+              << router_time
+              << " milliseconds.";
+      
+        router_percentile.add(router_time);
+      
       unpack_route_transaction(); // 
 
-      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction : " << transactions.size();
-
-      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
+      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << "  unpack_route_transaction : " << transactions.size();
+      
       }
       n_complete_workers.fetch_add(1);
 
@@ -142,34 +152,22 @@ public:
         std::this_thread::yield();
       }
       
-      VLOG_IF(DEBUG_V, id==0) << "Analysis time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
+      auto analysis_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
-                     .count()
+                     .count();
+
+      VLOG_IF(DEBUG_V, id==0) << "Analysis time: "
+              << analysis_time
               << " milliseconds.";
+
+        analyze_percentile.add(analysis_time);
 
       n_started_workers.fetch_add(1);
       // work as lock manager
       if (id < n_lock_manager) {
         // schedule transactions
         schedule_transactions();
-        VLOG(DEBUG_V) << "Schedule time: "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count()
-                << " milliseconds.";
-        for(int r = 0; r < router_recv_txn_num; r ++ ){
-          // 发回原地...
-          size_t generator_id = context.coordinator_num;
-          // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-          ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
-          flush_messages();
-        }
-        VLOG(DEBUG_V) << "Route back time: "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count()
-                << " milliseconds.";
+
       } else {
         // work as executor
         run_transactions();
@@ -179,6 +177,16 @@ public:
                       .count()
                 << " milliseconds.";
       }
+
+      auto execution_schedule_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG(DEBUG_V) << "Schedule time: "
+                << execution_schedule_time
+                << " milliseconds.";
+
+        execute_latency.add(execution_schedule_time);
+
       LOG(INFO) << "done, send: " << router_recv_txn_num << " " << need_remote_read_num;
 
       n_complete_workers.fetch_add(1);
@@ -600,7 +608,7 @@ private:
   std::deque<int> router_stop_queue;
 
   int router_recv_txn_num = 0; // generator router from 
-
+  Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
   int need_remote_read_num = 0;
 };
 } // namespace star

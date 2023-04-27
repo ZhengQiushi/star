@@ -405,7 +405,7 @@ public:
       //   process_request();
       // }
 
-      router_fence(); // wait for coordinator to response
+      // router_fence(); // wait for coordinator to response
 
       LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
@@ -636,7 +636,7 @@ protected:
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *, 10086> in_queue, out_queue;
+  LockfreeQueue<Message *, 100860> in_queue, out_queue;
   std::vector<std::vector<int>> txns_coord_cost;
   std::vector<std::unique_ptr<TransactionType>> transactions;
 };

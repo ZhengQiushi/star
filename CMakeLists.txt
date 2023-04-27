@@ -12,9 +12,6 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 
-# find_library(jemalloc_lib jemalloc) # jemalloc 5.0
-# set(jemalloc_lib, "/usr/lib64/libjemalloc.so.1")
-
 # additional target to perform clang-format run, requires clang-format
 
 include_directories(${PROJECT_SOURCE_DIR}/include)

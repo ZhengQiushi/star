@@ -297,7 +297,7 @@ public:
       do {
         // exit 
         status = static_cast<ExecutorStatus>(worker_status.load());
-
+        process_request();
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "Executor " << id << " exits.";
             
@@ -415,7 +415,7 @@ public:
       //   process_request();
       // }
 
-      router_fence(); // wait for coordinator to response
+      // router_fence(); // wait for coordinator to response
 
       LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
@@ -621,7 +621,7 @@ protected:
 
   // vector<ITable *> router_table_vec;
 
-  ShareQueue<simpleTransaction*, 14096> transactions_queue;// [20];
+  ShareQueue<simpleTransaction*, 54096> transactions_queue;// [20];
   size_t generator_num;
   std::atomic<uint32_t> is_full_signal;// [20];
 
@@ -660,7 +660,7 @@ protected:
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *, 10086> in_queue, out_queue;
+  LockfreeQueue<Message *, 100860> in_queue, out_queue;
   std::vector<std::vector<int>> txns_coord_cost;
   std::vector<std::unique_ptr<TransactionType>> transactions;
 };

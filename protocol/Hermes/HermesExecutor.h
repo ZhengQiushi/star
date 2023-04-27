@@ -98,12 +98,29 @@ public:
 
     for (;;) {
       auto begin = std::chrono::steady_clock::now();
+      auto cur_time = std::chrono::duration_cast<std::chrono::seconds>(
+                     std::chrono::steady_clock::now() - start_time)
+                     .count();
+
       ExecutorStatus status;
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
 
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "HermesExecutor " << id << " exits. ";
+
+
+          LOG(INFO) << " router : " << router_percentile.nth(50) << " " <<
+          router_percentile.nth(80) << " " << router_percentile.nth(95) << " " << 
+          router_percentile.nth(99);
+
+          LOG(INFO) << " analysis : " << analyze_percentile.nth(50) << " " <<
+          analyze_percentile.nth(80) << " " << analyze_percentile.nth(95) << " " << 
+          analyze_percentile.nth(99);
+
+          LOG(INFO) << " execution : " << execute_latency.nth(50) << " " <<
+          execute_latency.nth(80) << " " << execute_latency.nth(95) << " " << 
+          execute_latency.nth(99);
           return;
         }
       } while (status != ExecutorStatus::Analysis);
@@ -118,23 +135,25 @@ public:
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-      VLOG_IF(DEBUG_V, id==0) << "Unpack start time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
+
+      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
-                     .count()
+                     .count();
+      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
+              << router_time
               << " milliseconds.";
+
+      if(cur_time > 40)
+      router_percentile.add(router_time);
+      
       unpack_route_transaction(); // 
 
-      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction : " << transactions.size();
+      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << "  unpack_route_transaction : " << transactions.size();
 
-        
-      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
+
         // router_planning();
       }
+
       n_complete_workers.fetch_add(1);
 
       // wait to Execute
@@ -144,12 +163,16 @@ public:
         std::this_thread::yield();
       }
 
-      VLOG_IF(DEBUG_V, id==0) << "Analysis time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
+      auto analysis_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
-                     .count()
+                     .count();
+
+      VLOG_IF(DEBUG_V, id==0) << "Analysis time: "
+              << analysis_time
               << " milliseconds.";
 
+      if(cur_time > 40)
+      analyze_percentile.add(analysis_time);
 
       n_started_workers.fetch_add(1);
       // work as lock manager
@@ -157,24 +180,13 @@ public:
         // schedule transactions
         schedule_transactions();
 
-        VLOG(DEBUG_V) << "Schedule time: "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count()
-                << " milliseconds.";
-
-        for(int r = 0; r < router_recv_txn_num; r ++ ){
-          // 发回原地...
-          size_t generator_id = context.coordinator_num;
-          // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-          ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
-          flush_messages();
-        }
-        VLOG(DEBUG_V) << "Route back time: "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count()
-                << " milliseconds.";
+        // for(int r = 0; r < router_recv_txn_num; r ++ ){
+        //   // 发回原地...
+        //   size_t generator_id = context.coordinator_num;
+        //   // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+        //   ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
+        //   flush_messages();
+        // }
       } else {
         // work as executor
         run_transactions();
@@ -184,6 +196,17 @@ public:
                       .count()
                 << " milliseconds.";
       }
+      
+      auto execution_schedule_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG(DEBUG_V) << "Schedule time: "
+                << execution_schedule_time
+                << " milliseconds.";
+
+      if(cur_time > 40)
+      execute_latency.add(execution_schedule_time);
+
       LOG(INFO) << "done, send: " << router_recv_txn_num << " " << 
                                      need_transfer_num   << " " << need_remote_read_num;
 
@@ -396,13 +419,13 @@ public:
           // target
           txn.network_size += MessageFactoryType::new_async_search_message(
               *(this->messages[i]), *table, key, txn.id, key_offset, replica_id);
-          VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+          VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size() << " on replica " << replica_id;
         } else {
           // others, only change the router
           txn.network_size += MessageFactoryType::transfer_request_router_only_message(
               *worker->messages[i], 
               *table, txn, key_offset);
-          VLOG(DEBUG_V8) << "ASYNC ROUTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
+          VLOG(DEBUG_V8) << "ASYNC ROUTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size() << " on replica " << replica_id;
         } 
         txn.pendingResponses++;
 
@@ -487,7 +510,7 @@ public:
     int last = 0;
     
     auto begin = std::chrono::steady_clock::now();
-
+    int worker_execution_num[20] = {0};
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
       auto& txn = transactions[i];
@@ -564,6 +587,7 @@ public:
         }
         if (grant_lock) {
           auto worker = get_available_worker(request_id++);
+          worker_execution_num[worker] += 1;
           all_executors[worker]->transaction_queue.push(txn.get());
           real_num += 1;
         } else {
@@ -600,6 +624,11 @@ public:
               << time_transfer_read / 1000 << " " << time_locking / 1000 << " "
               << last / 1000;
 
+    
+
+    for(int i = 0 ; i < context.worker_num; i ++ ){
+      LOG(INFO) << i << " : " << worker_execution_num[i]; 
+    }
     set_lock_manager_bit(id);
   }
 
@@ -684,6 +713,8 @@ public:
         //   txn.distributed_transaction = true;
         // }
         txn.local_read.fetch_add(-1);
+      } else {
+        DCHECK(false);
       }
     };
 
@@ -826,5 +857,7 @@ private:
   int need_remote_read_num = 0;
 
   int router_recv_txn_num = 0; // generator router from 
+
+  Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
 };
 } // namespace star

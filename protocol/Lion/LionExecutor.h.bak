@@ -207,12 +207,11 @@ public:
   
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    int num = 1; // context.coordinator_num
-    if(router_stop_queue.size() < num){
+    if(router_stop_queue.size() < context.coordinator_num){
       ret = false;
     } else {
       //
-      int i = num; // context.coordinator_num;
+      int i = context.coordinator_num;
       while(i > 0){
         i --;
         DCHECK(router_stop_queue.size() > 0);
@@ -304,11 +303,6 @@ public:
 
     for (;;) {
       auto begin = std::chrono::steady_clock::now();
-      auto cur_time = std::chrono::duration_cast<std::chrono::seconds>(
-                     std::chrono::steady_clock::now() - start_time)
-                     .count();
-                     
-      LOG(INFO) << "new batch processing ";
       times ++ ;
 
       do {
@@ -322,20 +316,6 @@ public:
           if(metis_transaction != nullptr){
             metis_transaction->status = ExecutorStatus::EXIT;
           }
-
-          LOG(INFO) << " router : " << router_percentile.nth(50) << " " <<
-          router_percentile.nth(80) << " " << router_percentile.nth(95) << " " << 
-          router_percentile.nth(99);
-
-          LOG(INFO) << " analysis : " << analyze_percentile.nth(50) << " " <<
-          analyze_percentile.nth(80) << " " << analyze_percentile.nth(95) << " " << 
-          analyze_percentile.nth(99);
-
-          LOG(INFO) << " execution : " << execute_latency.nth(50) << " " <<
-          execute_latency.nth(80) << " " << execute_latency.nth(95) << " " << 
-          execute_latency.nth(99);
-          return;
-
           // for(auto& t: transmiter){
           //   t.join();
           // }
@@ -362,26 +342,11 @@ public:
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
-      // for(int r = 0; r < router_recv_txn_num; r ++ ){
-      //   // 发回原地...
-      //   size_t generator_id = context.coordinator_num;
-      //   // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-      //   ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
-      //   flush_messages(async_messages);
-      // }
-
-      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count();
-
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
-              << router_time
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
               << " milliseconds.";
-
-      if(cur_time > 10)
-        router_percentile.add(router_time);
-
-
       // now = std::chrono::steady_clock::now();
 
       unpack_route_transaction(*c_workload, *s_workload, storage, router_recv_txn_num); // 
@@ -438,7 +403,14 @@ public:
       // r_size = s_transactions_queue.size();
       // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
       run_transaction(ExecutorStatus::S_PHASE, &s_transactions_queue, async_message_num);
-      
+      for(int r = 0; r < router_recv_txn_num; r ++ ){
+        // 发回原地...
+        size_t generator_id = context.coordinator_num;
+        // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+        ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
+        flush_messages(async_messages);
+      }
+
       // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
 
       VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] done "
@@ -478,15 +450,11 @@ public:
       n_complete_workers.fetch_add(1);
 
 
-      auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count();
-
-      if(cur_time > 10)
-        execute_latency.add(execution_schedule_time);
 
       VLOG_IF(DEBUG_V, id==0) << "whole batch "
-              << execution_schedule_time
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
               << " milliseconds.";
     }
     VLOG_IF(DEBUG_V, id==0) << "TIMES : " << times; 
@@ -570,7 +538,6 @@ public:
     int time_prepare_read = 0;    
     int time_read_remote = 0;
     int time3 = 0;
-    int time4 = 0;
 
 
     uint64_t last_seed = 0;
@@ -684,24 +651,15 @@ public:
         } while (retry_transaction);
       }
 
-      // ControlMessageFactory::router_transaction_response_message(*(async_messages[context.coordinator_num]));
-
-      auto now = std::chrono::steady_clock::now();
       cur_transactions_queue->pop_front();
       flush_messages(messages); 
-      flush_async_messages(); 
 
       if (i % context.batch_flush == 0) {
+        flush_async_messages(); 
         flush_sync_messages();
         // flush_record_messages();
+        
       }
-      
-      time4 += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-      now = std::chrono::steady_clock::now();
-      // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-
     }
     flush_messages(messages); 
     flush_async_messages();
@@ -714,7 +672,7 @@ public:
     LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
 
     if(cur_queue_size > 0){
-      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << " send: " << time4 / cur_queue_size; // << "  router : " << time1 / cur_queue_size; 
+      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size; // << "  router : " << time1 / cur_queue_size; 
       // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
       // remaster_delay_transactions = 0;
     }
@@ -1577,8 +1535,6 @@ private:
   std::deque<uint64_t> s_source_coordinator_ids, c_source_coordinator_ids, r_source_coordinator_ids;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx
-
-  Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
 
 };
 } // namespace star

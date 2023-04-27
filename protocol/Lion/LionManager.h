@@ -11,6 +11,7 @@
 
 namespace star {
 
+#define MAX_COORDINATOR_NUM 20
 
 template <class Workload>
 class LionManager : public star::Manager {
@@ -31,6 +32,8 @@ public:
     batch_size = context.batch_size;
     recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
     transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
+    
+    node_txns.resize(MAX_COORDINATOR_NUM);
   }
 
 
@@ -287,5 +290,11 @@ public:
   std::atomic<uint32_t> recorder_status;
   std::atomic<uint32_t> transmit_status;
   std::unique_ptr<Partitioner> c_partitioner;
+
+  std::atomic<uint32_t> is_full_signal;
+  std::atomic<uint32_t> schedule_done;
+  ShareQueue<simpleTransaction*, 54096> transactions_queue;
+
+  std::vector<std::vector<std::shared_ptr<simpleTransaction>>> node_txns;
 };
 } // namespace star

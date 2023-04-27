@@ -245,21 +245,21 @@ public:
       // remaster_delay_transactions = 0;
     }
   }
-
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    if(router_stop_queue.size() < context.coordinator_num){
+    int num = 1; // context.coordinator_num
+    if(router_stop_queue.size() < num){
       ret = false;
     } else {
       //
-      int i = context.coordinator_num;
+      int i = num; // context.coordinator_num;
       while(i > 0){
         i --;
         DCHECK(router_stop_queue.size() > 0);
         int recv_txn_num = router_stop_queue.front();
         router_stop_queue.pop_front();
         router_recv_txn_num += recv_txn_num;
-        VLOG(DEBUG_V8) << " RECV : " << recv_txn_num << " cur total : " << router_recv_txn_num;
+        VLOG(DEBUG_V8) << " RECV : " << recv_txn_num;
       }
       ret = true;
     }
@@ -344,13 +344,13 @@ public:
               << " milliseconds.";
 
       LOG(INFO) << "single_txn_num: " << single_txn_num << " " << " cross_txn_num: " << cross_txn_num << " " << r_size;
-      for(size_t r = 0; r < r_size; r ++ ){
-        // 发回原地...
-        size_t generator_id = context.coordinator_num;
-        // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-        ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
-        flush_messages(async_messages);
-      }
+      // for(size_t r = 0; r < r_size; r ++ ){
+      //   // 发回原地...
+      //   size_t generator_id = context.coordinator_num;
+      //   // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+      //   ControlMessageFactory::router_transaction_response_message(*(async_messages[generator_id]));
+      //   flush_messages(async_messages);
+      // }
 
       status = static_cast<ExecutorStatus>(worker_status.load());
 

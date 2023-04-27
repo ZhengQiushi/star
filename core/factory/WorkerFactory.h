@@ -201,7 +201,7 @@ public:
         manager_thread_id += 1;
       // }
 
-      auto manager = std::make_shared<StarManager<WorkloadType>>(
+      auto manager = std::make_shared<LionManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag, db);
 
       // add recorder for data-transformation
@@ -485,10 +485,7 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
-      int manager_thread_id = context.worker_num;
-      // if(context.lion_with_metis_init){
-        manager_thread_id += 1;
-      // }
+      int manager_thread_id = context.worker_num + 1;
 
       auto manager = std::make_shared<LionManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag, db);
@@ -496,7 +493,9 @@ public:
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::LionGenerator<WorkloadType, Lion<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+              manager->n_completed_workers, manager->n_started_workers, 
+              manager->transactions_queue, manager->is_full_signal,
+              manager->schedule_done, manager->node_txns));
       }
       // 
       // if(context.lion_with_metis_init){

@@ -49,24 +49,24 @@ public:
     while (!stopFlag.load()) {
 
 
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          int replica_num = partitioner.replica_num();
-          for(int r = 0 ; r < replica_num; r ++ ){
-            VLOG(DEBUG_V) << "Replica[" << r << "] : ";
-            for(size_t i = 0 ; i < context.partition_num; i ++ ){
-              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i, r);
-              VLOG(DEBUG_V) << "   P[" << i << "]: " << dest_table->table_record_num();
-            }
-          }
-        } else {
-            for(size_t i = 0 ; i < context.partition_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        // if(WorkloadType::which_workload == myTestSet::YCSB){
+        //   int replica_num = partitioner.replica_num();
+        //   for(int r = 0 ; r < replica_num; r ++ ){
+        //     VLOG(DEBUG_V) << "Replica[" << r << "] : ";
+        //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
+        //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i, r);
+        //       VLOG(DEBUG_V) << "   P[" << i << "]: " << dest_table->table_record_num();
+        //     }
+        //   }
+        // } else {
+        //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
+        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
               
-              ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
-              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
+        //       ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
+        //       VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
+        //     // }
+        //   }
+        // }
       // the coordinator on each machine generates
       // a batch of transactions using the same random seed.
 
@@ -130,25 +130,25 @@ public:
     std::size_t n_coordinators = context.coordinator_num;
 
     for (;;) {
-        if(WorkloadType::which_workload == myTestSet::YCSB){
-          int replica_num = partitioner.replica_num();
-          for(int r = 0 ; r < replica_num; r ++ ){
-            VLOG(DEBUG_V) << "Replica[" << r << "] : ";
+        // if(WorkloadType::which_workload == myTestSet::YCSB){
+        //   int replica_num = partitioner.replica_num();
+        //   for(int r = 0 ; r < replica_num; r ++ ){
+        //     VLOG(DEBUG_V8) << "Replica[" << r << "] : ";
 
-            for(size_t i = 0 ; i < context.partition_num; i ++ ){
-              ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i, r);
-              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
-            }
-          }
-        } else {
-            for(size_t i = 0 ; i < context.partition_num; i ++ ){
-            // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
+        //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
+        //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i, r);
+        //       VLOG(DEBUG_V8) << "P[" << i << "]: " << dest_table->table_record_num();
+        //     }
+        //   }
+        // } else {
+        //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
+        //     // if(l_partitioner->is_partition_replicated_on(ycsb::tableId, i, coordinator_id)) {
               
-              ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
-              VLOG(DEBUG_V) << "P[" << i << "]: " << dest_table->table_record_num();
-            // }
-          }
-        }
+        //       ITable *dest_table = db.find_table(tpcc::stock::tableID, i);
+        //       VLOG(DEBUG_V8) << "P[" << i << "]: " << dest_table->table_record_num();
+        //     // }
+        //   }
+        // }
 
       // VLOG(DEBUG_V4) << "Seed: " << random.get_seed();
       ExecutorStatus status = wait4_signal();

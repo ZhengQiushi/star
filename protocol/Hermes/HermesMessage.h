@@ -749,7 +749,10 @@ public:
                                            + key_size);
 
     stringPiece = inputPiece.toStringPiece();
-    stringPiece.remove_prefix(sizeof(replica_id) + sizeof(new_coordinator_id));
+    stringPiece.remove_prefix(sizeof(txn_id) + 
+                              sizeof(key_offset) +
+                              sizeof(replica_id) + 
+                              sizeof(new_coordinator_id));
     // get row and offset
     const void *key = stringPiece.data();
 

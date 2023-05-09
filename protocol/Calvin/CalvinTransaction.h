@@ -180,7 +180,8 @@ public:
                                    readKey.get_key(), readKey.get_value());
         } else {
 
-          if (partitioner.has_master_partition(readSet[i].get_partition_id())) {
+          if (partitioner.is_partition_replicated_on(readSet[i].get_partition_id(),
+                                                     coordinator_id)) {
             local_read.fetch_add(1);
           } else {
             remote_read.fetch_add(1);
@@ -245,6 +246,8 @@ public:
         // spin on local & remote read
         while (local_read.load() > 0 || remote_read.load() > 0) {
           // process remote reads for other workers
+          int a = local_read.load();
+          int b = remote_read.load();
           remote_request_handler(worker_id);
         }
 

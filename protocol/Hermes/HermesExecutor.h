@@ -128,7 +128,6 @@ public:
       n_started_workers.fetch_add(1);
       if (id < n_lock_manager) {
 
-        // my_generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
       router_recv_txn_num = 0;
       // 准备transaction
       while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
@@ -293,34 +292,12 @@ public:
       p->set_id(t_id);
       p->on_replica_id = simple_txn.on_replica_id;      
       p->router_coordinator_id = simple_txn.destination_coordinator;
-
+      p->is_real_distributed = simple_txn.is_real_distributed;
       prepare_transaction(*p);
       // LOG(INFO) << *(int*) p->readSet[0].get_key() << " " << *(int*) p->readSet[1].get_key();
       transactions.push_back(std::move(p));
     }
   }
-
-  void my_generate_transactions() {
-      router_recv_txn_num = 0;
-      // 准备transaction
-      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
-        process_request();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
-
-      // VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
-      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                std::chrono::steady_clock::now() - begin)
-      //                .count()
-      //         << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
-
-      unpack_route_transaction(); // 
-
-      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction : " << transactions.size();
-
-  }
-
 
   void prepare_transaction(TransactionType &txn) {
     /**
@@ -375,11 +352,11 @@ public:
       }
       //
 
-      if (readKey.get_write_lock_bit()) {
-        // 有写且写到主副本...从副本也需要吧
-        active_coordinators[readKey.get_master_coordinator_id()] = true;
-        // active_coordinators[readKey.get_secondary_coordinator_id()] = true;
-      }
+      // if (readKey.get_write_lock_bit()) {
+      //   // 有写且写到主副本...从副本也需要吧
+      //   active_coordinators[readKey.get_master_coordinator_id()] = true;
+      //   // active_coordinators[readKey.get_secondary_coordinator_id()] = true;
+      // }
     }
   }
 
@@ -402,7 +379,7 @@ public:
       auto partition_id = readKey.get_partition_id();
       auto key = readKey.get_key();
       ITable *table = db.find_table(table_id, partition_id, replica_id);
-
+      // auto coordinatorID = readKey.get_master_coordinator_id();
       auto coordinatorID = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key, replica_id);
       readKey.set_master_coordinator_id(coordinatorID);
       // 
@@ -502,6 +479,7 @@ public:
     std::size_t request_id = 0;
     int skip_num = 0;
     int real_num = 0;
+    int distributed_num = 0;
     need_transfer_num = 0;
     need_remote_read_num = 0;
 
@@ -525,8 +503,12 @@ public:
         continue;
       }
       auto now = std::chrono::steady_clock::now();
-      // do transactions remote
-      transfer_request_messages(*txn);
+      if(txn->is_real_distributed){
+        // do transactions remote
+        transfer_request_messages(*txn);
+        distributed_num += 1;
+      }
+
 
       time_transfer_read += std::chrono::duration_cast<std::chrono::microseconds>(
                                                             std::chrono::steady_clock::now() - now)
@@ -574,6 +556,7 @@ public:
             is_with_lock_manager = true;
           }
 
+          now = std::chrono::steady_clock::now();
           grant_lock = true;
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           if (readKey.get_write_lock_bit()) {
@@ -584,6 +567,9 @@ public:
           } else {
             CHECK(false);
           }
+          time_locking += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
         }
         if (grant_lock) {
           auto worker = get_available_worker(request_id++);
@@ -608,11 +594,6 @@ public:
           n_abort_no_retry.fetch_add(1);
         }
       }
-
-      time_locking += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                            std::chrono::steady_clock::now() - now)
-          .count();
-      now = std::chrono::steady_clock::now(); 
     }
 
     last += std::chrono::duration_cast<std::chrono::microseconds>(
@@ -621,8 +602,9 @@ public:
 
     LOG(INFO) << " transaction recv : " << transactions.size() << " " 
               << real_num << " " << skip_num << " "
-              << time_transfer_read / 1000 << " " << time_locking / 1000 << " "
-              << last / 1000;
+              << time_transfer_read * 1.0 / real_num << " " << time_locking * 1.0 / real_num << " "
+              << last * 1.0 / real_num << " " 
+              << distributed_num;
 
     
 
@@ -632,9 +614,55 @@ public:
     set_lock_manager_bit(id);
   }
 
-  void run_transactions() { 
+  // void run_transactions() { 
+  //   size_t generator_id = context.coordinator_num;
+
+  //   while (!get_lock_manager_bit(lock_manager_id) ||
+  //          !transaction_queue.empty()) {
+
+  //     if (transaction_queue.empty()) {
+  //       process_request();
+  //       continue;
+  //     }
+
+  //     TransactionType *transaction = transaction_queue.front();
+  //     bool ok = transaction_queue.pop();
+  //     DCHECK(ok);
+  //     // analyze_active_coordinator(*transaction);
+
+  //     auto result = transaction->execute(id);
+
+  //     VLOG(DEBUG_V12) << id << " exeute " << transaction->id;
+
+  //     n_network_size.fetch_add(transaction->network_size.load());
+  //     if (result == TransactionResult::READY_TO_COMMIT) {
+  //       protocol.commit(*transaction, lock_manager_id, n_lock_manager,
+  //                       partitioner.replica_group_size);
+  //       VLOG(DEBUG_V12) << id << " commit " << transaction->id;
+
+  //     } else if (result == TransactionResult::ABORT) {
+  //       // non-active transactions, release lock
+  //       protocol.abort(*transaction, lock_manager_id, n_lock_manager,
+  //                      partitioner.replica_group_size);
+  //       VLOG(DEBUG_V12) << id << " abort " << transaction->id;
+
+  //       // auto tmp = transaction->get_query();
+  //       // // LOG(INFO) << "ABORT " << *(int*)& tmp[0] << " " << *(int*)& tmp[1] << " " << transaction->active_coordinators[0] << " " << transaction->active_coordinators[1];
+  //     } else {
+  //       CHECK(false) << "abort no retry transaction should not be scheduled.";
+  //     }
+  //   }
+  // }
+
+  void run_transactions() {
     size_t generator_id = context.coordinator_num;
 
+    auto begin = std::chrono::steady_clock::now();
+
+    int idle_time = 0;
+    int execution_time = 0;
+    int commit_time = 0;
+    int cnt = 0;
     while (!get_lock_manager_bit(lock_manager_id) ||
            !transaction_queue.empty()) {
 
@@ -643,33 +671,51 @@ public:
         continue;
       }
 
+      auto idle = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      idle_time += idle;
+      begin = std::chrono::steady_clock::now();
+
       TransactionType *transaction = transaction_queue.front();
       bool ok = transaction_queue.pop();
       DCHECK(ok);
-      // analyze_active_coordinator(*transaction);
 
       auto result = transaction->execute(id);
 
-      VLOG(DEBUG_V12) << id << " exeute " << transaction->id;
+      auto execution = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      execution_time += execution;
+      begin = std::chrono::steady_clock::now();
 
       n_network_size.fetch_add(transaction->network_size.load());
       if (result == TransactionResult::READY_TO_COMMIT) {
         protocol.commit(*transaction, lock_manager_id, n_lock_manager,
                         partitioner.replica_group_size);
-        VLOG(DEBUG_V12) << id << " commit " << transaction->id;
-
       } else if (result == TransactionResult::ABORT) {
         // non-active transactions, release lock
         protocol.abort(*transaction, lock_manager_id, n_lock_manager,
                        partitioner.replica_group_size);
-        VLOG(DEBUG_V12) << id << " abort " << transaction->id;
-
-        // auto tmp = transaction->get_query();
-        // // LOG(INFO) << "ABORT " << *(int*)& tmp[0] << " " << *(int*)& tmp[1] << " " << transaction->active_coordinators[0] << " " << transaction->active_coordinators[1];
       } else {
         CHECK(false) << "abort no retry transaction should not be scheduled.";
       }
+      auto commit = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      commit_time += commit;
+      begin = std::chrono::steady_clock::now();
+      cnt += 1;
+      // // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
+      // ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
+      // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
+      // flush_messages();
     }
+    LOG(INFO) << "total: " << cnt << " " 
+              << idle_time / cnt  << " "
+              << execution_time / cnt << " "
+              << commit_time / cnt;
+
   }
 
   void setup_execute_handlers(TransactionType &txn) {
@@ -847,7 +893,7 @@ private:
       controlMessageHandlers;
 
   LockfreeQueue<Message *, 10086> in_queue, out_queue;
-  LockfreeQueue<TransactionType *> transaction_queue;
+  LockfreeQueue<TransactionType *, 10086> transaction_queue;
   std::vector<HermesExecutor *> all_executors;
 
   std::deque<simpleTransaction> router_transactions_queue;

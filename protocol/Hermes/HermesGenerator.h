@@ -166,6 +166,11 @@ public:
 
     t->on_replica_id = replica_id;
     t->destination_coordinator = replica_destination;
+    if(master_max_cnt == query_keys.size()){
+      t->is_real_distributed = false;
+    } else {
+      t->is_real_distributed = true;
+    }
     // LOG(INFO) << t->idx_ << " " << t->keys[0] << " " << t->keys[1] << " " << replica_id;
     return;
    }

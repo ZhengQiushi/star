@@ -693,7 +693,8 @@ public:
   }
 
   std::size_t master_coordinator(std::size_t partition_id) const override {
-    return partition_id % replica_group_size + coordinator_start_id;
+    // return partition_id % replica_group_size + coordinator_start_id;
+    return partition_id % coordinator_num;
   }
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
     return (partition_id + 1) % coordinator_num;

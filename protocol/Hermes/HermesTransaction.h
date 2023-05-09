@@ -193,11 +193,11 @@ public:
           readKey.set_master_coordinator_id(master_coordinator);
           // readKey.set_secondary_coordinator_id(secondary_coordinator);
 
-          // if (master_coordinator == coordinator_id) {
-          //   local_read.fetch_add(1);
-          // } else {
-          //   remote_read.fetch_add(1);
-          // }
+          if (master_coordinator == coordinator_id) {
+            local_read.fetch_add(1);
+          } else {
+            remote_read.fetch_add(1);
+          }
         }
 
         readSet[i].set_prepare_processed_bit();
@@ -346,5 +346,6 @@ public:
   Operation operation; // never used
   std::vector<HermesRWKey> readSet, writeSet;
   int on_replica_id;
+  int is_real_distributed;
 };
 } // namespace star

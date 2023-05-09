@@ -115,9 +115,13 @@ public:
           LOG(INFO) << " execution : " << execute_latency.nth(50) << " " <<
           execute_latency.nth(80) << " " << execute_latency.nth(95) << " " << 
           execute_latency.nth(99);
+
+          LOG(INFO) <<  " n_lock_manager : " << n_lock_manager;
           return;
         }
       } while (status != ExecutorStatus::Analysis);
+
+      need_remote_read_num = 0;
 
       n_started_workers.fetch_add(1);
       if (id < n_lock_manager) {
@@ -351,7 +355,14 @@ public:
     std::size_t request_id = 0;
     int skip_num = 0;
     int real_num = 0;
+
+    int write_lock_num = 0;
+    int read_lock_num = 0;
     
+    int time_locking = 0;
+    int last = 0;
+    auto begin = std::chrono::steady_clock::now();
+
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
       if (!transactions[i]->abort_no_retry) {
@@ -380,17 +391,22 @@ public:
                   lock_manager_id) {
             continue;
           }
-
+          auto now = std::chrono::steady_clock::now();
           grant_lock = true;
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           if (readKey.get_write_lock_bit()) {
             CalvinHelper::write_lock(tid);
+            write_lock_num += 1;
             // LOG(INFO) << "TXN[" << transactions[i]->id << "] wLOCK : " << *(int*)key;
           } else if (readKey.get_read_lock_bit()) {
             CalvinHelper::read_lock(tid);
+            read_lock_num += 1;
           } else {
             CHECK(false);
           }
+          time_locking += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
         }
         if (grant_lock) {
           auto worker = get_available_worker(request_id++);
@@ -410,13 +426,30 @@ public:
         }
       }
     }
-    LOG(INFO) << " transaction recv : " << transactions.size() << " " << real_num << " " << skip_num;
+    last += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                            std::chrono::steady_clock::now() - begin)
+                                                            .count();
+
+    // LOG(INFO) << " transaction recv : " << transactions.size() << " " << real_num << " " << skip_num;
+    LOG(INFO) << " transaction recv : " << transactions.size() << " " 
+              << real_num << " " << skip_num << " "
+              << time_locking * 1.0 / real_num << " "
+              << last * 1.0 / real_num << " "
+              << write_lock_num * 1.0 / real_num << " "
+              << read_lock_num * 1.0 / real_num;
+
     set_lock_manager_bit(id);
   }
 
   void run_transactions() {
     size_t generator_id = context.coordinator_num;
 
+    auto begin = std::chrono::steady_clock::now();
+
+    int idle_time = 0;
+    int execution_time = 0;
+    int commit_time = 0;
+    int cnt = 0;
     while (!get_lock_manager_bit(lock_manager_id) ||
            !transaction_queue.empty()) {
 
@@ -425,11 +458,24 @@ public:
         continue;
       }
 
+      auto idle = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      idle_time += idle;
+      begin = std::chrono::steady_clock::now();
+
       TransactionType *transaction = transaction_queue.front();
       bool ok = transaction_queue.pop();
       DCHECK(ok);
 
       auto result = transaction->execute(id);
+
+      auto execution = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      execution_time += execution;
+      begin = std::chrono::steady_clock::now();
+
       n_network_size.fetch_add(transaction->network_size.load());
       if (result == TransactionResult::READY_TO_COMMIT) {
         protocol.commit(*transaction, lock_manager_id, n_lock_manager,
@@ -441,12 +487,22 @@ public:
       } else {
         CHECK(false) << "abort no retry transaction should not be scheduled.";
       }
-      
+      auto commit = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      commit_time += commit;
+      begin = std::chrono::steady_clock::now();
+      cnt += 1;
       // // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
       // ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
       // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
       // flush_messages();
     }
+    LOG(INFO) << "total: " << cnt << " " 
+              << idle_time / cnt  << " "
+              << execution_time / cnt << " "
+              << commit_time / cnt;
+
   }
 
   void setup_execute_handlers(TransactionType &txn) {
@@ -464,20 +520,23 @@ public:
        * 
        */
       auto *worker = this->all_executors[worker_id];
-      if (worker->partitioner.has_master_partition(partition_id)) {
+      if (worker->partitioner.is_partition_replicated_on(partition_id, coordinator_id)) {
         ITable *table = worker->db.find_table(table_id, partition_id);
         CalvinHelper::read(table->search(key), value, table->value_size());
 
         auto &active_coordinators = txn.active_coordinators;
         for (auto i = 0u; i < active_coordinators.size(); i++) {
           // 发送到涉及到的且非本地coordinator
-          if (i == worker->coordinator_id || !active_coordinators[i])
+          // if (i == worker->coordinator_id || !active_coordinators[i])
+          if (i == worker->coordinator_id)
             continue;
-          auto sz = MessageFactoryType::new_read_message(
-              *worker->messages[i], *table, id, key_offset, value);
-          txn.network_size.fetch_add(sz);
-          txn.distributed_transaction = true;
-          need_remote_read_num += 1;
+          if(!worker->partitioner.is_partition_replicated_on(partition_id, i) && active_coordinators[i]){
+            auto sz = MessageFactoryType::new_read_message(
+                *worker->messages[i], *table, id, key_offset, value);
+            txn.network_size.fetch_add(sz);
+            txn.distributed_transaction = true;
+            need_remote_read_num += 1;
+          }
         }
         txn.local_read.fetch_add(-1);
       }
@@ -601,7 +660,7 @@ private:
       controlMessageHandlers;
   
   LockfreeQueue<Message *, 10086> in_queue, out_queue;
-  LockfreeQueue<TransactionType *> transaction_queue;
+  LockfreeQueue<TransactionType *, 10086> transaction_queue;
   std::vector<CalvinExecutor *> all_executors;
 
   std::deque<simpleTransaction> router_transactions_queue;

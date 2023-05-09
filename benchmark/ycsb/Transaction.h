@@ -382,7 +382,8 @@ private:
   std::size_t partition_id;
   YCSBQuery query;
   bool is_transmit_request;
-  int on_replica_id; // only for hermes
+  int on_replica_id;       // only for hermes
+  int is_real_distributed; // only for hermes
 };
 } // namespace ycsb
 

@@ -46,9 +46,24 @@ public:
     writeSet.clear();
   }
 
-  virtual TransactionResult execute(std::size_t worker_id) = 0;
+  virtual bool is_transmit_requests() = 0;
+  virtual ExecutorStatus get_worker_status() = 0;
+  virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
+  virtual TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) = 0;
+  virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
 
+  virtual TransactionResult execute(std::size_t worker_id) = 0;
   virtual void reset_query() = 0;
+
+  virtual const std::vector<u_int64_t> get_query() = 0;
+  virtual const std::string get_query_printed() = 0;
+  virtual const std::vector<bool> get_query_update() = 0;
+
+  virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+  virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
+  virtual bool check_cross_node_txn(bool is_dynamic) = 0;
+  virtual std::size_t get_partition_id() = 0;
+
 
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,
@@ -137,6 +152,22 @@ public:
     return writeSet.size() - 1;
   }
 
+  bool process_remaster_requests(std::size_t worker_id) {
+    DCHECK(false);
+    return true;
+  }
+  
+  bool process_local_requests(std::size_t worker_id){
+    // 
+    DCHECK(false);
+    return false;
+  }
+  bool process_read_only_requests(std::size_t worker_id){
+    // 
+    DCHECK(false);
+    return false;
+  } 
+
   void set_id(std::size_t id) { this->id = id; }
 
   void set_tid_offset(std::size_t offset) { this->tid_offset = offset; }
@@ -185,5 +216,10 @@ public:
   Partitioner &partitioner;
   Operation operation; // never used
   std::vector<AriaRWKey> readSet, writeSet;
+
+  int router_coordinator_id;
+  int on_replica_id; // 
+  int is_real_distributed;
+
 };
 } // namespace star

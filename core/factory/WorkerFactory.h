@@ -66,6 +66,13 @@
 #include "protocol/Hermes/HermesTransaction.h"
 #include "protocol/Hermes/HermesGenerator.h"
 
+
+#include "protocol/Aria/Aria.h"
+#include "protocol/Aria/AriaExecutor.h"
+#include "protocol/Aria/AriaManager.h"
+#include "protocol/Aria/AriaTransaction.h"
+#include "protocol/Aria/AriaGenerator.h"
+
 #include <unordered_set>
 
 namespace star {
@@ -116,7 +123,7 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion", "LionNS", "Hermes", "MyClay"};
+                                                 "Lion", "LionNS", "Hermes", "MyClay", "Aria"};
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -386,6 +393,28 @@ public:
         static_cast<HermesExecutor<WorkloadType> *>(workers[i].get())
             ->set_all_executors(all_executors);
       }
+    } else if (context.protocol == "Aria") {
+
+      using TransactionType = star::AriaTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+
+      // create manager
+
+      auto manager = std::make_shared<AriaManager<WorkloadType>>(
+          coordinator_id, context.worker_num, db, context, stop_flag);
+
+      // create worker
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<AriaExecutor<WorkloadType>>(
+            coordinator_id, i, db, context, manager->transactions,
+            manager->storages, manager->epoch, manager->worker_status,
+            manager->total_abort, manager->n_completed_workers,
+            manager->n_started_workers, manager->transactions_prepared));
+      }
+
+      workers.push_back(manager);
     }
     else if (context.protocol == "MyClay") {
       CHECK(context.partition_num %
@@ -654,6 +683,29 @@ public:
               manager->n_completed_workers, manager->n_started_workers));
       }
       // push manager to workers
+      workers.push_back(manager);
+    } else if (context.protocol == "Aria") {
+
+      using TransactionType = star::AriaTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+      // create manager
+
+      auto manager = std::make_shared<AriaManager<WorkloadType>>(
+          coordinator_id, context.worker_num, db, context, stop_flag);
+
+      // create worker
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<group_commit::AriaGenerator<WorkloadType, Aria<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->is_full_signal,
+              manager->schedule_done));
+      }
+
       workers.push_back(manager);
     }
 

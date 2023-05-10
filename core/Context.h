@@ -83,6 +83,10 @@ public:
   bool kiva_snapshot_isolation = false;
   bool operation_replication = false;
 
+  bool aria_read_only_optmization = true;
+  bool aria_reordering_optmization = true;
+  bool aria_snapshot_isolation = false;
+  
   std::vector<std::string> peers;
 };
 } // namespace star

@@ -323,7 +323,7 @@ public:
 
   std::size_t pendingResponses;
  
-  int router_coordinator_id;
+  
 
   std::function<bool(std::size_t)> process_requests;
 
@@ -345,6 +345,8 @@ public:
   std::vector<bool> active_coordinators;
   Operation operation; // never used
   std::vector<HermesRWKey> readSet, writeSet;
+
+  int router_coordinator_id;
   int on_replica_id;
   int is_real_distributed;
 };

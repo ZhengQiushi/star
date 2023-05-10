@@ -35,6 +35,8 @@ enum class ExecutorStatus {
   Kiva_COMMIT,
   STOP,
   EXIT,
+  Aria_READ,
+  Aria_COMMIT,
   LION_KING_START,
   LION_NORMAL_START,
   LION_KING_EXECUTE

@@ -127,30 +127,26 @@ public:
 
       n_started_workers.fetch_add(1);
       if (id < n_lock_manager) {
+        router_recv_txn_num = 0;
+        // 准备transaction
+        while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
+          process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }
 
-      router_recv_txn_num = 0;
-      // 准备transaction
-      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
-        process_request();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
+        auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
+                << router_time
+                << " milliseconds.";
 
-      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count();
-      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
-              << router_time
-              << " milliseconds.";
+        if(cur_time > 40)
+        router_percentile.add(router_time);
+        
+        unpack_route_transaction(); // 
 
-      if(cur_time > 40)
-      router_percentile.add(router_time);
-      
-      unpack_route_transaction(); // 
-
-      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << "  unpack_route_transaction : " << transactions.size();
-
-
-        // router_planning();
+        VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << "  unpack_route_transaction : " << transactions.size();
       }
 
       n_complete_workers.fetch_add(1);

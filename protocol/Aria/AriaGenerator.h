@@ -42,17 +42,13 @@ public:
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
-           ShareQueue<simpleTransaction*, 54096>& transactions_queue,
            std::atomic<uint32_t>& is_full_signal,
-           std::atomic<uint32_t>& schedule_done, 
-           std::vector<std::vector<std::shared_ptr<simpleTransaction>>>& node_txns)
+           std::atomic<uint32_t>& schedule_done)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        transactions_queue(transactions_queue),
         is_full_signal(is_full_signal),
         schedule_done(schedule_done),
-        node_txns(node_txns),
         partitioner(PartitionerFactory::create_partitioner(
             context.partitioner, coordinator_id, context.coordinator_num)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -96,7 +92,9 @@ public:
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
-    
+
+    replica_num = partitioner->replica_num();
+    ycsbTableID = ycsb::ycsb::tableID;
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage){
@@ -196,10 +194,14 @@ public:
     for (size_t j = 0 ; j < query_keys.size(); j ++ ){
       // LOG(INFO) << "query_keys[j] : " << query_keys[j];
       // look-up the dynamic router to find-out where
-      size_t cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
-                                            ycsbTableID, 
-                                            (void*)& query_keys[j], replica_id);
-
+      size_t cur_c_id;
+      DCHECK(replica_id < 2);
+      int partition_id = query_keys[j] / context.keysPerPartition;
+      if(replica_id == 0){
+        cur_c_id = partitioner->master_coordinator(partition_id);
+      } else {
+        cur_c_id = partitioner->secondary_coordinator(partition_id);
+      }
       from_nodes_id[cur_c_id] += 1;
 
       if(from_nodes_id[cur_c_id] > master_max_cnt){
@@ -254,7 +256,7 @@ public:
 
     // transaction only commit in a single group
 
-    std::queue<std::unique_ptr<TransactionType>> q;
+    std::queue<std::unique_ptr<simpleTransaction>> q;
     std::size_t count = 0;
 
     // generators
@@ -294,7 +296,7 @@ public:
       ExecutorStatus status;
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
-
+        process_request();
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "AriaExecutor " << id << " exits. ";
           for (auto &t : generators) {
@@ -321,7 +323,7 @@ public:
       if(id == 0){
         // schedule prepared
         std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-        size_t batch_size = (size_t)transactions_queue.size() < (size_t)contextbatch_size ? (size_t)transactions_queue.size(): (size_t)contextbatch_size;
+        size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
 
         t_start = std::chrono::steady_clock::now();
         t_1 = 0;
@@ -334,6 +336,10 @@ public:
           // txn->destination_coordinator = coordinator_id_dst;
           router_request(router_send_txn_cnt, txn.get());            
           q.push(std::move(txn));
+        }
+
+        for(int i = 0 ; i < router_send_txn_cnt.size(); i ++ ){
+          LOG(INFO) << i << " : " << router_send_txn_cnt[i];
         }
 
         LOG(INFO) << 1.0 * t_1 / 1000 / 1000 << " " << 1.0 * t_2 / 1000 / 1000<< " " << 1.0 * t_3 / 1000 / 1000;
@@ -373,6 +379,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::Aria_COMMIT) {
         std::this_thread::yield();
+        process_request();
       }
       n_started_workers.fetch_add(1);
       LOG(INFO) << "Start Commit";
@@ -510,12 +517,8 @@ public:
         } else if(type < messageHandlers.size()){
           // transaction from LionExecutor
           messageHandlers[type](messagePiece,
-                                *sync_messages[message->get_source_node_id()], 
-                                sync_messages,
-                                db, context, partitioner.get(),
-                                transaction.get(), 
-                                // &router_transactions_queue,
-                                &migration_transactions_queue);
+                                *sync_messages[message->get_source_node_id()], *table,
+                                transactions);
         }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
@@ -593,8 +596,12 @@ protected:
   int t_2;
   int t_3;
 
+  int replica_num;
+  size_t ycsbTableID;
+
   std::unique_ptr<Clay<WorkloadType>> my_clay;
   size_t generator_num;
+  
   
   std::vector<int> generator_core_id;
   // std::vector<int> sender_core_id;
@@ -606,12 +613,12 @@ protected:
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
 
-  ShareQueue<simpleTransaction*, 54096> &transactions_queue;// [20];// [20];
+  ShareQueue<simpleTransaction*, 540960> transactions_queue;// [20];// [20];
 
   std::atomic<uint32_t>& is_full_signal;
   std::atomic<uint32_t>& schedule_done;
 
-  std::vector<std::vector<std::shared_ptr<simpleTransaction>>>& node_txns;
+  std::vector<std::vector<std::shared_ptr<simpleTransaction>>> node_txns;
   
   std::unique_ptr<Partitioner> partitioner;
   RandomType random;
@@ -621,6 +628,8 @@ protected:
   Percentile<int64_t> commit_latency, write_latency;
   Percentile<int64_t> dist_latency, local_latency;
   std::unique_ptr<TransactionType> transaction;
+  std::vector<std::unique_ptr<TransactionType>> transactions;
+
   std::vector<std::unique_ptr<Message>> sync_messages, metis_async_messages;
   std::vector<std::unique_ptr<Message>> async_messages;// [20];
 
@@ -631,11 +640,9 @@ protected:
 
   std::deque<int> router_stop_queue;
 
-  std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
-                                 DatabaseType &, const ContextType &, Partitioner *, // add partitioner
-                                 TransactionType *, 
-                                //  ShareQueue<simpleTransaction>*,
-                                 ShareQueue<simpleTransaction>*)>>
+  std::vector<
+      std::function<void(MessagePiece, Message &, ITable &,
+                         std::vector<std::unique_ptr<TransactionType>> &)>>
       messageHandlers;
 
   std::vector<

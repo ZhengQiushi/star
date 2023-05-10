@@ -36,8 +36,11 @@ public:
               const ContextType &context, std::atomic<bool> &stopFlag)
       : base_type(coordinator_id, id, context, stopFlag), db(db), epoch(0) {
 
-    storages.resize(context.batch_size);
+    storages.resize(context.batch_size * 5);
     transactions.resize(context.batch_size);
+    transactions_prepared.store(false);
+    is_full_signal.store(false);
+    schedule_done.store(false);
   }
 
   void coordinator_start() override {
@@ -157,5 +160,9 @@ public:
   std::vector<std::unique_ptr<TransactionType>> transactions;
   std::vector<std::shared_ptr<simpleTransaction>> txns;
   std::atomic<uint32_t> total_abort;
+  std::atomic<uint32_t> transactions_prepared;
+
+  std::atomic<uint32_t> is_full_signal;
+  std::atomic<uint32_t> schedule_done;
 };
 } // namespace star

@@ -47,15 +47,17 @@ public:
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &total_abort,
                std::atomic<uint32_t> &n_complete_workers,
-               std::atomic<uint32_t> &n_started_workers)
+               std::atomic<uint32_t> &n_started_workers,
+               std::atomic<uint32_t> &transactions_prepared)
       : Worker(coordinator_id, id), db(db), context(context),
         transactions(transactions), storages(storages), epoch(epoch),
         worker_status(worker_status), total_abort(total_abort),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        transactions_prepared(transactions_prepared),
         partitioner(PartitionerFactory::create_partitioner(
             context.partitioner, coordinator_id, context.coordinator_num)),
-        workload(coordinator_id, db, random, *partitioner),
+        workload(coordinator_id, worker_status, db, random, *partitioner, start_time),
         random(reinterpret_cast<uint64_t>(this)),
         protocol(db, context, *partitioner),
         delay(std::make_unique<SameDelay>(
@@ -67,9 +69,53 @@ public:
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
+    controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
+
   }
 
   ~AriaExecutor() = default;
+
+
+  void unpack_route_transaction(){
+    auto n_abort = total_abort.load();
+
+    // erase committed transactions;
+    transactions.erase(transactions.begin() + n_abort, transactions.end());
+    // storages.erase(storages.begin() + n_abort, storages.end());
+
+    int s = router_transactions_queue.size();
+    DCHECK(s == router_recv_txn_num);
+    while(s -- > 0){
+      simpleTransaction simple_txn = router_transactions_queue.front();
+      // txn_replica_involved(&simple_txn, context.coordinator_id);
+      router_transactions_queue.pop_front();
+
+      n_network_size.fetch_add(simple_txn.size);
+      // router_planning(&simple_txn);
+      size_t t_id = transactions.size();
+      // storages.push_back(StorageType());
+      auto p = workload.unpack_transaction(context, 0, storages[t_id], simple_txn);
+      p->set_id(t_id);
+      p->on_replica_id = simple_txn.on_replica_id;      
+      p->router_coordinator_id = simple_txn.destination_coordinator;
+      p->is_real_distributed = simple_txn.is_real_distributed;
+      // prepare_transaction(*p);
+      // LOG(INFO) << *(int*) p->readSet[0].get_key() << " " << *(int*) p->readSet[1].get_key();
+      transactions.push_back(std::move(p));
+    }
+  }
+
+  bool is_router_stopped(int& router_recv_txn_num){
+    bool ret = false;
+    if(!router_stop_queue.empty()){
+      int recv_txn_num = router_stop_queue.front();
+      router_stop_queue.pop_front();
+      router_recv_txn_num += recv_txn_num;
+      VLOG(DEBUG_V8) << " RECV : " << recv_txn_num;
+      ret = true;
+    }
+    return ret;
+  }
 
   void start() override {
 
@@ -80,23 +126,35 @@ public:
       auto cur_time = std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::steady_clock::now() - start_time)
                      .count();
-                     
+
       ExecutorStatus status;
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
-
+        process_request();
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "AriaExecutor " << id << " exits. ";
+
+          LOG(INFO) << " router : " << router_percentile.nth(50) << " " <<
+          router_percentile.nth(80) << " " << router_percentile.nth(95) << " " << 
+          router_percentile.nth(99);
+
+          LOG(INFO) << " execution : " << execute_percentile.nth(50) << " " <<
+          execute_percentile.nth(80) << " " << execute_percentile.nth(95) << " " << 
+          execute_percentile.nth(99);
+
+          LOG(INFO) << " commit : " << commit_percentile.nth(50) << " " <<
+          commit_percentile.nth(80) << " " << commit_percentile.nth(95) << " " << 
+          commit_percentile.nth(99);
           return;
         }
       } while (status != ExecutorStatus::Aria_READ);
 
       n_started_workers.fetch_add(1);
 
-      if (id < n_lock_manager) {
+      if (id == 0) {
         router_recv_txn_num = 0;
         // 准备transaction
-        while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
+        while(!is_router_stopped(router_recv_txn_num)){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
@@ -108,22 +166,55 @@ public:
                 << router_time
                 << " milliseconds.";
 
-        if(cur_time > 40)
-          router_percentile.add(router_time);
+        router_percentile.add(router_time);
         
         unpack_route_transaction(); // 
 
         VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << "  unpack_route_transaction : " << transactions.size();
+        transactions_prepared.store(true);
+      }
+      while(transactions_prepared.load() == false){
+        std::this_thread::yield();
+        process_request();
       }
 
+      auto unpack_router_time =std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin)
+                    .count();
+      VLOG_IF(DEBUG_V, id==0) << "Unpack finish time: "
+              << unpack_router_time
+              << " milliseconds.";
 
       read_snapshot();
       n_complete_workers.fetch_add(1);
+
+
+      auto done_snapshot =                std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG(DEBUG_V) << "done_snapshot time: "
+                << done_snapshot
+                << " milliseconds.";
+
       // wait to Aria_READ
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Aria_READ) {
         process_request();
       }
+
+      if(id == 0){
+        transactions_prepared.store(false);
+      }
+
+      auto execution_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG(DEBUG_V) << "Execution time: "
+                << execution_time
+                << " milliseconds.";
+
+      execute_percentile.add(execution_time);
+
       process_request();
       n_complete_workers.fetch_add(1);
 
@@ -131,7 +222,16 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::Aria_COMMIT) {
         std::this_thread::yield();
+        process_request();
       }
+
+      auto start_commit_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG(DEBUG_V) << "Start commit time: "
+                << start_commit_time
+                << " milliseconds.";
+
       n_started_workers.fetch_add(1);
       commit_transactions();
       n_complete_workers.fetch_add(1);
@@ -140,6 +240,16 @@ public:
              ExecutorStatus::Aria_COMMIT) {
         process_request();
       }
+
+      auto commit_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
+        VLOG(DEBUG_V) << "Commit time: "
+                << commit_time
+                << " milliseconds.";
+
+      commit_percentile.add(commit_time);
+
       process_request();
       n_complete_workers.fetch_add(1);
     }
@@ -165,6 +275,9 @@ public:
     auto cur_epoch = epoch.load();
     auto n_abort = total_abort.load();
     std::size_t count = 0;
+    
+    auto test = std::chrono::steady_clock::now();
+
     for (auto i = id; i < transactions.size(); i += context.worker_num) {
 
       process_request();
@@ -173,9 +286,10 @@ public:
       // else only reset the query
 
       if (transactions[i] == nullptr || i >= n_abort) {
-        auto partition_id = get_partition_id();
-        transactions[i] =
-            workload.next_transaction(context, partition_id, storages[i]);
+        // pass
+        // auto partition_id = get_partition_id();
+        // transactions[i] =
+        //     workload.next_transaction(context, partition_id, storages[i]);
       } else {
         transactions[i]->reset();
       }
@@ -201,6 +315,12 @@ public:
       }
     }
     flush_messages();
+    auto execute_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                           std::chrono::steady_clock::now() - test)
+                           .count();
+    test = std::chrono::steady_clock::now();
+
+    LOG(INFO) << " snapshot read [" << id << "] : " << count << " " << execute_time / count << " " << execute_time * 1.0 / 1000;
 
     // reserve
     count = 0;
@@ -228,6 +348,11 @@ public:
       }
     }
     flush_messages();
+
+    auto reserve_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                           std::chrono::steady_clock::now() - test)
+                           .count();
+    LOG(INFO) << " snapshot reserve [" << id << "] : " << count << " " << reserve_time / count << " " << reserve_time * 1.0 / 1000;
   }
 
   void reserve_transaction(TransactionType &txn) {
@@ -238,6 +363,7 @@ public:
 
     std::vector<AriaRWKey> &readSet = txn.readSet;
     std::vector<AriaRWKey> &writeSet = txn.writeSet;
+    auto replicaId = txn.on_replica_id;
 
     // reserve reads;
     for (std::size_t i = 0u; i < readSet.size(); i++) {
@@ -249,12 +375,16 @@ public:
       auto tableId = readKey.get_table_id();
       auto partitionId = readKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
-      if (partitioner->has_master_partition(partitionId)) {
+      auto coordinatorID = partitioner->master_coordinator(tableId, partitionId,
+      readKey.get_key(), replicaId);
+
+      // if (partitioner->has_master_partition(partitionId)) {
+      if(coordinatorID == coordinator_id) {
         std::atomic<uint64_t> &tid = AriaHelper::get_metadata(table, readKey);
         readKey.set_tid(&tid);
         AriaHelper::reserve_read(tid, txn.epoch, txn.id);
       } else {
-        auto coordinatorID = this->partitioner->master_coordinator(partitionId);
+        // auto coordinatorID = this->partitioner->master_coordinator(partitionId);
         txn.network_size += MessageFactoryType::new_reserve_message(
             *(this->messages[coordinatorID]), *table, txn.id, readKey.get_key(),
             txn.epoch, false);
@@ -267,12 +397,15 @@ public:
       auto tableId = writeKey.get_table_id();
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
-      if (partitioner->has_master_partition(partitionId)) {
+      auto coordinatorID = partitioner->master_coordinator(tableId, partitionId,
+      writeKey.get_key(), replicaId);
+      if(coordinatorID == coordinator_id) {
+      // if (partitioner->has_master_partition(partitionId)) {
         std::atomic<uint64_t> &tid = AriaHelper::get_metadata(table, writeKey);
         writeKey.set_tid(&tid);
         AriaHelper::reserve_write(tid, txn.epoch, txn.id);
       } else {
-        auto coordinatorID = this->partitioner->master_coordinator(partitionId);
+        // auto coordinatorID = this->partitioner->master_coordinator(partitionId);
         txn.network_size += MessageFactoryType::new_reserve_message(
             *(this->messages[coordinatorID]), *table, txn.id,
             writeKey.get_key(), txn.epoch, true);
@@ -288,7 +421,7 @@ public:
 
     const std::vector<AriaRWKey> &readSet = txn.readSet;
     const std::vector<AriaRWKey> &writeSet = txn.writeSet;
-
+    auto replicaId = txn.on_replica_id;
     // analyze raw
 
     for (std::size_t i = 0u; i < readSet.size(); i++) {
@@ -301,7 +434,11 @@ public:
       auto partitionId = readKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (partitioner->has_master_partition(partitionId)) {
+      auto coordinatorID = partitioner->master_coordinator(tableId, partitionId,
+      readKey.get_key(), replicaId);
+
+      if(coordinatorID == coordinator_id) {
+      // if (partitioner->has_master_partition(partitionId)) {
         uint64_t tid = AriaHelper::get_metadata(table, readKey).load();
         uint64_t epoch = AriaHelper::get_epoch(tid);
         uint64_t wts = AriaHelper::get_wts(tid);
@@ -311,7 +448,7 @@ public:
           break;
         }
       } else {
-        auto coordinatorID = this->partitioner->master_coordinator(partitionId);
+        // auto coordinatorID = this->partitioner->master_coordinator(partitionId);
         txn.network_size += MessageFactoryType::new_check_message(
             *(this->messages[coordinatorID]), *table, txn.id, txn.tid_offset,
             readKey.get_key(), txn.epoch, false);
@@ -328,7 +465,11 @@ public:
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (partitioner->has_master_partition(partitionId)) {
+      auto coordinatorID = partitioner->master_coordinator(tableId, partitionId,
+      writeKey.get_key(), replicaId);
+
+      if(coordinatorID == coordinator_id) {
+      // if (partitioner->has_master_partition(partitionId)) {
         uint64_t tid = AriaHelper::get_metadata(table, writeKey).load();
         uint64_t epoch = AriaHelper::get_epoch(tid);
         uint64_t rts = AriaHelper::get_rts(tid);
@@ -341,7 +482,7 @@ public:
           txn.waw = true;
         }
       } else {
-        auto coordinatorID = this->partitioner->master_coordinator(partitionId);
+        // auto coordinatorID = this->partitioner->master_coordinator(partitionId);
         txn.network_size += MessageFactoryType::new_check_message(
             *(this->messages[coordinatorID]), *table, txn.id, txn.tid_offset,
             writeKey.get_key(), txn.epoch, true);
@@ -452,10 +593,14 @@ public:
       const void *key = readKey.get_key();
       void *value = readKey.get_value();
       bool local_index_read = readKey.get_local_index_read_bit();
+      auto replica_id = txn.on_replica_id;
 
       bool local_read = false;
 
-      if (this->partitioner->has_master_partition(partition_id)) {
+      auto coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, readKey.get_key(), replica_id);
+
+      if(coordinatorID == coordinator_id) {
+      // if (this->partitioner->has_master_partition(partition_id)) {
         local_read = true;
       }
 
@@ -466,8 +611,8 @@ public:
         AriaHelper::set_key_tid(readKey, row);
         AriaHelper::read(row, value, table->value_size());
       } else {
-        auto coordinatorID =
-            this->partitioner->master_coordinator(partition_id);
+        // auto coordinatorID =
+        //     this->partitioner->master_coordinator(partition_id);
         txn.network_size += MessageFactoryType::new_search_message(
             *(this->messages[coordinatorID]), *table, tid, txn.tid_offset, key,
             key_offset);
@@ -551,9 +696,20 @@ public:
         DCHECK(type < messageHandlers.size());
         ITable *table = db.find_table(messagePiece.get_table_id(),
                                       messagePiece.get_partition_id());
-        messageHandlers[type](messagePiece,
-                              *messages[message->get_source_node_id()], *table,
-                              transactions);
+
+        if(type < controlMessageHandlers.size()){
+          // transaction router from Generator
+          controlMessageHandlers[type](
+            messagePiece,
+            *messages[message->get_source_node_id()], db,
+            &router_transactions_queue, 
+            &router_stop_queue
+          );
+        } else {
+          messageHandlers[type](messagePiece,
+                                *messages[message->get_source_node_id()], *table,
+                                transactions);
+        }
       }
 
       size += message->get_message_count();
@@ -569,6 +725,7 @@ private:
   std::vector<StorageType> &storages;
   std::atomic<uint32_t> &epoch, &worker_status, &total_abort;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+  std::atomic<uint32_t> &transactions_prepared;
   std::unique_ptr<Partitioner> partitioner;
   WorkloadType workload;
   RandomType random;
@@ -580,6 +737,18 @@ private:
       std::function<void(MessagePiece, Message &, ITable &,
                          std::vector<std::unique_ptr<TransactionType>> &)>>
       messageHandlers;
-  LockfreeQueue<Message *> in_queue, out_queue;
+
+  std::vector<
+      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      controlMessageHandlers;
+
+  LockfreeQueue<Message *, 10086> in_queue, out_queue;
+
+  std::deque<simpleTransaction> router_transactions_queue;
+  std::deque<int> router_stop_queue;
+
+  int router_recv_txn_num = 0; // generator router from 
+
+  Percentile<int64_t> router_percentile, execute_percentile, commit_percentile;
 };
 } // namespace star

@@ -95,7 +95,7 @@ public:
     return partition_id % coordinator_num;
   }
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
-    return (partition_id) % coordinator_num;
+    return (partition_id + 1) % coordinator_num;
   }
   bool is_partition_replicated_on(std::size_t partition_id,
                                   std::size_t coordinator_id) const override {
@@ -130,8 +130,12 @@ public:
   }
   
   std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
-    DCHECK(false);
-    return master_coordinator(partition_id); // false;
+    DCHECK(replica_id < 2);
+    if(replica_id == 0){
+      return master_coordinator(partition_id); // false;
+    } else {
+      return secondary_coordinator(partition_id); // false;
+    }
   }
   std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
     DCHECK(false);

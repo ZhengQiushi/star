@@ -35,14 +35,18 @@ public:
   using MessageHandlerType = MyClayMessageHandler<DatabaseType>;
 
   using StorageType = typename WorkloadType::StorageType;
-
+  int pin_thread_id_ = 3;
   MyClayGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
-           std::atomic<uint32_t> &n_started_workers)
+           std::atomic<uint32_t> &n_started_workers,
+           ShareQueue<simpleTransaction*, 54096>& transactions_queue,
+           std::atomic<uint32_t> &is_full_signal)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        transactions_queue(transactions_queue),
+        is_full_signal(is_full_signal),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -70,20 +74,19 @@ public:
     router_transaction_done.store(0);
     router_transactions_send.store(0);
 
-    is_full_signal.store(0);
     generator_core_id.resize(context.coordinator_num);
 
     generator_num = 1;
 
     generator_core_id.resize(context.coordinator_num);
-    sender_core_id.resize(context.coordinator_num);
+    // sender_core_id.resize(context.coordinator_num);
 
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      sender_core_id[i] = pin_thread_id_ ++ ;
-    }
+    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    //   sender_core_id[i] = pin_thread_id_ ++ ;
+    // }
 
     txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
     
@@ -171,125 +174,6 @@ public:
       }
      return from_nodes_id;
    }
-
-  // int select_best_node(simpleTransaction* t) {
-    
-  //   int max_node = -1;
-  //   // if(t->is_distributed){
-  //     std::unordered_map<int, int> result;
-  //     result = txn_nodes_involved(t, max_node, true);
-  //   // } else {
-  //   //   max_node = t->partition_id % context.coordinator_num;
-  //   // }
-
-  //   DCHECK(max_node != -1);
-  //   return max_node;
-  // }
-  
-  // int router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
-  //   // transmit_request_queue
-  //   auto new_transmit_generate = [&](int n){
-  //     simpleTransaction* s = new simpleTransaction();
-  //     s->is_transmit_request = true;
-  //     s->partition_id = n;
-  //     return s;
-  //   };
-
-  //   static int transmit_idx = 0; // split into sub-transactions
-  //   static int metis_transmit_idx = 0;
-  //   int move_size = 0;
-  //   const int transmit_block_size = 10;
-
-  //   int cur_move_size = my_clay->move_plans.size();
-  //   // pack up move-steps to transmit request
-  //   double thresh_ratio = 1;
-  //   for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
-  //     bool success = false;
-  //     std::shared_ptr<myMove<WorkloadType>> cur_move;
-      
-  //     success = my_clay->move_plans.pop_no_wait(cur_move);
-  //     DCHECK(success == true);
-      
-      
-  //     auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
-  //     metis_new_txn->access_frequency = cur_move->access_frequency;
-  //     metis_new_txn->destination_coordinator = cur_move->dest_coordinator_id;
-  //     for(auto move_record: cur_move->records){
-  //         metis_new_txn->keys.push_back(move_record.record_key_);
-  //         metis_new_txn->update.push_back(true);
-  //     }
-  //     //
-  //     transmit_request_queue.push_no_wait(metis_new_txn);
-  //     move_size++;
-  //     // metis_txns.push_back(metis_new_txn);
-  //     // cur_moves.push_back(cur_move);
-  //     // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
-
-  //     // auto new_txn = new_transmit_generate(transmit_idx ++ );
-  //     // for(auto move_record: cur_move->records){
-  //     //     new_txn->keys.push_back(move_record.record_key_);
-  //     //     new_txn->update.push_back(true);
-  //     //     new_txn->destination_coordinator = coordinator_id_dst;
-  //     //     new_txn->metis_idx_ = metis_new_txn->idx_;
-
-  //     //     if(new_txn->keys.size() > transmit_block_size){
-  //     //       // added to the router
-  //     //       transmit_requests.push_back(new_txn);
-  //     //       new_txn = new_transmit_generate(transmit_idx ++ );
-  //     //     }
-  //     // }
-
-  //     // if(new_txn->keys.size() > 0){
-  //     //   transmit_requests.push_back(new_txn); // 
-  //     // }
-  //   }
-
-
-
-  //   // // pull request
-  //   // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-  //   // for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-  //   //   transmit_requests[i] = new_transmit_generate(i);
-  //   // }
-
-  //   // const int transmit_block_size = 10;
-
-  //   // int cur_move_size = move_plans.size();
-  //   // int move_size = 0;
-  //   // // pack up move-steps to transmit request
-  //   // for(int i = 0 ; i < cur_move_size; i ++ ){
-  //   //   bool success = false;
-  //   //   std::shared_ptr<myMove<WorkloadType>> cur_move = move_plans.pop_no_wait(success);
-  //   //   DCHECK(success == true);
-
-  //   //   for(auto move_record: cur_move->records){
-  //   //     if(move_record.src_coordinator_id != cur_move->dest_coordinator_id){
-  //   //       //
-  //   //       if(move_size == 0){
-  //   //         move_size = 1;
-  //   //       }
-  //   //       transmit_requests[cur_move->dest_coordinator_id]->keys.push_back(move_record.record_key_);
-  //   //       transmit_requests[cur_move->dest_coordinator_id]->update.push_back(true);
-
-  //   //       if(transmit_requests[cur_move->dest_coordinator_id]->keys.size() >= transmit_block_size){
-  //   //         // added to the router
-  //   //         transmit_request_queue.push_no_wait(transmit_requests[cur_move->dest_coordinator_id]);
-  //   //         transmit_requests[cur_move->dest_coordinator_id] = new_transmit_generate(cur_move->dest_coordinator_id);
-  //   //         move_size ++ ;
-  //   //       }
-  //   //     }
-  //   //   }
-  //   // }
-
-  //   // for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){
-  //   //   if(transmit_requests[i]->keys.size() > 0){
-  //   //     transmit_request_queue.push_no_wait(transmit_requests[i]);
-  //   //   }
-  //   // }
-  //   return move_size;
-  // }
-
-  int pin_thread_id_ = 3;
 
   void txn_nodes_involved(simpleTransaction* t, bool is_dynamic) {
     
@@ -397,26 +281,28 @@ public:
 
     // generators
     std::vector<std::thread> generators;
-    for (auto n = 0u; n < generator_num; n++) {
-      generators.emplace_back([&](int n) {
-        ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
-        while(status != ExecutorStatus::EXIT){
-          // 
-          bool is_not_full = prepare_transactions_to_run(workload, storage);
-          if(!is_not_full){
-            is_full_signal.store(1);
-            while(is_full_signal.load() == 1 && status != ExecutorStatus::EXIT){
-              std::this_thread::sleep_for(std::chrono::microseconds(5));
-              status = static_cast<ExecutorStatus>(worker_status.load());
+    if(id == 0){
+      for (auto n = 0u; n < generator_num; n++) {
+        generators.emplace_back([&](int n) {
+          ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+          while(status != ExecutorStatus::EXIT){
+            // 
+            bool is_not_full = prepare_transactions_to_run(workload, storage);
+            if(!is_not_full){
+              is_full_signal.store(1);
+              while(is_full_signal.load() == 1 && status != ExecutorStatus::EXIT){
+                std::this_thread::sleep_for(std::chrono::microseconds(5));
+                status = static_cast<ExecutorStatus>(worker_status.load());
+              }
             }
+            status = static_cast<ExecutorStatus>(worker_status.load());
           }
-          status = static_cast<ExecutorStatus>(worker_status.load());
-        }
-        LOG(INFO) << "generators " << n << " exits.";
-      }, n);
+          LOG(INFO) << "generators " << n << " exits.";
+        }, n);
 
-      if (context.cpu_affinity) {
-        ControlMessageFactory::pin_thread_to_core(context, generators[n], generator_core_id[n]);
+        if (context.cpu_affinity) {
+          ControlMessageFactory::pin_thread_to_core(context, generators[n], generator_core_id[n]);
+        }
       }
     }
     // wait 
@@ -481,9 +367,11 @@ public:
         process_request();
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "Executor " << id << " exits.";
-            
-          for (auto &t : generators) {
-            t.join();
+
+          if(id == 0){
+            for (auto &t : generators) {
+              t.join();
+            }
           }
           return;
         }
@@ -512,13 +400,9 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to process_request";
 
-      // thread to router the transaction generated by Generator
-      std::vector<std::thread> threads;
-      // for (auto n = 0u; n < context.coordinator_num; n++) {
-      //   threads.emplace_back([&](int n) {
-          // 
+      
           std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-
+    // if(id == 0){
           auto router_request = [&](size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
             // router transaction to coordinators
             messages_mutex[coordinator_id_dst]->lock();
@@ -536,7 +420,10 @@ public:
 
           // real transactions
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
-          for(size_t i = 0; i < batch_size / context.worker_num; i ++ ){
+
+          size_t per_thread_num = batch_size / context.worker_num;
+          
+          for(size_t i = 0; i < per_thread_num; i ++ ){
             bool success = false;
             std::shared_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success));
             DCHECK(success == true);
@@ -545,7 +432,9 @@ public:
             router_request(txn->destination_coordinator, txn); 
           }
 
-          is_full_signal.store(0);
+          if(id == 0){
+            is_full_signal.store(0);
+          }
           VLOG(DEBUG_V14) << " send router " << router_send_txn_cnt[0] << " " << router_send_txn_cnt[1];
           // after router all txns, send the stop-SIGNAL
           for (auto l = 0u; l < context.coordinator_num; l++){
@@ -558,22 +447,14 @@ public:
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }
-      //   }, n);
 
-      //   if (context.cpu_affinity) {
-      //     ControlMessageFactory::pin_thread_to_core(context, threads[n], sender_core_id[n]); // , generator_core_id[n]);
-      //   }
+    // }
       // }
-
-      for (auto &t : threads) {
-        t.join();
-      }
 
       LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
                            .count() * 1.0 / 1000 / 1000 ;
       // test = std::chrono::steady_clock::now();
-      
       // router_fence(); // wait for coordinator to response
 
       LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
@@ -787,11 +668,11 @@ protected:
   std::unique_ptr<Clay<WorkloadType>> my_clay;
   std::atomic<uint32_t> transmit_request_response;
 
-  ShareQueue<simpleTransaction*, 54096> transactions_queue;
+  ShareQueue<simpleTransaction*, 54096>& transactions_queue;
   // ShareQueue<simpleTransaction*, 409600> transmit_request_queue;
 
   size_t generator_num;
-  std::atomic<uint32_t> is_full_signal;// [20];
+  std::atomic<uint32_t> &is_full_signal;// [20];
 
   std::vector<int> generator_core_id;
   std::vector<int> sender_core_id;

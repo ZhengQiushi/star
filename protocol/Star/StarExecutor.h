@@ -154,7 +154,7 @@ public:
   
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    int num = 1; // context.coordinator_num
+    size_t num = 1; // context.coordinator_num
     if(router_stop_queue.size() < num){
       ret = false;
     } else {

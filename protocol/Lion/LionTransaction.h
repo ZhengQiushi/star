@@ -155,6 +155,11 @@ public:
     add_to_write_set(writeKey);
   }
 
+
+  void set_id(uint32_t id){
+    id = id;
+  }
+  
   bool process_requests(std::size_t worker_id) {
     /**
      * @brief calling functions inited by handle
@@ -195,7 +200,7 @@ public:
 
     if (pendingResponses > 0) {
       message_flusher();
-      // LOG(INFO) << "txn.pendingResponses " << pendingResponses;
+      // LOG(INFO) << "txn.pendingResponses " << id << " " << pendingResponses;
       while (pendingResponses > 0) {
         remote_request_handler();
         // 
@@ -366,7 +371,7 @@ public:
   bool is_abort(){
     return abort_lock || abort_read_validation;
   }
-  
+
 public:
   std::size_t coordinator_id, partition_id;
   std::chrono::steady_clock::time_point startTime;
@@ -417,6 +422,7 @@ public:
   std::vector<LionRWKey> readSet, writeSet, routerSet;
 
   ExecutorStatus status;
+  uint32_t id;
 };
 
 } // namespace star

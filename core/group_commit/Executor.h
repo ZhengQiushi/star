@@ -206,7 +206,7 @@ public:
 
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    int num = 1; // context.coordinator_num
+    size_t num = 1; // context.coordinator_num
     if(router_stop_queue.size() < num){
       ret = false;
     } else {
@@ -262,8 +262,6 @@ public:
       n_started_workers.fetch_add(1);
       
       process_request();
-
-      auto now = std::chrono::steady_clock::now();
 
       int router_recv_txn_num = 0;
       int router_recv_txn_num_indeed = 0;

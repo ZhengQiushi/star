@@ -173,7 +173,7 @@ public:
     std::size_t n_coordinators = context.coordinator_num;
 
     for (auto i = 0u; i <= n_coordinators - 1; i++) {
-
+      LOG(INFO) << "consume ACK " << ack_in_queue.size();
       ack_in_queue.wait_till_non_empty();
       std::unique_ptr<Message> message(ack_in_queue.front());
       bool ok = ack_in_queue.pop();
@@ -254,8 +254,9 @@ public:
       signal_in_queue.push(message);
       break;
     case ControlMessage::ACK:
-      VLOG(DEBUG_V14) << "ACK " << id; 
+      VLOG(DEBUG_V14) << "push ACK " << id << " " << message->get_source_node_id() << " -> " << message->get_dest_node_id() << " " << ack_in_queue.size() + 1; 
       ack_in_queue.push(message);
+
       break;
     case ControlMessage::STOP:
       VLOG(DEBUG_V14) << "STOP " << id << " " << message->get_source_node_id() << " -> " << message->get_dest_node_id() << " " << stop_in_queue.size(); 

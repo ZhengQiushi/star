@@ -31,6 +31,7 @@ enum class MyClayMessage {
   ABORT_REQUEST,
   WRITE_REQUEST,
   REPLICATION_REQUEST,
+  REPLICATION_RESPONSE,
   NFIELDS
 };
 
@@ -991,7 +992,61 @@ public:
     } else {
       SiloHelper::unlock(tid);
     }
+
+    uint32_t txn_id = 0;
+    int debug_key = 0;
+
+    auto message_size = MessagePiece::get_header_size() + 
+                        sizeof(txn_id) + 
+                        sizeof(debug_key);
+                        
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::REPLICATION_RESPONSE), message_size,
+        table_id, partition_id);
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header 
+            << txn_id
+            << debug_key;
+            
+    responseMessage.flush();
+
   }
+
+  static void replication_response_handler(MessagePiece inputPiece,
+                                          Message &responseMessage,
+                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn
+
+) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(MyClayMessage::REPLICATION_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    int key = 0;
+    uint32_t txn_id;
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() + 
+          sizeof(txn_id) + 
+          sizeof(key));
+
+    // auto stringPiece = inputPiece.toStringPiece();
+    // Decoder dec(stringPiece);
+    // dec >> txn_id;
+
+    // stringPiece = inputPiece.toStringPiece();
+    // stringPiece.remove_prefix(sizeof(txn_id));
+
+    // const void *key_ = stringPiece.data();
+    // key = *(int*) key_;
+
+    // VLOG(DEBUG_V16) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " " << key;
+  }
+
+
+
 
   static std::vector<
       std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, Transaction *)>>
@@ -1015,6 +1070,7 @@ public:
     v.push_back(MyClayMessageHandler::abort_request_handler);
     v.push_back(MyClayMessageHandler::write_request_handler);
     v.push_back(MyClayMessageHandler::replication_request_handler);
+    v.push_back(MyClayMessageHandler::replication_response_handler);
     return v;
   }
 };

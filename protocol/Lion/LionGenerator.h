@@ -108,39 +108,6 @@ public:
     //   txns_coord_cost[i] = std::make_unique<int[]>(context.coordinator_num);
     // }
     
-
-
-    
-    // if(context.lion_with_metis_init){
-    //   LOG(INFO) << "lion with metis start to initialize the graph.";
-    //   auto start_time = std::chrono::steady_clock::now(); 
-
-    //   my_clay = std::make_unique<Clay<WorkloadType>>(context, db, worker_status);
-
-    //   if(context.lion_with_metis_init == 1){
-    //     my_clay->init_with_history("/home/star/data/result_test.xls");
-
-    //     auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                             std::chrono::steady_clock::now() - start_time)
-    //                             .count();
-    //     LOG(INFO) << "lion loading file. Used " << latency << " ms.";
-
-    //     my_clay->metis_partition_graph();
-
-    //     latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                         std::chrono::steady_clock::now() - start_time)
-    //                         .count();
-    //     LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
-    //   } else {
-
-    //     my_clay->metis_partiion_read_from_file();
-    //     auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-    //                         std::chrono::steady_clock::now() - start_time)
-    //                         .count();
-    //     LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
-
-    //   }
-    // }
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage){
@@ -312,32 +279,6 @@ public:
             n_network_size.fetch_add(router_size);
             router_transactions_send.fetch_add(1);
           };
-
-  // void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn, int thread_id) {
-  //   // router transaction to coordinators
-  //   size_t coordinator_id_dst = txn->destination_coordinator;
-  //   // messages_mutex[coordinator_id_dst]->lock();
-  //   size_t router_size = ControlMessageFactory::new_router_transaction_message(
-  //       *async_messages[thread_id][coordinator_id_dst].get(), 0, *txn, 
-  //       context.coordinator_id);
-  //   // messages_mutex[coordinator_id_dst]->unlock();
-
-  //   router_send_txn_cnt[coordinator_id_dst]++;
-  //   n_network_size.fetch_add(router_size);
-  //   router_transactions_send.fetch_add(1);
-  // };
-
-  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, size_t coordinator_id_dst, simpleTransaction* txn) {
-    // router transaction to coordinators
-    // messages_mutex[coordinator_id_dst]->lock();
-    size_t router_size = LionMessageFactory::metis_migration_transaction_message(
-        *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
-        context.coordinator_id);
-    flush_message(metis_async_messages, coordinator_id_dst);
-    // messages_mutex[coordinator_id_dst]->unlock();
-
-    n_network_size.fetch_add(router_size);
-  };
 
   struct cmp{
     bool operator()(const std::shared_ptr<simpleTransaction>& a, 
@@ -612,10 +553,10 @@ public:
         }
       }
     }
-
-      while(is_full_signal.load() == 0){
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
+    // wait 
+    while(is_full_signal.load() == 0){
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+    }
     // }
     // main loop
     for (;;) {
@@ -677,49 +618,54 @@ public:
 
           is_full_signal.store(0);
           schedule_done.store(1);
+
+          std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[thread_id];
+          for(size_t i = 0; i < txns.size(); i ++ ){
+            // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator << " " << txns[i]->keys[0] << " " << txns[i]->keys[1];
+            coordinator_send[txns[i]->destination_coordinator] ++ ;
+            router_request(router_send_txn_cnt, txns[i]);   
+          }
+
+          auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                      std::chrono::steady_clock::now() - test)
+                      .count() * 1.0 / 1000 / 1000;
+          LOG(INFO) << "scheduler_transactions + send : " << cur_timestamp__;
+
+          // 
+          for (auto l = 0u; l < context.coordinator_num; l++){
+            if(l == context.coordinator_id){
+              continue;
+            }
+            
+            LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+            messages_mutex[l]->lock();
+            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
+            flush_message(async_messages, l);
+            messages_mutex[l]->unlock();
+          }
+
+          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
+          }
+
+          ////
+
+          LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
+                              std::chrono::steady_clock::now() - test)
+                              .count() * 1.0 / 1000 / 1000;
       }
 
-      while(schedule_done.load() == 0){
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
+      // while(schedule_done.load() == 0){
+      //   std::this_thread::sleep_for(std::chrono::microseconds(5));
+      // }
       
       //// 
       // LOG(INFO) << "NEW";
-      std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[0];
-      size_t cnt_per_thread = txns.size() / context.worker_num;
-      for(size_t i = id * cnt_per_thread; i < cnt_per_thread; i ++ ){
-        // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator << " " << txns[i]->keys[0] << " " << txns[i]->keys[1];
-        coordinator_send[txns[i]->destination_coordinator] ++ ;
-        router_request(router_send_txn_cnt, txns[i]);   
-      }
+      // std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[0];
+      // size_t cnt_per_thread = txns.size() / context.worker_num;
 
-      auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                  std::chrono::steady_clock::now() - test)
-                  .count() * 1.0 / 1000 / 1000;
-      LOG(INFO) << "scheduler_transactions + send : " << cur_timestamp__;
 
-      // 
-      for (auto l = 0u; l < context.coordinator_num; l++){
-        if(l == context.coordinator_id){
-          continue;
-        }
-        
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
-        messages_mutex[l]->lock();
-        ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
-        flush_message(async_messages, l);
-        messages_mutex[l]->unlock();
-      }
 
-      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-      }
-
-      ////
-
-      LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count() * 1.0 / 1000 / 1000;
       // test = std::chrono::steady_clock::now();
 
       n_complete_workers.fetch_add(1);
@@ -897,9 +843,7 @@ public:
                                 *sync_messages[message->get_source_node_id()], 
                                 sync_messages,
                                 db, context, partitioner.get(),
-                                transaction.get(), 
-                                // &router_transactions_queue,
-                                &migration_transactions_queue);
+                                no_use);
         }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
@@ -1006,15 +950,14 @@ protected:
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
   std::deque<simpleTransaction> router_transactions_queue;
-  ShareQueue<simpleTransaction> migration_transactions_queue;
 
   std::deque<int> router_stop_queue;
 
+  std::vector<std::unique_ptr<TransactionType>> no_use;
+
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *, // add partitioner
-                                 TransactionType *, 
-                                //  ShareQueue<simpleTransaction>*,
-                                 ShareQueue<simpleTransaction>*)>>
+                                 std::vector<std::unique_ptr<TransactionType>>&)>>
       messageHandlers;
 
   std::vector<

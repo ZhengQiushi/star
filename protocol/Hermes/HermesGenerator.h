@@ -147,8 +147,8 @@ public:
     int replica_destination = -1;
     
     // check master num at this replica on each node
-    int from_nodes_id[20] = {0};
-    int master_max_cnt = 0;
+    size_t from_nodes_id[20] = {0};
+    size_t master_max_cnt = 0;
     for (size_t j = 0 ; j < query_keys.size(); j ++ ){
       // LOG(INFO) << "query_keys[j] : " << query_keys[j];
       // look-up the dynamic router to find-out where
@@ -606,7 +606,7 @@ protected:
   int t_2;
   int t_3;
 
-  int replica_num;
+  size_t replica_num;
   size_t ycsbTableID;
 
   // vector<ITable *> router_table_vec;

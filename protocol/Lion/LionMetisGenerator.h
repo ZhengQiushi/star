@@ -12,7 +12,7 @@
 #include "core/Worker.h"
 #include "glog/logging.h"
 #include <chrono>
-
+#include "protocol/Lion/LionMetisMessage.h"
 #include <unordered_map>
 #include "core/Coordinator.h"
 #include <mutex>          // std::mutex, std::lock_guard
@@ -32,8 +32,8 @@ public:
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
   using MessageType = typename ProtocolType::MessageType;
-  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
-  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
+  using MessageFactoryType = LionMetisMessageFactory;
+  using MessageHandlerType = LionMetisMessageHandler<DatabaseType>;
 
   using StorageType = typename WorkloadType::StorageType;
 
@@ -462,7 +462,7 @@ public:
     // router transaction to coordinators
     uint64_t coordinator_id_dst = txn->destination_coordinator;
     messages_mutex[coordinator_id_dst]->lock();
-    size_t router_size = LionMessageFactory::metis_migration_transaction_message(
+    size_t router_size = LionMetisMessageFactory::metis_migration_transaction_message(
         *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
         context.coordinator_id);
     flush_message(metis_async_messages, coordinator_id_dst);
@@ -520,7 +520,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 15 * 1000;
+        int start_offset = 30 * 1000;
         // 
         int cur_workload = 0;
 
@@ -720,7 +720,7 @@ public:
                                 *sync_messages[message->get_source_node_id()], 
                                 sync_messages,
                                 db, context, partitioner.get(),
-                                transaction.get(), 
+                                no_use, 
                                 // &router_transactions_queue,
                                 &migration_transactions_queue);
         }
@@ -828,9 +828,11 @@ protected:
 
   std::deque<int> router_stop_queue;
 
+  std::vector<std::shared_ptr<TransactionType>> no_use;
+
   std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
                                  DatabaseType &, const ContextType &, Partitioner *, // add partitioner
-                                 TransactionType *, 
+                                 std::vector<std::shared_ptr<TransactionType>>& , 
                                 //  ShareQueue<simpleTransaction>*,
                                  ShareQueue<simpleTransaction>*)>>
       messageHandlers;

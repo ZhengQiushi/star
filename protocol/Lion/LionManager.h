@@ -19,6 +19,9 @@ public:
   using base_type = star::Manager;
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
+  using StorageType = typename WorkloadType::StorageType;
+  using TransactionType = LionTransaction;
+  
 
   LionManager(std::size_t coordinator_id, std::size_t id,
               const Context &context, 
@@ -34,6 +37,10 @@ public:
     transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
     
     node_txns.resize(MAX_COORDINATOR_NUM);
+
+    storages.resize(context.batch_size * 4);
+    transactions_prepared.store(false);
+    cur_real_distributed_cnt.store(0);
   }
 
 
@@ -142,7 +149,7 @@ public:
       set_worker_status(ExecutorStatus::STOP);
       broadcast_stop();
 
-      VLOG(DEBUG_V) << "wait_ack";
+      VLOG(DEBUG_V) << "wait_ack c-phase";
 
       wait4_ack();
 
@@ -180,7 +187,7 @@ public:
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
       
-      VLOG(DEBUG_V) << "wait4_ack";
+      VLOG(DEBUG_V) << "wait4_ack s-phase";
 
       wait4_ack();
 
@@ -215,7 +222,7 @@ public:
   void non_coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     for (;;) {
 
@@ -251,7 +258,7 @@ public:
 
       wait_all_workers_finish();
 
-      VLOG(DEBUG_V) << "send_ack";
+      VLOG(DEBUG_V) << "send_ack c-phase";
 
       send_ack();
 
@@ -276,7 +283,7 @@ public:
       set_worker_status(ExecutorStatus::STOP);
       VLOG(DEBUG_V) << "wait_all_workers_finish";
       wait_all_workers_finish();
-      VLOG(DEBUG_V) << "send_ack";
+      VLOG(DEBUG_V) << "send_ack s-phase";
 
       send_ack();
       VLOG(DEBUG_V) << "finished";
@@ -295,6 +302,12 @@ public:
   std::atomic<uint32_t> schedule_done;
   ShareQueue<simpleTransaction*, 54096> transactions_queue;
 
+  std::atomic<uint32_t> transactions_prepared; 
+  std::atomic<uint32_t> cur_real_distributed_cnt;
+  std::vector<std::unique_ptr<TransactionType>> s_transactions_queue; 
+  std::vector<std::unique_ptr<TransactionType>> c_transactions_queue; 
+  std::vector<StorageType> storages;
   std::vector<std::vector<std::shared_ptr<simpleTransaction>>> node_txns;
+
 };
 } // namespace star

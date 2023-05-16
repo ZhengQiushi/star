@@ -388,7 +388,7 @@ public:
     star::Decoder dec(stringPiece);
     dec >> send_txn_cnt;
     stop_queue->push_back(send_txn_cnt);
-    VLOG(DEBUG_V12) << "GET ROUTER_STOP " << stop_queue->size();
+    LOG(INFO) << "GET ROUTER_STOP " << stop_queue->size();
     return;
 
 }

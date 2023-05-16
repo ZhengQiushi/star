@@ -112,6 +112,10 @@ int main(int argc, char *argv[]) {
   std::string src_file = "resultss.xls";
   std::string dst_file = "resultss_partition_30_60.xls"; 
 
+  if(context.protocol == "MyClay"){
+    LOG(INFO) << "MyClay";
+    dst_file = "clay_resultss_partition_0_30.xls"; 
+  }
   // dst_file = "resultss_partition_0_30.xls"; 
   // my_clay->my_run_offline(src_file, dst_file, 0, 60);
 

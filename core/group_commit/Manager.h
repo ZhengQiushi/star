@@ -5,6 +5,7 @@
 #pragma once
 
 #include "core/Manager.h"
+#include "common/ShareQueue.h"
 
 namespace star {
 namespace group_commit {
@@ -13,9 +14,14 @@ class Manager : public star::Manager {
 public:
   using base_type = star::Manager;
 
+  ShareQueue<simpleTransaction*, 54096> transactions_queue;
+  std::atomic<uint32_t> is_full_signal;
+
   Manager(std::size_t coordinator_id, std::size_t id, const Context &context,
           std::atomic<bool> &stopFlag)
-      : base_type(coordinator_id, id, context, stopFlag) {}
+      : base_type(coordinator_id, id, context, stopFlag) {
+        is_full_signal.store(false);
+      }
 
   void coordinator_start() override {
 

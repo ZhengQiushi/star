@@ -106,15 +106,19 @@ public:
     uint64_t last_seed = 0;
 
     // int time1 = 0;
+    int time_before_prepare_set = 0;
     int time_prepare_read = 0;
     int time_read_remote = 0;
     int time3 = 0;
     auto begin = std::chrono::steady_clock::now();
 
+    std::vector<int> why(30, 0);
 
     auto i = 0u;
     size_t cur_queue_size = cur_transactions_queue.size();    
     for (auto i = 0u; i < cur_queue_size; i++) {
+      auto now = std::chrono::steady_clock::now();
+      
       if(cur_transactions_queue.empty()){
         break;
       }
@@ -128,13 +132,17 @@ public:
         process_request();
         last_seed = random.get_seed();
 
+          time_before_prepare_set += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+
         if (retry_transaction) {
           transaction->reset();
         } else {
           // std::size_t partition_id = transaction->get_partition_id();
           setupHandlers(*transaction);
         }
-        auto now = std::chrono::steady_clock::now();
+        
         
         // auto result = transaction->execute(id);
           transaction->prepare_read_execute(id);
@@ -240,14 +248,23 @@ public:
 
 
     if(cur_queue_size > 0){
-      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size ;// << "  router : " << time1 / cur_queue_size; 
+      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  
+      << " set: " << time_before_prepare_set / cur_queue_size 
+      << " prepare: " << time_prepare_read / cur_queue_size 
+      << " execute: " << time_read_remote / cur_queue_size 
+      << " commit: " << time3 / cur_queue_size 
+      << "\n" 
+      << " : "        << why[21] / cur_queue_size << " " << why[21]
+      << " : "        << why[22] / cur_queue_size << " " << why[22]
+      // << " : "        << why[19] / cur_queue_size << " " << why[19]
+      ;// << "  router : " << time1 / cur_queue_size; 
       // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
       // remaster_delay_transactions = 0;
     }
   }
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    int num = 1; // context.coordinator_num
+    size_t num = 1; // context.coordinator_num
     if(router_stop_queue.size() < num){
       ret = false;
     } else {

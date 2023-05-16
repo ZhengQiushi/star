@@ -604,7 +604,7 @@ public:
 
     
 
-    for(int i = 0 ; i < context.worker_num; i ++ ){
+    for(size_t i = 0 ; i < context.worker_num; i ++ ){
       LOG(INFO) << i << " : " << worker_execution_num[i]; 
     }
     set_lock_manager_bit(id);

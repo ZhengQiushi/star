@@ -17,6 +17,7 @@
 #include "protocol/Lion/LionTransaction.h"
 #include "protocol/Lion/LionManager.h"
 #include "protocol/Lion/LionMessage.h"
+#include "protocol/Lion/LionMetisMessage.h"
 #include <glog/logging.h>
 
 namespace star {
@@ -287,7 +288,7 @@ private:
           auto coordinatorID = k;
           txn.network_size += MessageFactoryType::new_replication_message(
               *messages[coordinatorID], *table, readKey.get_key(),
-              readKey.get_value(), commit_tid);
+              readKey.get_value(), commit_tid, txn.id);
           
           DCHECK(strlen((char*)readKey.get_value()) > 0);
           // async_message_num.fetch_add(1);

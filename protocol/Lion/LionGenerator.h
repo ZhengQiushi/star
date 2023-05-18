@@ -42,6 +42,7 @@ public:
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
+           std::atomic<uint32_t> &skip_s_phase,
            ShareQueue<simpleTransaction*, 54096>& transactions_queue,
            std::atomic<uint32_t>& is_full_signal,
            std::atomic<uint32_t>& schedule_done, 
@@ -49,6 +50,7 @@ public:
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        skip_s_phase(skip_s_phase),
         transactions_queue(transactions_queue),
         is_full_signal(is_full_signal),
         schedule_done(schedule_done),
@@ -928,6 +930,8 @@ protected:
   const ContextType &context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+
+  std::atomic<uint32_t> &skip_s_phase;
 
   ShareQueue<simpleTransaction*, 54096> &transactions_queue;// [20];// [20];
 

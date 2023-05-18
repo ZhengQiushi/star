@@ -34,7 +34,7 @@
 
 #include "protocol/MyClay/MyClay.h"
 #include "protocol/MyClay/MyClayExecutor.h"
-// #include "protocol/MyClay/MyClayManager.h"
+#include "protocol/MyClay/MyClayManager.h"
 #include "protocol/MyClay/MyClayGenerator.h"
 #include "protocol/MyClay/MyClayMeitsExecutor.h"
 #include "protocol/MyClay/MyClayMetisGenerator.h"
@@ -437,13 +437,17 @@ public:
         manager_thread_id += 1;
       // }
 
-      auto manager = std::make_shared<group_commit::Manager>(
+      auto manager = std::make_shared<group_commit::MyClayManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<MyClayExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->worker_status,
-            manager->n_completed_workers, manager->n_started_workers));
+            manager->n_completed_workers, manager->n_started_workers,
+            manager->transactions_prepared,
+            manager->r_transactions_queue,
+            manager->storages
+            ));
       }
 
       // if(context.lion_with_metis_init){
@@ -529,6 +533,7 @@ public:
         workers.push_back(std::make_shared<group_commit::LionGenerator<WorkloadType, Lion<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers, 
+              manager->skip_s_phase,
               manager->transactions_queue, manager->is_full_signal,
               manager->schedule_done, manager->node_txns));
       }
@@ -557,7 +562,7 @@ public:
         manager_thread_id += 1;
       // }
 
-      auto manager = std::make_shared<group_commit::Manager>(
+      auto manager = std::make_shared<group_commit::MyClayManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
@@ -565,7 +570,8 @@ public:
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers,
               manager->transactions_queue, 
-              manager->is_full_signal));
+              manager->is_full_signal
+              ));
       }
 
         workers.push_back(std::make_shared<group_commit::MyClayMetisGenerator<WorkloadType, MyClay<DatabaseType>>>(

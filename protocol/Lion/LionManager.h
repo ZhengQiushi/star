@@ -300,6 +300,9 @@ public:
 
   std::atomic<uint32_t> is_full_signal;
   std::atomic<uint32_t> schedule_done;
+
+  std::atomic<uint32_t> skip_s_phase;
+
   ShareQueue<simpleTransaction*, 54096> transactions_queue;
 
   std::atomic<uint32_t> transactions_prepared; 

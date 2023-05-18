@@ -41,7 +41,8 @@ public:
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
            ShareQueue<simpleTransaction*, 54096>& transactions_queue,
-           std::atomic<uint32_t> &is_full_signal)
+           std::atomic<uint32_t> &is_full_signal
+           )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -402,7 +403,7 @@ public:
 
       
           std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-    // if(id == 0){
+    if(id == 0){
           auto router_request = [&](size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
             // router transaction to coordinators
             messages_mutex[coordinator_id_dst]->lock();
@@ -421,7 +422,7 @@ public:
           // real transactions
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
 
-          size_t per_thread_num = batch_size / context.worker_num;
+          size_t per_thread_num = batch_size;//  / context.worker_num;
           
           for(size_t i = 0; i < per_thread_num; i ++ ){
             bool success = false;
@@ -432,10 +433,13 @@ public:
             router_request(txn->destination_coordinator, txn); 
           }
 
-          if(id == 0){
-            is_full_signal.store(0);
+          // if(id == 0){
+          is_full_signal.store(0);
+          // }
+          for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) << id << " send to coordinator[" << i << "] : " << router_send_txn_cnt[i];
           }
-          VLOG(DEBUG_V14) << " send router " << router_send_txn_cnt[0] << " " << router_send_txn_cnt[1];
+          
           // after router all txns, send the stop-SIGNAL
           for (auto l = 0u; l < context.coordinator_num; l++){
             if(l == context.coordinator_id){
@@ -448,7 +452,7 @@ public:
             messages_mutex[l]->unlock();
           }
 
-    // }
+    }
       // }
 
       LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
@@ -668,11 +672,11 @@ protected:
   std::unique_ptr<Clay<WorkloadType>> my_clay;
   std::atomic<uint32_t> transmit_request_response;
 
-  ShareQueue<simpleTransaction*, 54096>& transactions_queue;
+
   // ShareQueue<simpleTransaction*, 409600> transmit_request_queue;
 
   size_t generator_num;
-  std::atomic<uint32_t> &is_full_signal;// [20];
+  
 
   std::vector<int> generator_core_id;
   std::vector<int> sender_core_id;
@@ -683,6 +687,10 @@ protected:
   const ContextType &context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+
+  ShareQueue<simpleTransaction*, 54096> &transactions_queue;
+  std::atomic<uint32_t> &is_full_signal;// [20];
+
   std::unique_ptr<Partitioner> partitioner;
   RandomType random;
   ProtocolType protocol;

@@ -75,7 +75,7 @@ public:
   void *search_value(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
     bool ok = map_.contains(k);
-    DCHECK(ok == true);
+    DCHECK(ok == true) << *(int*)key;
     return &std::get<1>(map_[k]);
   }
 

@@ -43,7 +43,7 @@ public:
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &skip_s_phase,
-           ShareQueue<simpleTransaction*, 54096>& transactions_queue,
+           ShareQueue<simpleTransaction*>& transactions_queue,
            std::atomic<uint32_t>& is_full_signal,
            std::atomic<uint32_t>& schedule_done, 
            std::vector<std::vector<std::shared_ptr<simpleTransaction>>>& node_txns)
@@ -109,6 +109,8 @@ public:
     // for(int i = 0 ; i < txns_coord_cost.size(); i ++ ){
     //   txns_coord_cost[i] = std::make_unique<int[]>(context.coordinator_num);
     // }
+
+    pure_single_txn_cnt = 0;
     
   }
 
@@ -377,6 +379,7 @@ public:
         txn_nodes_involved(txn.get(), true, txns_coord_cost[thread_id]);
       } else {
         DCHECK(txn->is_distributed == 0);
+        pure_single_txn_cnt += 1;
         txn->destination_coordinator = txn->partition_id % context.coordinator_num;
       } 
 
@@ -563,7 +566,7 @@ public:
     // main loop
     for (;;) {
       auto test = std::chrono::steady_clock::now();
-      
+
       ExecutorStatus status;
       do {
         // exit 
@@ -592,6 +595,10 @@ public:
         }
       } while (status != ExecutorStatus::C_PHASE);
 
+      if(id == 0){
+        skip_s_phase.store(false);
+      }
+      
       while (!q.empty()) {
         auto &ptr = q.front();
         auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -615,6 +622,7 @@ public:
       std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
       if(id == 0){
           int thread_id = 0; //n;
+          pure_single_txn_cnt = 0;
 
           scheduler_transactions(thread_id);
 
@@ -655,6 +663,10 @@ public:
           LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
                               std::chrono::steady_clock::now() - test)
                               .count() * 1.0 / 1000 / 1000;
+
+          if(pure_single_txn_cnt == 0){
+            skip_s_phase.store(true);
+          }
       }
 
       // while(schedule_done.load() == 0){
@@ -679,50 +691,61 @@ public:
       }
       process_request();
 
-      if(id == 0){
-        schedule_done.store(0);
-      }
+      if(skip_s_phase.load() == false){
+        if(id == 0){
+          schedule_done.store(0);
+        }
 
-      LOG(INFO) << "after s_phase " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count() * 1.0 / 1000 / 1000;
-      // s-phase
-      n_started_workers.fetch_add(1);
-      n_complete_workers.fetch_add(1);
+        LOG(INFO) << "after s_phase " << std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - test)
+                            .count() * 1.0 / 1000 / 1000;
+        // s-phase
+        n_started_workers.fetch_add(1);
+        n_complete_workers.fetch_add(1);
 
-      VLOG(DEBUG_V) << "Generator " << id << " finish S_PHASE";
+        VLOG(DEBUG_V) << "Generator " << id << " finish S_PHASE";
 
-      // router_fence(); // wait for coordinator to response
+        // router_fence(); // wait for coordinator to response
 
-      LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count() * 1.0 / 1000 / 1000;
-      // test = std::chrono::steady_clock::now();
+        LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - test)
+                            .count() * 1.0 / 1000 / 1000;
+        // test = std::chrono::steady_clock::now();
 
-      // flush_async_messages();
-      // for(size_t thread_id = 0 ; thread_id < context.coordinator_num; thread_id ++ ){
-      //   flush_messages(async_messages[thread_id]);
-      // }
-      flush_async_messages();
+        // flush_async_messages();
+        // for(size_t thread_id = 0 ; thread_id < context.coordinator_num; thread_id ++ ){
+        //   flush_messages(async_messages[thread_id]);
+        // }
+        flush_async_messages();
 
 
-      
-      while (static_cast<ExecutorStatus>(worker_status.load()) ==
-             ExecutorStatus::S_PHASE) {
+        
+        while (static_cast<ExecutorStatus>(worker_status.load()) ==
+              ExecutorStatus::S_PHASE) {
+          process_request();
+        }
+
+        // test = std::chrono::steady_clock::now();
+
+
+        // n_complete_workers has been cleared
         process_request();
+        n_complete_workers.fetch_add(1);
+      }
+      else {
+        VLOG_IF(DEBUG_V, id==0) << "skip s phase wait back ";
+        process_request();
+        n_complete_workers.fetch_add(1);
+
+        
       }
 
-      VLOG_IF(DEBUG_V, id==0) << "wait back "
-              << std::chrono::duration_cast<std::chrono::microseconds>(
-                     std::chrono::steady_clock::now() - test)
-                     .count() * 1.0 / 1000 / 1000
-              << " microseconds.";
-      // test = std::chrono::steady_clock::now();
+        VLOG_IF(DEBUG_V, id==0) << "wait back "
+                << std::chrono::duration_cast<std::chrono::microseconds>(
+                      std::chrono::steady_clock::now() - test)
+                      .count() * 1.0 / 1000 / 1000
+                << " microseconds.";
 
-
-      // n_complete_workers has been cleared
-      process_request();
-      n_complete_workers.fetch_add(1);
     }
     // not end here!
   }
@@ -925,6 +948,7 @@ protected:
   // std::vector<int> sender_core_id;
   std::mutex mm;
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
+  int pure_single_txn_cnt;
 
   DatabaseType &db;
   const ContextType &context;
@@ -933,7 +957,7 @@ protected:
 
   std::atomic<uint32_t> &skip_s_phase;
 
-  ShareQueue<simpleTransaction*, 54096> &transactions_queue;// [20];// [20];
+  ShareQueue<simpleTransaction*> &transactions_queue;// [20];// [20];
 
   std::atomic<uint32_t>& is_full_signal;
   std::atomic<uint32_t>& schedule_done;
@@ -969,7 +993,7 @@ protected:
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *, 50086> in_queue, out_queue;
+  LockfreeQueue<Message *, 500860> in_queue, out_queue;
 
   std::ofstream outfile_excel;
 

@@ -169,27 +169,38 @@ public:
 
       n_completed_workers.store(0);
       n_started_workers.store(0);
-      signal_worker(ExecutorStatus::S_PHASE);
-      wait_all_workers_start();
       
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
+      signal_worker(merge_value_to_signal(skip_s_phase.load(), ExecutorStatus::S_PHASE));
 
-      wait_all_workers_finish();
-      
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
+      if(skip_s_phase.load() == false){
+        wait_all_workers_start();
+        
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
-      broadcast_stop();
-      wait4_stop(n_coordinators - 1);
+        wait_all_workers_finish();
+        
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
+        broadcast_stop();
+        wait4_stop(n_coordinators - 1);
 
-      n_completed_workers.store(0);
-      set_worker_status(ExecutorStatus::STOP);
-      wait_all_workers_finish();
-      
-      VLOG(DEBUG_V) << "wait4_ack s-phase";
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
 
-      wait4_ack();
+        n_completed_workers.store(0);
+        set_worker_status(ExecutorStatus::STOP);
+        wait_all_workers_finish();
+        
+        VLOG(DEBUG_V) << "wait4_ack s-phase";
+
+        wait4_ack();
+      } else {
+        LOG(INFO) << "skip s phase";
+        wait_all_workers_finish();
+        
+        VLOG(DEBUG_V) << "wait4_ack s-phase";
+
+        wait4_ack();
+      }
 
       VLOG(DEBUG_V) << "finished";
       {
@@ -266,26 +277,40 @@ public:
       VLOG(DEBUG_V) << "start S-Phase";
       
       // start s-phase
+      bool is_s_phase_skip = false;
+      std::tie(is_s_phase_skip, signal) = split_signal(wait4_signal());
 
-      signal = wait4_signal();
+      skip_s_phase.store(is_s_phase_skip);
+      
       DCHECK(signal == ExecutorStatus::S_PHASE);
       n_completed_workers.store(0);
       n_started_workers.store(0);
-      set_worker_status(ExecutorStatus::S_PHASE);
-      VLOG(DEBUG_V) << "wait_all_workers_start";
-      wait_all_workers_start();
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
-      wait_all_workers_finish();
-      broadcast_stop();
-      VLOG(DEBUG_V) << "wait4_stop";
-      wait4_stop(n_coordinators - 1);
-      // n_completed_workers.store(0);
-      set_worker_status(ExecutorStatus::STOP);
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
-      wait_all_workers_finish();
-      VLOG(DEBUG_V) << "send_ack s-phase";
 
-      send_ack();
+      set_worker_status(ExecutorStatus::S_PHASE);
+
+      if(skip_s_phase.load() == false){
+        VLOG(DEBUG_V) << "wait_all_workers_start";
+        wait_all_workers_start();
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
+        wait_all_workers_finish();
+        broadcast_stop();
+        VLOG(DEBUG_V) << "wait4_stop";
+        wait4_stop(n_coordinators - 1);
+        // n_completed_workers.store(0);
+        set_worker_status(ExecutorStatus::STOP);
+        VLOG(DEBUG_V) << "wait_all_workers_finish";
+        wait_all_workers_finish();
+        VLOG(DEBUG_V) << "send_ack s-phase";
+
+        send_ack();
+      } else {
+        LOG(INFO) << "skip s phase";
+        LOG(INFO) << "wait_all_workers_finish";
+        wait_all_workers_finish();
+        LOG(INFO) << "send_ack";
+        send_ack();
+      }
+
       VLOG(DEBUG_V) << "finished";
 
     }
@@ -303,12 +328,16 @@ public:
 
   std::atomic<uint32_t> skip_s_phase;
 
-  ShareQueue<simpleTransaction*, 54096> transactions_queue;
+  ShareQueue<simpleTransaction*> transactions_queue;
 
   std::atomic<uint32_t> transactions_prepared; 
   std::atomic<uint32_t> cur_real_distributed_cnt;
   std::vector<std::unique_ptr<TransactionType>> s_transactions_queue; 
   std::vector<std::unique_ptr<TransactionType>> c_transactions_queue; 
+
+  ShareQueue<int> s_txn_id_queue;
+  ShareQueue<int> c_txn_id_queue;
+
   std::vector<StorageType> storages;
   std::vector<std::vector<std::shared_ptr<simpleTransaction>>> node_txns;
 

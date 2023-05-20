@@ -42,9 +42,12 @@ public:
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
                std::atomic<uint32_t> &n_started_workers, 
+               std::atomic<uint32_t> &skip_s_phase, 
                std::atomic<uint32_t> &transactions_prepared, 
                std::vector<std::unique_ptr<TransactionType>> &s_transactions_queue, 
                std::vector<std::unique_ptr<TransactionType>> &c_transactions_queue,
+               ShareQueue<int> &s_txn_id_queue,
+               ShareQueue<int> &c_txn_id_queue,
                std::vector<StorageType> &storages) // ,
                // HashMap<9916, std::string, int> &data_pack_map)
       : Worker(coordinator_id, id), db(db), context(context),
@@ -56,9 +59,12 @@ public:
         random(reinterpret_cast<uint64_t>(this)), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        skip_s_phase(skip_s_phase),
         transactions_prepared(transactions_prepared),
         s_transactions_queue(s_transactions_queue),
         c_transactions_queue(c_transactions_queue),
+        s_txn_id_queue(s_txn_id_queue),
+        c_txn_id_queue(c_txn_id_queue),
         storages(storages),
         // data_pack_map(data_pack_map),
         delay(std::make_unique<SameDelay>(
@@ -195,15 +201,19 @@ public:
       n_network_size.fetch_add(simple_txn.size);
 
       if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
+        uint32_t txn_id = s_transactions_queue.size();
         auto p = s_workload->unpack_transaction(context, 0, storage, simple_txn);
         s_transactions_queue.push_back(std::move(p));
+        s_txn_id_queue.push_no_wait(txn_id);
+
       } else {
         uint32_t txn_id = c_transactions_queue.size();
         if(txn_id >= storages.size()){
           DCHECK(false);
         }
         auto p = c_workload->unpack_transaction(context, 0, storages[txn_id], simple_txn);
-        
+        c_txn_id_queue.push_no_wait(txn_id);
+
         if(simple_txn.is_transmit_request){
           DCHECK(false);
         } else {
@@ -375,7 +385,10 @@ public:
         async_fence();
       }
 
-      run_transaction(ExecutorStatus::C_PHASE, c_transactions_queue ,async_message_num);
+      run_transaction(ExecutorStatus::C_PHASE, 
+      c_transactions_queue,
+      c_txn_id_queue,
+      async_message_num);
     
       n_complete_workers.fetch_add(1);
 
@@ -397,76 +410,91 @@ public:
                      .count()
               << " milliseconds.";
       // now = std::chrono::steady_clock::now();
+        VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
+        while (static_cast<ExecutorStatus>(worker_status.load()) !=
+              ExecutorStatus::S_PHASE) {
+          process_request(); 
+        }
 
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
-      while (static_cast<ExecutorStatus>(worker_status.load()) !=
-             ExecutorStatus::S_PHASE) {
-        process_request(); 
-      }
+      VLOG_IF(DEBUG_V, id==0) << "S_phase enter"
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
 
       if(id == 0){
         transactions_prepared.store(false);
       }
-      // s_phase
-      VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] wait for s-phase "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
 
-      n_started_workers.fetch_add(1);
-      VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] worker " << id << " ready to run_transaction";
+      if(skip_s_phase.load() == false){
+        // s_phase
+        VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] wait for s-phase "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
+        // now = std::chrono::steady_clock::now();
 
-      // r_size = s_transactions_queue.size();
-      // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
-      run_transaction(ExecutorStatus::S_PHASE, s_transactions_queue, async_message_num);
-      
-      // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
+        n_started_workers.fetch_add(1);
+        VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] worker " << id << " ready to run_transaction";
 
-      VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] done "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
-      
-      replication_fence(ExecutorStatus::S_PHASE);
-      n_complete_workers.fetch_add(1);
-      VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] fence "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
+        // r_size = s_transactions_queue.size();
+        // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
+        run_transaction(ExecutorStatus::S_PHASE, 
+        s_transactions_queue, 
+        s_txn_id_queue,
+        async_message_num);
+        
+        // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
 
-      // once all workers are stop, we need to process the replication
-      // requests
+        VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] done "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
+        // now = std::chrono::steady_clock::now();
+        
+        replication_fence(ExecutorStatus::S_PHASE);
+        n_complete_workers.fetch_add(1);
+        VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] fence "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
+        // now = std::chrono::steady_clock::now();
 
-      while (static_cast<ExecutorStatus>(worker_status.load()) ==
-             ExecutorStatus::S_PHASE) {
+        // once all workers are stop, we need to process the replication
+        // requests
+
+        while (static_cast<ExecutorStatus>(worker_status.load()) ==
+              ExecutorStatus::S_PHASE) {
+          process_request();
+        }
+
+        VLOG_IF(DEBUG_V, id==0) << "wait back "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
+        // now = std::chrono::steady_clock::now();
+
+
+        // n_complete_workers has been cleared
         process_request();
+        n_complete_workers.fetch_add(1);
+
+      } else {
+        VLOG_IF(DEBUG_V, id==0) << "skip s phase";
+        process_request();
+        n_complete_workers.fetch_add(1);
       }
 
-      VLOG_IF(DEBUG_V, id==0) << "wait back "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
+        auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count();
 
-
-      // n_complete_workers has been cleared
-      process_request();
-      n_complete_workers.fetch_add(1);
-
-
-      auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count();
-
-      if(cur_time > 10)
-        execute_latency.add(execution_schedule_time);
+        if(cur_time > 10)
+          execute_latency.add(execution_schedule_time);
 
       VLOG_IF(DEBUG_V, id==0) << "whole batch "
               << execution_schedule_time
@@ -513,6 +541,7 @@ public:
 
   void run_transaction(ExecutorStatus status, 
                        std::vector<std::unique_ptr<TransactionType>>& cur_trans,
+                       ShareQueue<int>& txn_id_queue,
                        std::atomic<uint32_t>& async_message_num,
                        bool naive_router = false,
                        bool reset_time = false) {
@@ -554,8 +583,26 @@ public:
     std::vector<int> why(20, 0);
 
     // while(!cur_trans->empty()){ // 为什么不能这样？ 不是太懂
-    for (auto i = id; i < cur_queue_size; i += context.worker_num) {
-      
+    // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
+    auto i = 0l;
+    for(;;) {
+      bool success = false;
+      if(status == ExecutorStatus::C_PHASE){
+        i = txn_id_queue.pop_no_wait(success);
+        if(!success){
+          i = sub_c_txn_id_queue.pop_no_wait(success);
+        } 
+      } else {
+        i = txn_id_queue.pop_no_wait(success);
+      }
+      if(!success){
+        break;
+      }
+      if(i >= cur_trans.size() || cur_trans[i].get() == nullptr){
+        // DCHECK(false) << i << " " << cur_trans.size();
+        continue;
+      }
+
       auto now = std::chrono::steady_clock::now();
       count += 1;
       auto txnStartTime = cur_trans[i]->startTime = std::chrono::steady_clock::now();
@@ -682,14 +729,15 @@ public:
     auto total_sec = std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count() * 1.0;
-    LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / count << " per/micros."
-              << txn_percentile.nth(10) << " " 
-              << txn_percentile.nth(50) << " "
-              << txn_percentile.nth(80) << " "
-              << txn_percentile.nth(90) << " "
-              << txn_percentile.nth(95);
-
     if(count > 0){
+      LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / count << " per/micros."
+                << txn_percentile.nth(10) << " " 
+                << txn_percentile.nth(50) << " "
+                << txn_percentile.nth(80) << " "
+                << txn_percentile.nth(90) << " "
+                << txn_percentile.nth(95);
+
+    
       VLOG(DEBUG_V4)  << time_read_remote << " " << count 
       << " pre: "     << time_before_prepare_request / count  
       << " set: "     << time_before_prepare_set / count 
@@ -745,10 +793,24 @@ public:
     size_t cur_queue_size = cur_trans.size();
     int router_txn_num = 0;
 
-    for (auto i = id; i < cur_queue_size; i += context.worker_num) {
-      if(cur_trans[i]->distributed_transaction == false){
+
+    // for(;;) {
+    for (auto x = id; x < cur_queue_size; x += context.worker_num) {
+      bool success = false;
+      auto i = c_txn_id_queue.pop_no_wait(success);
+      if(!success){
+        break;
+      }
+      if(i >= cur_trans.size() || cur_trans[i].get() == nullptr){
+        // DCHECK(false) << i << " " << cur_trans.size();
         continue;
       }
+      
+      if(cur_trans[i]->distributed_transaction == false){
+        c_txn_id_queue.push_no_wait(i);
+        continue;
+      }
+      sub_c_txn_id_queue.push_no_wait(i);
 
       cur_trans[i]->startTime = std::chrono::steady_clock::now();
       bool retry_transaction = false;
@@ -802,9 +864,11 @@ public:
     auto total_sec = std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count() * 1.0;
-    LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
+    
 
     if(cur_queue_size > 0){
+      LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
+
       VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size;
     }
 
@@ -1240,6 +1304,8 @@ private:
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+  std::atomic<uint32_t> &skip_s_phase;
+
   std::atomic<uint32_t> &transactions_prepared;
   std::atomic<uint32_t> cur_real_distributed_cnt;
 
@@ -1248,6 +1314,12 @@ private:
 
   
   std::vector<std::unique_ptr<TransactionType>> &c_transactions_queue;
+
+  ShareQueue<int> &s_txn_id_queue;
+  ShareQueue<int> &c_txn_id_queue;
+
+  ShareQueue<int> sub_c_txn_id_queue;
+
   std::vector<StorageType> &storages;
   // std::vector<std::unique_ptr<TransactionType>> &r_transactions_queue;
 
@@ -1281,7 +1353,7 @@ private:
               std::vector<std::unique_ptr<TransactionType>>&
               )>>
       messageHandlers;
-  LockfreeQueue<Message *, 10086> in_queue, out_queue,
+  LockfreeQueue<Message *, 100860> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 

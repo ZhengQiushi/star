@@ -222,9 +222,12 @@ public:
             coordinator_id, i, db, context, manager->batch_size,
             manager->worker_status, manager->n_completed_workers,
             manager->n_started_workers,
+            manager->skip_s_phase,
             manager->transactions_prepared,
             manager->s_transactions_queue,
             manager->c_transactions_queue,
+            manager->s_txn_id_queue,
+            manager->c_txn_id_queue,
             manager->storages
             )); // , manager->recorder_status // recorder->data_pack_map
       }
@@ -446,6 +449,7 @@ public:
             manager->n_completed_workers, manager->n_started_workers,
             manager->transactions_prepared,
             manager->r_transactions_queue,
+            manager->txn_id_queue,
             manager->storages
             ));
       }

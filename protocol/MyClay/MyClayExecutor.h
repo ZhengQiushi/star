@@ -39,6 +39,7 @@ public:
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &transactions_prepared,
            std::vector<std::unique_ptr<TransactionType>> &r_transactions_queue,
+           ShareQueue<int, 10086> &txn_id_queue,
            std::vector<StorageType> &storages
            )
       : Worker(coordinator_id, id), db(db), context(context),
@@ -46,6 +47,7 @@ public:
         n_started_workers(n_started_workers),
         transactions_prepared(transactions_prepared),
         r_transactions_queue(r_transactions_queue),
+        txn_id_queue(txn_id_queue), 
         storages(storages),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
@@ -88,6 +90,8 @@ public:
       
       n_network_size.fetch_add(simple_txn.size);
       auto p = workload.unpack_transaction(context, 0, storages[idx], simple_txn);
+      txn_id_queue.push_no_wait(idx);
+
       idx += 1;
 
       r_transactions_queue.push_back(std::move(p));
@@ -120,7 +124,17 @@ public:
     auto i = 0u;
     size_t cur_queue_size = cur_txns.size(); 
     int count = 0;   
-    for (auto i = id; i < cur_queue_size; i += context.worker_num) {
+    // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
+    for(;;) {
+      bool success = false;
+      i = txn_id_queue.pop_no_wait(success);
+      if(!success){
+        break;
+      }
+      if(i >= cur_txns.size() || cur_txns[i].get() == nullptr){
+        // DCHECK(false) << i << " " << cur_trans.size();
+        continue;
+      }
       auto now = std::chrono::steady_clock::now();
       bool retry_transaction = false;
       count += 1;
@@ -331,14 +345,16 @@ public:
                      .count()
               << " milliseconds.";
 
+      single_txn_num = 0;
+      cross_txn_num = 0;
+
       if (id == 0) {
         while(!is_router_stopped(router_recv_txn_num)){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
 
-        single_txn_num = 0;
-        cross_txn_num = 0;
+
 
         VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -630,6 +646,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::atomic<uint32_t> &transactions_prepared;
   std::vector<std::unique_ptr<TransactionType>>  &r_transactions_queue;
+  ShareQueue<int, 10086> &txn_id_queue;
   std::vector<StorageType> &storages;
 
 

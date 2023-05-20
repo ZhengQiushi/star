@@ -21,6 +21,7 @@ public:
 
   std::atomic<uint32_t> transactions_prepared; 
   std::vector<std::unique_ptr<TransactionType>> r_transactions_queue;
+  ShareQueue<int, 10086> txn_id_queue;
   std::vector<StorageType> storages;
   
   // std::vector<std::unique_ptr<TransactionType>> c_transactions_queue;

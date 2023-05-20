@@ -77,17 +77,18 @@ public:
 
     generator_core_id.resize(context.coordinator_num);
 
-    generator_num = 1;
+    generator_num = context.coordinator_num;
 
     generator_core_id.resize(context.coordinator_num);
-    // sender_core_id.resize(context.coordinator_num);
+    sender_core_id.resize(context.coordinator_num);
 
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
-    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-    //   sender_core_id[i] = pin_thread_id_ ++ ;
-    // }
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      sender_core_id[i] = pin_thread_id_;
+      generator_core_id[i] = pin_thread_id_ ++ ;
+    }
 
     txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
     
@@ -404,6 +405,10 @@ public:
       
           std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
     if(id == 0){
+      std::vector<std::thread> threads;
+      for (auto n = 0u; n < context.coordinator_num; n++) {
+        threads.emplace_back([&](int n) {
+
           auto router_request = [&](size_t coordinator_id_dst, std::shared_ptr<simpleTransaction> txn) {
             // router transaction to coordinators
             messages_mutex[coordinator_id_dst]->lock();
@@ -422,7 +427,7 @@ public:
           // real transactions
           size_t batch_size = (size_t)transactions_queue.size() < (size_t)context.batch_size ? (size_t)transactions_queue.size(): (size_t)context.batch_size;
 
-          size_t per_thread_num = batch_size;//  / context.worker_num;
+          size_t per_thread_num = batch_size / context.coordinator_num;
           
           for(size_t i = 0; i < per_thread_num; i ++ ){
             bool success = false;
@@ -451,7 +456,17 @@ public:
             flush_message(async_messages, l);
             messages_mutex[l]->unlock();
           }
+        }, n);
 
+        if (context.cpu_affinity) {
+          ControlMessageFactory::pin_thread_to_core(context, threads[n], sender_core_id[n]); // , generator_core_id[n]);
+        }
+
+      }
+
+      for (auto &t : threads) {
+        t.join();
+      }
     }
       // }
 

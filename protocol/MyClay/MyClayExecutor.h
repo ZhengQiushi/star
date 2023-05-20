@@ -39,7 +39,7 @@ public:
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &transactions_prepared,
            std::vector<std::unique_ptr<TransactionType>> &r_transactions_queue,
-           ShareQueue<int, 10086> &txn_id_queue,
+           ShareQueue<int> &txn_id_queue,
            std::vector<StorageType> &storages
            )
       : Worker(coordinator_id, id), db(db), context(context),
@@ -277,7 +277,7 @@ public:
   }
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    size_t num = 1; // context.coordinator_num
+    size_t num = context.coordinator_num; // 1
     if(router_stop_queue.size() < num){
       ret = false;
     } else {
@@ -363,6 +363,15 @@ public:
                 << " milliseconds.";
         // now = std::chrono::steady_clock::now();
         unpack_route_transaction(workload, router_recv_txn_num); // 
+
+
+        VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds." 
+                << r_transactions_queue.size() << " "
+                << txn_id_queue.size();
 
         transactions_prepared.store(true);
       }
@@ -646,7 +655,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::atomic<uint32_t> &transactions_prepared;
   std::vector<std::unique_ptr<TransactionType>>  &r_transactions_queue;
-  ShareQueue<int, 10086> &txn_id_queue;
+  ShareQueue<int> &txn_id_queue;
   std::vector<StorageType> &storages;
 
 

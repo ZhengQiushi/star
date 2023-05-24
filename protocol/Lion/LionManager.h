@@ -8,10 +8,82 @@
 
 #include "common/Percentile.h"
 #include "core/Manager.h"
+#include "common/ShareQueue.h"
+#include <mutex>
 
 namespace star {
 
 #define MAX_COORDINATOR_NUM 20
+
+struct ScheduleMeta {
+  ScheduleMeta(int coordinator_num, int batch_size){
+    this->coordinator_num = coordinator_num;
+    this->batch_size = batch_size * coordinator_num;
+    for(size_t i = 0 ; i < coordinator_num; i ++ ){
+      node_busy[i] = 0;
+    }
+    txns_coord_cost.resize(this->batch_size, std::vector<int>(coordinator_num, 0));
+    txn_id.store(0);
+    reorder_done.store(false);
+  }
+  void clear(){
+    for(size_t i = 0 ; i < coordinator_num; i ++ ){
+      node_busy[i] = 0;
+    }
+    node_txns.clear();
+    txn_id.store(0);
+    reorder_done.store(false);
+    LOG(INFO) << " CLEAR !!!! " << txn_id.load();
+  }
+  int coordinator_num;
+  int batch_size;
+  
+  std::mutex l;
+  std::vector<std::shared_ptr<simpleTransaction>> node_txns;
+  std::unordered_map<size_t, int> node_busy;
+  std::vector<std::vector<int>> txns_coord_cost;
+
+  std::atomic<uint32_t> txn_id;
+  std::atomic<uint32_t> reorder_done;
+  ShareQueue<uint32_t> send_txn_id;
+};
+
+
+template <class Workload> 
+struct TransactionMeta {
+  using TransactionType = LionTransaction;
+  using WorkloadType = Workload;
+  using StorageType = typename WorkloadType::StorageType;
+  TransactionMeta(int coordinator_num, int batch_size){
+    this->batch_size = batch_size;
+    this->coordinator_num = coordinator_num;
+    storages.resize(batch_size * coordinator_num * 2);
+  }
+  void clear(){
+    s_txn_id.store(0);
+    c_txn_id.store(0);
+  }
+
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  
+  std::atomic<uint32_t> s_txn_id;
+  std::atomic<uint32_t> c_txn_id;
+
+  std::vector<std::unique_ptr<TransactionType>> s_transactions_queue;
+  std::vector<std::unique_ptr<TransactionType>> c_transactions_queue;
+
+  std::vector<StorageType> storages;
+  
+  ShareQueue<int> s_txn_id_queue;
+  ShareQueue<int> c_txn_id_queue;
+
+  std::mutex s_l;
+  std::mutex c_l;
+
+  int batch_size;
+  int coordinator_num;
+};
+
 
 template <class Workload>
 class LionManager : public star::Manager {
@@ -30,15 +102,19 @@ public:
       : base_type(coordinator_id, id, context, stopFlag),
         db(db),
         c_partitioner(std::make_unique<StarCPartitioner>(
-            coordinator_id, context.coordinator_num)) {
+            coordinator_id, context.coordinator_num)),
+        schedule_meta(context.coordinator_num, context.batch_size),
+        txn_meta(context.coordinator_num, context.batch_size) {
 
     batch_size = context.batch_size;
     recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
     transmit_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
     
-    node_txns.resize(MAX_COORDINATOR_NUM);
-
-    storages.resize(context.batch_size * 4);
+    // node_txns.resize(MAX_COORDINATOR_NUM);
+    // node_busy_.resize(MAX_COORDINATOR_NUM);
+    // txns_coord_cost.resize(MAX_COORDINATOR_NUM);
+    
+    
     transactions_prepared.store(false);
     cur_real_distributed_cnt.store(0);
   }
@@ -328,18 +404,27 @@ public:
 
   std::atomic<uint32_t> skip_s_phase;
 
-  ShareQueue<simpleTransaction*> transactions_queue;
+  ShareQueue<simpleTransaction*, 40960> transactions_queue;
 
   std::atomic<uint32_t> transactions_prepared; 
   std::atomic<uint32_t> cur_real_distributed_cnt;
-  std::vector<std::unique_ptr<TransactionType>> s_transactions_queue; 
-  std::vector<std::unique_ptr<TransactionType>> c_transactions_queue; 
 
-  ShareQueue<int> s_txn_id_queue;
-  ShareQueue<int> c_txn_id_queue;
+  
+  // std::vector<std::unique_ptr<TransactionType>> s_transactions_queue; 
+  // std::vector<std::unique_ptr<TransactionType>> c_transactions_queue; 
 
-  std::vector<StorageType> storages;
-  std::vector<std::vector<std::shared_ptr<simpleTransaction>>> node_txns;
+  // std::mutex s_l;
+  // std::mutex c_l;
+
+  // ShareQueue<simpleTransaction> router_transactions_queue;
+
+  // ShareQueue<int> s_txn_id_queue;
+  // ShareQueue<int> c_txn_id_queue;
+
+  // std::vector<StorageType> storages;
+
+  ScheduleMeta schedule_meta;
+  TransactionMeta<WorkloadType> txn_meta;
 
 };
 } // namespace star

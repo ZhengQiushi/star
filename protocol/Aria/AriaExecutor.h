@@ -83,12 +83,20 @@ public:
     transactions.erase(transactions.begin() + n_abort, transactions.end());
     // storages.erase(storages.begin() + n_abort, storages.end());
 
-    int s = router_transactions_queue.size();
-    DCHECK(s == router_recv_txn_num);
-    while(s -- > 0){
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      // txn_replica_involved(&simple_txn, context.coordinator_id);
-      router_transactions_queue.pop_front();
+    // int size_ = router_transactions_queue.size();
+    while(true){
+      // size_ -- ;
+      // bool is_ok = false;
+      bool success = false;
+      simpleTransaction simple_txn = 
+        router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
+    // int s = router_transactions_queue.size();
+    // DCHECK(s == router_recv_txn_num);
+    // while(s -- > 0){
+    //   simpleTransaction simple_txn = router_transactions_queue.front();
+    //   // txn_replica_involved(&simple_txn, context.coordinator_id);
+    //   router_transactions_queue.pop_front();
 
       n_network_size.fetch_add(simple_txn.size);
       // router_planning(&simple_txn);
@@ -739,12 +747,12 @@ private:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
 
   LockfreeQueue<Message *, 10086> in_queue, out_queue;
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   int router_recv_txn_num = 0; // generator router from 

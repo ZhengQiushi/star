@@ -43,18 +43,17 @@ public:
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &skip_s_phase,
-           ShareQueue<simpleTransaction*>& transactions_queue,
+           ShareQueue<simpleTransaction*, 40960>& transactions_queue,
            std::atomic<uint32_t>& is_full_signal,
-           std::atomic<uint32_t>& schedule_done, 
-           std::vector<std::vector<std::shared_ptr<simpleTransaction>>>& node_txns)
+           ScheduleMeta &schedule_meta
+           )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
         skip_s_phase(skip_s_phase),
         transactions_queue(transactions_queue),
         is_full_signal(is_full_signal),
-        schedule_done(schedule_done),
-        node_txns(node_txns),
+        schedule_meta(schedule_meta),
         partitioner(std::make_unique<LionDynamicPartitioner<WorkloadType>>(
             coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -67,10 +66,6 @@ public:
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
 
-      // for (auto j = 0u; j <= context.coordinator_num; j ++){
-      //   async_messages[i].emplace_back(std::make_unique<Message>());
-      //   init_message(async_messages[i][j].get(), j); // thread_id, coordinator_id
-      // }
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
 
@@ -89,7 +84,7 @@ public:
     router_transaction_done.store(0);
     router_transactions_send.store(0);
 
-    is_full_signal.store(0);
+    is_full_signal_self.store(0);
     generator_num = 1;
 
     generator_core_id.resize(context.coordinator_num);
@@ -102,9 +97,8 @@ public:
     //   sender_core_id[i] = pin_thread_id_ ++ ;
     // }
 
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      txns_coord_cost[i].resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
-    }
+    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    // }
     
     // for(int i = 0 ; i < txns_coord_cost.size(); i ++ ){
     //   txns_coord_cost[i] = std::make_unique<int[]>(context.coordinator_num);
@@ -325,36 +319,34 @@ public:
     }
     return std::make_pair(idle_coord_id, min_cost);
   }
-  void scheduler_transactions(int thread_id){    
-    size_t batch_size = std::min((size_t)transactions_queue.size(),  // [thread_id]
-                            (size_t)context.batch_size);
-    // batch_size = 0; // debug
-    LOG(INFO) << "batch_size: " << std::to_string(batch_size);
+  void scheduler_transactions(){    
+    size_t batch_size = std::min((size_t)transactions_queue.size(),  
+                            (size_t)context.batch_size); // * context.coordinator_num
 
-    std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[thread_id];
-    txns.clear();
-
-    std::unordered_map<size_t, int>& busy_ = node_busy_[thread_id];
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      busy_[i] = 0;
-    }
+    auto & txns            = schedule_meta.node_txns;
+    auto & busy_           = schedule_meta.node_busy;
+    auto & txns_coord_cost = schedule_meta.txns_coord_cost;
     
     auto staart = std::chrono::steady_clock::now();
-
-    size_t cur_thread_transaction_num = batch_size;
-    int aver_val = cur_thread_transaction_num / context.coordinator_num;
-
 
     double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
                  std::chrono::steady_clock::now() - start_time)
                  .count() * 1.0 / 1000 / 1000;
     int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    for(size_t i = 0; i < cur_thread_transaction_num; i ++ ){
-
+    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load();
+    while(schedule_meta.txn_id.load() < batch_size){
+    // for(size_t i = 0; i < cur_thread_transaction_num; i ++ ){
       bool success = false;
-      std::shared_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success)); // [thread_id]
-      txn->idx_ = i;
+      std::shared_ptr<simpleTransaction> txn(transactions_queue.pop_no_wait(success)); 
+
+      {
+        std::lock_guard<std::mutex> l(schedule_meta.l);
+        txn->idx_ = schedule_meta.txn_id.load();
+        schedule_meta.send_txn_id.push_no_wait(txn->idx_);
+        schedule_meta.txn_id.fetch_add(1);
+        txns.push_back(txn);
+      }
 
       DCHECK(success == true);
 
@@ -376,53 +368,32 @@ public:
       if(txn->is_distributed){ 
         // static-distribute
         // std::unordered_map<int, int> result;
-        txn_nodes_involved(txn.get(), true, txns_coord_cost[thread_id]);
+        txn_nodes_involved(txn.get(), true, txns_coord_cost);
       } else {
         DCHECK(txn->is_distributed == 0);
         pure_single_txn_cnt += 1;
         txn->destination_coordinator = txn->partition_id % context.coordinator_num;
       } 
+      
+      {
+        std::lock_guard<std::mutex> l(schedule_meta.l);
+        busy_[txn->destination_coordinator] ++;
+      }
 
-      txns.push_back(txn);
-
-      busy_[txn->destination_coordinator] ++;
-
-
-      // if(((int)cur_timestamp / context.workload_time) == 0){
-      //   test_distributed_outfile_excel[thread_id] << "\t" << txn->idx_ << "\t" << txn->keys[0] << "\t" << txn->keys[1] << "\t" << txn->destination_coordinator << "\t" << txn->execution_cost << 
-      //   "\t" << txns_coord_cost[thread_id][txn->idx_][0] << "\t" << txns_coord_cost[thread_id][txn->idx_][1] << "\t" << txns_coord_cost[thread_id][txn->idx_][2] << "\t" << txns_coord_cost[thread_id][txn->idx_][3] << "\n" ;
-      // }
     }
-    // test_distributed_outfile_excel[thread_id] << "workload" << ((int)cur_timestamp / context.workload_time) << "\n";
-
-// ((int)cur_timestamp / context.workload_time) == 0
-
 
     double cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                  std::chrono::steady_clock::now() - staart)
-                 .count() * 1.0 / 1000 / 1000;
+                 .count() * 1.0 / 1000 ;
 
-    LOG(INFO) << "scheduler_transactions : " << cur_timestamp__;
-    // LOG(INFO) << "BEFORE";
-    // for(int i = 0; i < txns.size(); i ++ ){
-    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
-    // }
-
+    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
     long long threshold = 100 / (context.coordinator_num / 2) * 100 / (context.coordinator_num / 2); // 2200 - 2800
-
+    
+    int aver_val =  batch_size / context.coordinator_num;
     long long cur_val = cal_load_distribute(aver_val, busy_);
 
-    // if(((int)cur_timestamp / context.workload_time) == 0){
-    //   test_distributed_outfile_excel[thread_id] << "load: " << "\t" << threshold << "\n";
-    //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-    //     test_distributed_outfile_excel[thread_id] << busy_[i] << "\t";
-    //   }
-    //   test_distributed_outfile_excel[thread_id] <<"\n";
-    // }
+    if(id == 0){
 
-
-    // && context.lion_with_metis_init == 0 && 
-    
     if(cur_val > threshold && context.random_router == 0){ 
       std::priority_queue<std::shared_ptr<simpleTransaction>, 
                         std::vector<std::shared_ptr<simpleTransaction>>, 
@@ -460,7 +431,7 @@ public:
           if(overload_node.count(t->destination_coordinator)){
             // find minial cost in idle_node
             auto [idle_coord_id, min_cost] = find_idle_node(idle_node, 
-                                               txns_coord_cost[thread_id][t->idx_], 
+                                               txns_coord_cost[t->idx_], 
                                                (workload_type == 1 || context.lion_with_metis_init == 0));
             if(idle_coord_id == -1){
               continue;
@@ -479,12 +450,6 @@ public:
             if(idle_node[idle_coord_id] <= 0){
               idle_node.erase(idle_coord_id);
             }
-
-            // if(((int)cur_timestamp / context.workload_time) == 0){
-            //   test_distributed_outfile_excel[thread_id] << "change :" <<  "\t" << t->idx_ << "\t"<< t->keys[0] << "\t" << t->keys[1] << "\t" << t->destination_coordinator << "\t" << t->execution_cost << 
-            //       "\t" << txns_coord_cost[thread_id][t->idx_][0] << "\t" << txns_coord_cost[thread_id][t->idx_][1] << "\t" << txns_coord_cost[thread_id][t->idx_][2] << "\t" << txns_coord_cost[thread_id][t->idx_][3] << "\n" ;
-            // }
-
           }
 
           if(overload_node.size() == 0 || idle_node.size() == 0){
@@ -498,6 +463,19 @@ public:
         
       } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
     }
+
+
+    schedule_meta.reorder_done.store(true);
+    }
+
+
+    while(schedule_meta.reorder_done.load() == false){
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+    }
+    cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - staart)
+                 .count() * 1.0 / 1000 ;
+    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << threshold;
 
   }
   
@@ -534,7 +512,7 @@ public:
 
     // generators
     std::vector<std::thread> generators;
-    if(id == 0){
+    // if(id == 0){
       for (auto n = 0u; n < generator_num; n++) {
         generators.emplace_back([&](int n) {
           ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
@@ -557,7 +535,7 @@ public:
           ControlMessageFactory::pin_thread_to_core(context, generators[n], generator_core_id[n]);
         }
       }
-    }
+    // }
     // wait 
     while(is_full_signal.load() == 0){
       std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -566,7 +544,6 @@ public:
     // main loop
     for (;;) {
       auto test = std::chrono::steady_clock::now();
-
       ExecutorStatus status;
       do {
         // exit 
@@ -575,11 +552,11 @@ public:
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "Executor " << id << " exits.";
 
-          if(id == 0){
+          // if(id == 0){
             for (auto &t : generators) {
               t.join();
             }
-          }
+          // }
           // for (auto &t : transmiter) {
           //   t.join();
           // }
@@ -620,33 +597,29 @@ public:
       }
       
       std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-      if(id == 0){
-          int thread_id = 0; //n;
           pure_single_txn_cnt = 0;
+          scheduler_transactions();
 
-          scheduler_transactions(thread_id);
-
-          is_full_signal.store(0);
-          schedule_done.store(1);
-
-          std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[thread_id];
-          for(size_t i = 0; i < txns.size(); i ++ ){
-            // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator << " " << txns[i]->keys[0] << " " << txns[i]->keys[1];
+          std::vector<std::shared_ptr<simpleTransaction>> &txns = schedule_meta.node_txns;
+          
+          while(true){
+            bool success = false;
+            auto i = schedule_meta.send_txn_id.pop_no_wait(success);
+            if(!success) break;
             coordinator_send[txns[i]->destination_coordinator] ++ ;
             router_request(router_send_txn_cnt, txns[i]);   
           }
 
           auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                       std::chrono::steady_clock::now() - test)
-                      .count() * 1.0 / 1000 / 1000;
-          LOG(INFO) << "scheduler_transactions + send : " << cur_timestamp__;
+                      .count() * 1.0 / 1000;
+          LOG(INFO) << "send : " << cur_timestamp__ << " " << txns.size();
 
           // 
           for (auto l = 0u; l < context.coordinator_num; l++){
             if(l == context.coordinator_id){
               continue;
             }
-            
             LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
             messages_mutex[l]->lock();
             ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
@@ -660,19 +633,18 @@ public:
 
           ////
 
-          LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
+          LOG(INFO) << "router: " << std::chrono::duration_cast<std::chrono::microseconds>(
                               std::chrono::steady_clock::now() - test)
-                              .count() * 1.0 / 1000 / 1000;
+                              .count() * 1.0 / 1000;
 
-          if(pure_single_txn_cnt == 0){
+          if(id == 0 && pure_single_txn_cnt == 0){
             skip_s_phase.store(true);
           }
-      }
-
-      // while(schedule_done.load() == 0){
-      //   std::this_thread::sleep_for(std::chrono::microseconds(5));
+          if(id == 0){
+              is_full_signal.store(0);
+          }
       // }
-      
+
       //// 
       // LOG(INFO) << "NEW";
       // std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[0];
@@ -691,11 +663,11 @@ public:
       }
       process_request();
 
+      if(id == 0){
+        schedule_meta.clear();
+      }
+      
       if(skip_s_phase.load() == false){
-        if(id == 0){
-          schedule_done.store(0);
-        }
-
         LOG(INFO) << "after s_phase " << std::chrono::duration_cast<std::chrono::microseconds>(
                             std::chrono::steady_clock::now() - test)
                             .count() * 1.0 / 1000 / 1000;
@@ -710,12 +682,7 @@ public:
         LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
                             std::chrono::steady_clock::now() - test)
                             .count() * 1.0 / 1000 / 1000;
-        // test = std::chrono::steady_clock::now();
 
-        // flush_async_messages();
-        // for(size_t thread_id = 0 ; thread_id < context.coordinator_num; thread_id ++ ){
-        //   flush_messages(async_messages[thread_id]);
-        // }
         flush_async_messages();
 
 
@@ -957,13 +924,17 @@ protected:
 
   std::atomic<uint32_t> &skip_s_phase;
 
-  ShareQueue<simpleTransaction*> &transactions_queue;// [20];// [20];
+  ShareQueue<simpleTransaction*, 40960> &transactions_queue;// [20];// [20];
+  // ShareQueue<simpleTransaction*, 40960> transactions_queue_self;
 
   std::atomic<uint32_t>& is_full_signal;
-  std::atomic<uint32_t>& schedule_done;
+  std::atomic<uint32_t> is_full_signal_self;
 
-  std::vector<std::vector<std::shared_ptr<simpleTransaction>>>& node_txns;
-  
+  ScheduleMeta &schedule_meta;
+  // std::vector<std::shared_ptr<simpleTransaction>>& node_txns;
+  // std::unordered_map<size_t, int> &node_busy_;
+  // std::vector<std::vector<int>> &txns_coord_cost;
+
   std::unique_ptr<Partitioner> partitioner;
   RandomType random;
   // ProtocolType protocol;
@@ -977,7 +948,7 @@ protected:
 
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
 
   std::deque<int> router_stop_queue;
 
@@ -989,7 +960,7 @@ protected:
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;
@@ -1006,10 +977,6 @@ protected:
   std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];
   // 
 
-  std::unordered_map<size_t, int> node_busy_[MAX_COORDINATOR_NUM];
-  
-
-  std::vector<std::vector<int>> txns_coord_cost[MAX_COORDINATOR_NUM];
 };
 } // namespace group_commit
 

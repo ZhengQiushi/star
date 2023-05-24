@@ -224,11 +224,15 @@ public:
             manager->n_started_workers,
             manager->skip_s_phase,
             manager->transactions_prepared,
-            manager->s_transactions_queue,
-            manager->c_transactions_queue,
-            manager->s_txn_id_queue,
-            manager->c_txn_id_queue,
-            manager->storages
+            manager->txn_meta
+            // manager->s_transactions_queue,
+            // manager->c_transactions_queue,
+            // manager->s_l,
+            // manager->c_l,
+            // manager->router_transactions_queue,
+            // manager->s_txn_id_queue,
+            // manager->c_txn_id_queue,
+            // manager->storages
             )); // , manager->recorder_status // recorder->data_pack_map
       }
       // 
@@ -539,7 +543,7 @@ public:
               manager->n_completed_workers, manager->n_started_workers, 
               manager->skip_s_phase,
               manager->transactions_queue, manager->is_full_signal,
-              manager->schedule_done, manager->node_txns));
+              manager->schedule_meta));
       }
       // 
       // if(context.lion_with_metis_init){

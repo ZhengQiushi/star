@@ -985,7 +985,7 @@ protected:
 
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   ShareQueue<simpleTransaction> migration_transactions_queue;
 
   std::deque<int> router_stop_queue;

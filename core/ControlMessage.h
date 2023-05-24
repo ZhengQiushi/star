@@ -284,7 +284,7 @@ template <class Database> class ControlMessageHandler {
 public:
   static void router_transaction_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
-                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      ShareQueue<simpleTransaction>* router_txn_queue,
                                       std::deque<int>* stop_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -359,14 +359,14 @@ public:
                                          destination_coordinator << " " <<
                                          new_router_txn.keys[0]  << " " << 
                                          new_router_txn.keys[1];
-    router_txn_queue->push_back(new_router_txn);
+    router_txn_queue->push_no_wait(new_router_txn);
     // DCHECK(ok == true);
 
   }
   
   static void router_transaction_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
-                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      ShareQueue<simpleTransaction>* router_txn_queue,
                                       std::deque<int>* stop_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -377,7 +377,7 @@ public:
 
   static void router_stop_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db,
-                                      std::deque<simpleTransaction>* router_txn_queue,
+                                      ShareQueue<simpleTransaction>* router_txn_queue,
                                       std::deque<int>* stop_queue
 ) {
     DCHECK(inputPiece.get_message_type() ==
@@ -393,10 +393,10 @@ public:
 
 }
   static std::vector<
-      std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>*, std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, Database &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
   get_message_handlers() {
     std::vector<
-        std::function<void(MessagePiece, Message &, Database &, std::deque<simpleTransaction>*,  std::deque<int>* )>>
+        std::function<void(MessagePiece, Message &, Database &, ShareQueue<simpleTransaction>*,  std::deque<int>* )>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS) - 3);
     v.push_back(ControlMessageHandler::router_transaction_handler);

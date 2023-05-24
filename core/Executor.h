@@ -63,12 +63,16 @@ public:
 
   void unpack_route_transaction(WorkloadType& workload, StorageType& storage){
 
-    int size_ = router_transactions_queue.size();
-    while(size_ > 0){
-      size_ -- ;
+    // int size_ = router_transactions_queue.size();
+    while(true){
+      // size_ -- ;
       // bool is_ok = false;
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
+      bool success = false;
+      simpleTransaction simple_txn = 
+        router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
+      //  = router_transactions_queue.front();
+      // router_transactions_queue.pop_front();
       // DCHECK(is_ok == true);
       
       n_network_size.fetch_add(simple_txn.size);
@@ -348,10 +352,10 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
-  std::deque<simpleTransaction> router_transactions_queue;           // router
+  ShareQueue<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
 

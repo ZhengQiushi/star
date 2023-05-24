@@ -86,8 +86,8 @@ public:
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      sender_core_id[i] = pin_thread_id_;
-      generator_core_id[i] = pin_thread_id_ ++ ;
+      sender_core_id[i] = pin_thread_id_ ++ ;
+      // generator_core_id[i] = pin_thread_id_ ++ ;
     }
 
     txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
@@ -717,7 +717,7 @@ protected:
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   // std::deque<simpleTransaction> transmit_request_queue;
 
   std::deque<int> router_stop_queue;
@@ -727,7 +727,7 @@ protected:
       messageHandlers;
 
   std::vector<
-    std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>*)>>
+    std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>*)>>
     controlMessageHandlers;    
 
   std::vector<std::size_t> message_stats, message_sizes;

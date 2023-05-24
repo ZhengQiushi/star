@@ -260,13 +260,20 @@ public:
   }
 
   void unpack_route_transaction(){
-    int s = router_transactions_queue.size();
-    DCHECK(s == router_recv_txn_num);
+    // int s = router_transactions_queue.size();
+    // DCHECK(s == router_recv_txn_num);
     transactions.clear();
 
-    while(s -- > 0){
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
+    // while(s -- > 0){
+    //   simpleTransaction simple_txn = router_transactions_queue.front();
+    //   router_transactions_queue.pop_front();
+    while(true){
+      // size_ -- ;
+      // bool is_ok = false;
+      bool success = false;
+      simpleTransaction simple_txn = 
+        router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
 
       n_network_size.fetch_add(simple_txn.size);
       size_t t_id = transactions.size();
@@ -656,14 +663,14 @@ private:
                          std::vector<std::unique_ptr<TransactionType>> &)>>
       messageHandlers;
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   
   LockfreeQueue<Message *, 10086> in_queue, out_queue;
   LockfreeQueue<TransactionType *, 10086> transaction_queue;
   std::vector<CalvinExecutor *> all_executors;
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   int router_recv_txn_num = 0; // generator router from 

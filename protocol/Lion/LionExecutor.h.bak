@@ -1507,7 +1507,7 @@ private:
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   ShareQueue<simpleTransaction> metis_router_transactions_queue;
 
   std::deque<int> router_stop_queue;

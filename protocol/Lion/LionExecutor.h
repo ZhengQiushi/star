@@ -44,11 +44,16 @@ public:
                std::atomic<uint32_t> &n_started_workers, 
                std::atomic<uint32_t> &skip_s_phase, 
                std::atomic<uint32_t> &transactions_prepared, 
-               std::vector<std::unique_ptr<TransactionType>> &s_transactions_queue, 
-               std::vector<std::unique_ptr<TransactionType>> &c_transactions_queue,
-               ShareQueue<int> &s_txn_id_queue,
-               ShareQueue<int> &c_txn_id_queue,
-               std::vector<StorageType> &storages) // ,
+               TransactionMeta<WorkloadType>& txn_meta
+              //  std::vector<std::unique_ptr<TransactionType>> &txn_meta.s_transactions_queue, 
+              //  std::vector<std::unique_ptr<TransactionType>> &txn_meta.c_transactions_queue,
+              //  std::mutex &txn_meta.s_l,
+              //  std::mutex &txn_meta.c_l, 
+              //  ShareQueue<simpleTransaction> &txn_meta.router_transactions_queue,
+              //  ShareQueue<int> &txn_meta.s_txn_id_queue,
+              //  ShareQueue<int> &txn_meta.c_txn_id_queue,
+              //  std::vector<StorageType> &txn_meta.storages
+               ) // ,
                // HashMap<9916, std::string, int> &data_pack_map)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
@@ -61,11 +66,15 @@ public:
         n_started_workers(n_started_workers),
         skip_s_phase(skip_s_phase),
         transactions_prepared(transactions_prepared),
-        s_transactions_queue(s_transactions_queue),
-        c_transactions_queue(c_transactions_queue),
-        s_txn_id_queue(s_txn_id_queue),
-        c_txn_id_queue(c_txn_id_queue),
-        storages(storages),
+        txn_meta(txn_meta),
+        // txn_meta.s_transactions_queue(txn_meta.s_transactions_queue),
+        // txn_meta.c_transactions_queue(txn_meta.c_transactions_queue),
+        // txn_meta.s_l(txn_meta.s_l),
+        // txn_meta.c_l(txn_meta.c_l),
+        // txn_meta.router_transactions_queue(txn_meta.router_transactions_queue),
+        // txn_meta.s_txn_id_queue(txn_meta.s_txn_id_queue),
+        // txn_meta.c_txn_id_queue(txn_meta.c_txn_id_queue),
+        // txn_meta.storages(txn_meta.storages),
         // data_pack_map(data_pack_map),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
@@ -94,6 +103,8 @@ public:
 
       // metis_messages_mutex.emplace_back(std::make_unique<std::mutex>());
     }
+
+    // storages_self.resize(context.batch_size);
 
     messageHandlers = MessageHandlerType::get_message_handlers();
     controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
@@ -182,43 +193,43 @@ public:
     router_transactions_send.store(0);
   }
 
-  void unpack_route_transaction(int router_recv_txn_num){
-    int size_ = router_transactions_queue.size();
+  void unpack_route_transaction(){
+    // int size_ = txn_meta.router_transactions_queue.size();
     cur_real_distributed_cnt = 0;
-
-    s_transactions_queue.clear();
-    c_transactions_queue.clear();
-
     
-    while(size_ > 0 && router_recv_txn_num > 0){
-      // bool success = false;
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
-
-      // DCHECK(success == true);
-
-      size_ -- ;
+    while(true){
+      bool success = false;
+      simpleTransaction simple_txn = 
+        txn_meta.router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
       n_network_size.fetch_add(simple_txn.size);
-
+      
+      uint32_t txn_id;
+      std::unique_ptr<TransactionType> null_txn(nullptr);
       if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
-        uint32_t txn_id = s_transactions_queue.size();
-        auto p = s_workload->unpack_transaction(context, 0, storage, simple_txn);
-        s_transactions_queue.push_back(std::move(p));
-        s_txn_id_queue.push_no_wait(txn_id);
-
-      } else {
-        uint32_t txn_id = c_transactions_queue.size();
-        if(txn_id >= storages.size()){
-          DCHECK(false);
+        {
+          std::lock_guard<std::mutex> l(txn_meta.s_l);
+          txn_id = txn_meta.s_transactions_queue.size();
+          txn_meta.s_transactions_queue.push_back(std::move(null_txn));
+          txn_meta.s_txn_id_queue.push_no_wait(txn_id);
         }
-        auto p = c_workload->unpack_transaction(context, 0, storages[txn_id], simple_txn);
-        c_txn_id_queue.push_no_wait(txn_id);
-
+        auto p = s_workload->unpack_transaction(context, 0, storage, simple_txn);
+        txn_meta.s_transactions_queue[txn_id] = std::move(p);
+      } else {
+        {
+          std::lock_guard<std::mutex> l(txn_meta.c_l);
+          txn_id = txn_meta.c_transactions_queue.size();
+          if(txn_id >= txn_meta.storages.size()){
+            DCHECK(false);
+          }
+          txn_meta.c_transactions_queue.push_back(std::move(null_txn));
+          txn_meta.c_txn_id_queue.push_no_wait(txn_id);
+        }
+        auto p = c_workload->unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+        
         if(simple_txn.is_transmit_request){
           DCHECK(false);
         } else {
-          int max_node = -1;
-
           if(simple_txn.is_real_distributed){
             cur_real_distributed_cnt += 1;
             p->distributed_transaction = true;
@@ -227,10 +238,9 @@ public:
             }
           } 
           p->id = txn_id;
-          c_transactions_queue.push_back(std::move(p));
         }
+        txn_meta.c_transactions_queue[txn_id] = std::move(p);
       }
-      router_recv_txn_num -- ;
     }
   }
   
@@ -350,7 +360,7 @@ public:
 
       int router_recv_txn_num = 0;
       // 准备transaction
-      if (id == 0) {
+      // if (id == 0) {
         while(!is_router_stopped(router_recv_txn_num)){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -360,34 +370,46 @@ public:
                       std::chrono::steady_clock::now() - begin)
                       .count();
 
-        VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+        LOG(INFO) << "prepare_transactions_to_run "
                 << router_time
                 << " milliseconds.";
 
         if(cur_time > 10)
           router_percentile.add(router_time);
 
-        unpack_route_transaction(router_recv_txn_num); // 
+        unpack_route_transaction(); // 
 
-        VLOG_IF(DEBUG_V, id==0) << c_transactions_queue.size() << " "  << s_transactions_queue.size() << " OMG : " << cur_real_distributed_cnt;
+        VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size() << " OMG : " << cur_real_distributed_cnt;
 
-        transactions_prepared.store(true);
-      }
+        transactions_prepared.fetch_add(1);
+      // // }
+      LOG(INFO) << "[C-PHASE] do remaster "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
 
-      while(transactions_prepared.load() == false){
+      while(transactions_prepared.load() < context.worker_num){
         std::this_thread::yield();
         process_request();
       }
+
       n_started_workers.fetch_add(1);
 
       if(cur_real_distributed_cnt > 0){
-        do_remaster_transaction(ExecutorStatus::C_PHASE, c_transactions_queue,async_message_num);
+        do_remaster_transaction(ExecutorStatus::C_PHASE, txn_meta.c_transactions_queue,async_message_num);
         async_fence();
       }
 
+      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] do remaster "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
+
       run_transaction(ExecutorStatus::C_PHASE, 
-      c_transactions_queue,
-      c_txn_id_queue,
+      txn_meta.c_transactions_queue,
+      txn_meta.c_txn_id_queue,
       async_message_num);
     
       n_complete_workers.fetch_add(1);
@@ -423,7 +445,7 @@ public:
               << " milliseconds.";
 
       if(id == 0){
-        transactions_prepared.store(false);
+        transactions_prepared.store(0);
       }
 
       if(skip_s_phase.load() == false){
@@ -438,11 +460,11 @@ public:
         n_started_workers.fetch_add(1);
         VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] worker " << id << " ready to run_transaction";
 
-        // r_size = s_transactions_queue.size();
-        // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
+        // r_size = txn_meta.s_transactions_queue.size();
+        // LOG(INFO) << "txn_meta.s_transactions_queue.size() : " <<  r_size;
         run_transaction(ExecutorStatus::S_PHASE, 
-        s_transactions_queue, 
-        s_txn_id_queue,
+        txn_meta.s_transactions_queue, 
+        txn_meta.s_txn_id_queue,
         async_message_num);
         
         // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
@@ -488,7 +510,10 @@ public:
         process_request();
         n_complete_workers.fetch_add(1);
       }
-
+      if(id == 0){
+        txn_meta.s_transactions_queue.clear();
+        txn_meta.c_transactions_queue.clear();
+      }
         auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now() - begin)
                       .count();
@@ -797,7 +822,7 @@ public:
     // for(;;) {
     for (auto x = id; x < cur_queue_size; x += context.worker_num) {
       bool success = false;
-      auto i = c_txn_id_queue.pop_no_wait(success);
+      auto i = txn_meta.c_txn_id_queue.pop_no_wait(success);
       if(!success){
         break;
       }
@@ -807,7 +832,7 @@ public:
       }
       
       if(cur_trans[i]->distributed_transaction == false){
-        c_txn_id_queue.push_no_wait(i);
+        txn_meta.c_txn_id_queue.push_no_wait(i);
         continue;
       }
       sub_c_txn_id_queue.push_no_wait(i);
@@ -962,7 +987,7 @@ private:
           controlMessageHandlers[type](
             messagePiece,
             *async_messages[message->get_source_node_id()], db,
-            &router_transactions_queue, 
+            &txn_meta.router_transactions_queue, 
             &router_stop_queue
           );
         } else {
@@ -970,7 +995,7 @@ private:
                                 *sync_messages[message->get_source_node_id()], 
                                 sync_messages,
                                 db, context, partitioner,
-                                c_transactions_queue);
+                                txn_meta.c_transactions_queue);
 
           if(type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE) || 
              type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY)){
@@ -1309,18 +1334,18 @@ private:
   std::atomic<uint32_t> &transactions_prepared;
   std::atomic<uint32_t> cur_real_distributed_cnt;
 
+
+  TransactionMeta<WorkloadType>& txn_meta;
   StorageType storage;
-  std::vector<std::unique_ptr<TransactionType>> &s_transactions_queue;
 
-  
-  std::vector<std::unique_ptr<TransactionType>> &c_transactions_queue;
 
-  ShareQueue<int> &s_txn_id_queue;
-  ShareQueue<int> &c_txn_id_queue;
+  // ShareQueue<int> s_txn_id_queue_self;
+  // ShareQueue<int> c_txn_id_queue_self;
 
   ShareQueue<int> sub_c_txn_id_queue;
 
-  std::vector<StorageType> &storages;
+  
+  // std::vector<StorageType> storages_self;
   // std::vector<std::unique_ptr<TransactionType>> &r_transactions_queue;
 
 
@@ -1357,13 +1382,13 @@ private:
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  // ShareQueue<simpleTransaction> &txn_meta.router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   // HashMap<9916, std::string, int> &data_pack_map;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
 
   std::size_t remaster_delay_transactions;

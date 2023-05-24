@@ -128,15 +128,22 @@ public:
 
   void unpack_route_transaction(WorkloadType& c_workload, WorkloadType& s_workload, 
                                 StorageType& storage, int router_recv_txn_num){
-    int size_ = router_transactions_queue.size();
+    // int size_ = router_transactions_queue.size();
 
-    while(size_ > 0){ // && router_recv_txn_num > 0
-      size_ -- ;
-      // bool success = false;
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
+    // while(size_ > 0){ // && router_recv_txn_num > 0
+    //   size_ -- ;
+    //   // bool success = false;
+    //   simpleTransaction simple_txn = router_transactions_queue.front();
+    //   router_transactions_queue.pop_front();
       // DCHECK(success == true);
-      
+    while(true){
+      // size_ -- ;
+      // bool is_ok = false;
+      bool success = false;
+      simpleTransaction simple_txn = 
+        router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
+
       n_network_size.fetch_add(simple_txn.size);
 
       if(simple_txn.is_distributed){
@@ -740,11 +747,11 @@ private:
   LockfreeQueue<Message *> in_queue, out_queue, 
                            sync_queue; // for value sync when phase switching occurs
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>* ,std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
   // std::unique_ptr<WorkloadType> s_workload, c_workload;
 

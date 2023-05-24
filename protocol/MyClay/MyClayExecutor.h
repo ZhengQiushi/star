@@ -77,14 +77,26 @@ public:
 
   void unpack_route_transaction(WorkloadType& workload, 
                                 int router_recv_txn_num){
-    int size_ = router_transactions_queue.size();
+
+
+    // int size_ = router_transactions_queue.size();
     r_transactions_queue.clear();
     int idx = 0;
-    while(size_ > 0){ // && router_recv_txn_num > 0
-      size_ -- ;
+
+    while(true){
+      // size_ -- ;
+      // bool is_ok = false;
+      bool success = false;
+      simpleTransaction simple_txn = 
+        router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
+
+
+    // while(size_ > 0){ // && router_recv_txn_num > 0
+    //   size_ -- ;
       // bool success = false;
-      simpleTransaction simple_txn = router_transactions_queue.front();
-      router_transactions_queue.pop_front();
+      // simpleTransaction simple_txn = router_transactions_queue.front();
+      // router_transactions_queue.pop_front();
 
       // DCHECK(success == true);
       
@@ -676,11 +688,11 @@ protected:
       messageHandlers;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, std::deque<simpleTransaction>*, std::deque<int>* )>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
 
-  std::deque<simpleTransaction> router_transactions_queue;
+  ShareQueue<simpleTransaction> router_transactions_queue;
   // ShareQueue<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
 

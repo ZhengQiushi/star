@@ -195,7 +195,6 @@ public:
 
   void unpack_route_transaction(){
     // int size_ = txn_meta.router_transactions_queue.size();
-    cur_real_distributed_cnt = 0;
     
     while(true){
       bool success = false;
@@ -361,6 +360,7 @@ public:
       int router_recv_txn_num = 0;
       // 准备transaction
       // if (id == 0) {
+        
         while(!is_router_stopped(router_recv_txn_num)){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -377,6 +377,7 @@ public:
         if(cur_time > 10)
           router_percentile.add(router_time);
 
+        cur_real_distributed_cnt = 0;
         unpack_route_transaction(); // 
 
         VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size() << " OMG : " << cur_real_distributed_cnt;

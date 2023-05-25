@@ -18,22 +18,30 @@ namespace star {
 struct ScheduleMeta {
   ScheduleMeta(int coordinator_num, int batch_size){
     this->coordinator_num = coordinator_num;
-    this->batch_size = batch_size * coordinator_num;
+    this->batch_size = 2 * batch_size * coordinator_num;
     for(size_t i = 0 ; i < coordinator_num; i ++ ){
       node_busy[i] = 0;
     }
+    node_txns.resize(this->batch_size);
+    
     txns_coord_cost.resize(this->batch_size, std::vector<int>(coordinator_num, 0));
     txn_id.store(0);
     reorder_done.store(false);
+
+    start_schedule.store(0);
+    done_schedule.store(0);
   }
   void clear(){
     for(size_t i = 0 ; i < coordinator_num; i ++ ){
       node_busy[i] = 0;
     }
-    node_txns.clear();
+    node_txns.resize(this->batch_size);
     txn_id.store(0);
     reorder_done.store(false);
     LOG(INFO) << " CLEAR !!!! " << txn_id.load();
+
+    start_schedule.store(0);
+    done_schedule.store(0);
   }
   int coordinator_num;
   int batch_size;
@@ -46,6 +54,9 @@ struct ScheduleMeta {
   std::atomic<uint32_t> txn_id;
   std::atomic<uint32_t> reorder_done;
   ShareQueue<uint32_t> send_txn_id;
+
+  std::atomic<uint32_t> start_schedule;
+  std::atomic<uint32_t> done_schedule;
 };
 
 

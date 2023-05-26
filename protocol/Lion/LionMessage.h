@@ -811,7 +811,7 @@ public:
 
     star::Decoder dec(stringPiece);
     dec >> tid >> key_offset >> txn_id; // index offset in the readSet from source request node
-    DCHECK(txn_id < txns.size());
+    DCHECK(txn_id < txns.size()) << txn_id << " " << txns.size();
     auto& txn = txns[txn_id];
 
     txn->pendingResponses--;

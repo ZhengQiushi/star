@@ -328,7 +328,7 @@ public:
 
   std::atomic<uint32_t> skip_s_phase;
 
-  ShareQueue<simpleTransaction*> transactions_queue;
+  ShareQueue<simpleTransaction*, 100000> transactions_queue;
 
   std::atomic<uint32_t> transactions_prepared; 
   std::atomic<uint32_t> cur_real_distributed_cnt;

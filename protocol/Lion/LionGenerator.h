@@ -43,7 +43,7 @@ public:
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &skip_s_phase,
-           ShareQueue<simpleTransaction*>& transactions_queue,
+           ShareQueue<simpleTransaction*, 100000>& transactions_queue,
            std::atomic<uint32_t>& is_full_signal,
            std::atomic<uint32_t>& schedule_done, 
            std::vector<std::vector<std::shared_ptr<simpleTransaction>>>& node_txns)
@@ -957,7 +957,7 @@ protected:
 
   std::atomic<uint32_t> &skip_s_phase;
 
-  ShareQueue<simpleTransaction*> &transactions_queue;// [20];// [20];
+  ShareQueue<simpleTransaction*, 100000> &transactions_queue;// [20];// [20];
 
   std::atomic<uint32_t>& is_full_signal;
   std::atomic<uint32_t>& schedule_done;

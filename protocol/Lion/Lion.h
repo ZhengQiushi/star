@@ -291,11 +291,20 @@ private:
               readKey.get_value(), commit_tid, txn.id);
           
           DCHECK(strlen((char*)readKey.get_value()) > 0);
-          // async_message_num.fetch_add(1);
+          
           VLOG(DEBUG_V11) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
           send_replica = true;
+          replicate_count += 1;
+          if(context.migration_only){
+            break;
+          }
         }
       }
+
+      // if(replicate_count >= 2){
+      //   async_message_num.fetch_add(1);
+      //   // LOG(INFO) << "replicate_count : " << replicate_count;
+      // }
 
       if(send_replica == false && context.coordinator_num > 1){
         DCHECK(false);

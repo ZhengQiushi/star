@@ -157,7 +157,7 @@ public:
 
 
   void set_id(uint32_t id){
-    id = id;
+    this->id = id;
   }
   
   bool process_requests(std::size_t worker_id) {

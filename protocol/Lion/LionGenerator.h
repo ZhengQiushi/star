@@ -101,12 +101,11 @@ public:
     }
 
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      if(id == 0){
-        dispatcher_core_id[i] = pin_thread_id_ ++ ;
-      } else {
-        dispatcher_core_id[i] = pin_thread_id_ ++ + 5;
-      }
-      
+      // if(id == 0){
+        dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
+      // } else {
+      //   dispatcher_core_id[i] = pin_thread_id_ ++ + 5;
+      // }
     }
     dispatcher_num = context.worker_num * context.coordinator_num;
     cur_txn_num = context.batch_size / dispatcher_num ; // * context.coordinator_num
@@ -115,19 +114,24 @@ public:
         for (auto n = 0u; n < context.coordinator_num; n++) {
           
             dispatcher.emplace_back([&](int n, int worker_id) {
+              
+              ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+              do {
+                status = static_cast<ExecutorStatus>(worker_status.load());
+                std::this_thread::sleep_for(std::chrono::microseconds(5));
+              } while (status != ExecutorStatus::C_PHASE);  
             
-            
-            StorageType storage;
+
             int dispatcher_id  = worker_id * context.coordinator_num + n;
             while(is_full_signal_self[dispatcher_id].load() == false){
-                bool success = prepare_transactions_to_run(workload, storage,
+                bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
                                       transactions_queue_self[dispatcher_id]
                                     );
                 if(!success){ // full
                     is_full_signal_self[dispatcher_id].store(true);
                 } 
             }
-            ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+            
             while(status != ExecutorStatus::EXIT){
                   // wait for start
                   while(schedule_meta.start_schedule.load() == 0 && status != ExecutorStatus::EXIT){
@@ -137,7 +141,7 @@ public:
                       continue;
                     }
 
-                    bool success = prepare_transactions_to_run(workload, storage,
+                    bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
                       transactions_queue_self[dispatcher_id]
                     );
                     if(!success){ // full
@@ -198,7 +202,12 @@ public:
             }
         }
 
-
+        // for (auto n = 0u; n < context.coordinator_num; n++) {
+        //   int dispatcher_id  = this->id * context.coordinator_num + n;
+        //     while(is_full_signal_self[dispatcher_id].load() == false){
+        //       std::this_thread::sleep_for(std::chrono::microseconds(5));
+        //     }
+        // }
       // for (auto n = 0u; n < generator_num; n++) {
       //   generators.emplace_back([&](int n) {
       //     StorageType storage;
@@ -348,7 +357,7 @@ public:
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
         if(context.migration_only){
-          cur_score = 25 * cnt_master;
+          cur_score = 100 * cnt_master;
         } else {
           if(cnt_master == query_keys.size()){
             cur_score = 100 * (int)query_keys.size();
@@ -384,7 +393,13 @@ public:
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
       t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
-
+      // if(t->is_real_distributed){
+      //   std::string debug = "";
+      //   for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      //     debug += std::to_string(txns_coord_cost_[t->idx_][i]) + " ";
+      //   }
+      //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
+      // }
       size_t cnt_master = from_nodes_id[max_node];
       size_t cnt_secondary = from_nodes_id_secondary[max_node];
 
@@ -421,7 +436,7 @@ public:
 
   long long cal_load_distribute(int aver_val, 
                           std::unordered_map<size_t, int>& busy_){
-    int cur_val = 0;
+    long long cur_val = 0;
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       // 
       cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
@@ -475,6 +490,7 @@ public:
     LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<int> busy_local(context.coordinator_num, 0);
+    int real_distribute_num = 0;
     // while(schedule_meta.txn_id.load() < batch_size){
     for(size_t i = 0; i < cur_txn_num; i ++ ){
       bool success = false;
@@ -482,6 +498,9 @@ public:
       int idx = i + idx_offset;
 
       txns[idx] = std::move(new_txn);
+      // if(i < 2){
+      //   LOG(INFO) << i << " " << txns[idx]->is_distributed;
+      // }
       auto& txn = txns[idx];
       txn->idx_ = idx;      
       // {
@@ -494,18 +513,18 @@ public:
 
       DCHECK(success == true);
 
-      if(context.lion_with_trace_log){
+      if(context.lion_with_trace_log && id == 0){
         // 
-        out_.lock();
+        std::lock_guard<std::mutex> l(schedule_meta.l);
         auto current_timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::steady_clock::now() - trace_log)
                   .count() * 1.0 / 1000;
-        outfile_excel << current_timestamp << "\t";
-        for(auto item: txn->keys){
-          outfile_excel << item << "\t";
-        }
-        outfile_excel << "\n";
-        out_.unlock();
+          outfile_excel << current_timestamp << "\t";
+          for(auto item: txn->keys){
+            outfile_excel << item << "\t";
+          }
+          outfile_excel << "\n";
+
       }
 
       // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
@@ -518,6 +537,10 @@ public:
         pure_single_txn_cnt += 1;
         txn->destination_coordinator = txn->partition_id % context.coordinator_num;
       } 
+
+      if(txn->is_real_distributed){
+        real_distribute_num += 1;
+      }
       busy_local[txn->destination_coordinator] += 1;
     }
 
@@ -534,7 +557,10 @@ public:
                  .count() * 1.0 / 1000 ;
 
     LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
-
+              
+    if(real_distribute_num > 0){
+      LOG(INFO) << "real_distribute_num = " << real_distribute_num;
+    }
     while(schedule_meta.txn_id.load() < dispatcher_num){
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
@@ -546,7 +572,10 @@ public:
     long long cur_val = cal_load_distribute(aver_val, busy_);
 
     if(dispatcher_id == 0){
-
+    
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
+    }
     if(cur_val > threshold && context.random_router == 0){ 
       std::priority_queue<std::shared_ptr<simpleTransaction>, 
                         std::vector<std::shared_ptr<simpleTransaction>>, 
@@ -632,7 +661,7 @@ public:
     cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                  std::chrono::steady_clock::now() - staart)
                  .count() * 1.0 / 1000 ;
-    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << threshold;
+    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
 
   }
   
@@ -654,7 +683,7 @@ public:
 
     // 
     trace_log = std::chrono::steady_clock::now();
-    if(context.lion_with_trace_log){
+    if(context.lion_with_trace_log && id == 0){
       outfile_excel.open(context.data_src_path_dir + "resultss.xls", std::ios::trunc); // ios::trunc
       outfile_excel << "timestamp" << "\t" << "txn-items" << "\n";
     }
@@ -690,7 +719,7 @@ public:
               n.join();
             }
 
-          if(context.lion_with_trace_log){
+          if(context.lion_with_trace_log && id == 0){
             outfile_excel.close();
           }
           // distributed_outfile_excel.close();
@@ -1052,6 +1081,7 @@ protected:
 
   ShareQueue<simpleTransaction*, 40960> &transactions_queue;// [20];// [20];
   ShareQueue<simpleTransaction*, 40960> transactions_queue_self[20];
+  StorageType storages[20];
 
   std::atomic<uint32_t>& is_full_signal;
   std::atomic<uint32_t> is_full_signal_self[20];

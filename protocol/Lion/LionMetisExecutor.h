@@ -112,7 +112,7 @@ public:
     router_transaction_done.store(0);
     router_transactions_send.store(0);
 
-    metis_storages.resize(context.batch_size);
+    metis_storages.resize(context.batch_size * 10);
   }
   void trace_txn(){
     if(coordinator_id == 0 && id == 0){
@@ -216,8 +216,8 @@ public:
       if(success){
         VLOG(DEBUG_V16) << "Get Metis migration transaction ID(" << t.idx_ << ").";
         size_t txn_id = m_transactions_queue.size();
-        if(txn_id < metis_storages.size()){
-          metis_storages.push_back(storage);
+        if(txn_id >= metis_storages.size()){
+          DCHECK(false);
         }
         auto p = c_workload->unpack_transaction(context, 0, metis_storages[txn_id], t);
         p->set_id(txn_id);

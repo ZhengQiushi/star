@@ -48,37 +48,6 @@ enum class LionMetisMessage {
 class LionMetisMessageFactory {
 using Transaction = LionTransaction;
 public:
-  static std::size_t new_search_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset,
-                                        bool remaster) {
-
-    /*
-     * The structure of a search request: (primary key, read key offset)
-     */
-
-    auto key_size = table.key_size();
-
-    LionMetisMessage message_type = LionMetisMessage::SEARCH_REQUEST;
-    // if(is_metis){
-    //   message_type = LionMetisMessage::METIS_SEARCH_REQUEST;
-    VLOG(DEBUG_V16) << "LionMetisMessage::METIS_SEARCH_REQUEST: " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
-    // }
-
-    auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(message_type), message_size,
-        table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << remaster;
-    message.flush();
-    return message_size;
-  }
-
-
   static std::size_t new_metis_search_message(Message &message, ITable &table,
                                         const void *key, 
                                         uint32_t key_offset,
@@ -102,7 +71,7 @@ public:
         MessagePiece::get_header_size() + key_size + 
         sizeof(key_offset) + 
         sizeof(txn_id) + 
-        sizeof(remaster)   + 
+        sizeof(remaster) + 
         sizeof(is_metis);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(message_type), message_size,
@@ -130,11 +99,6 @@ public:
      * The structure of a search request: (primary key, read key offset)
      */
     LionMetisMessage message_type = LionMetisMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY;
-    // if(is_metis){
-    //   message_type = LionMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY;
-    //   // VLOG(DEBUG_V14) << "message_type = LionMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY";
-    // }
-
     auto key_size = table.key_size();
 
     auto message_size =
@@ -182,36 +146,6 @@ public:
     encoder.write_n_bytes(key, key_size);
     table.serialize_value(encoder, value);
     encoder << commit_tid;
-    message.flush();
-    return message_size;
-  }
-
-  static std::size_t new_search_router_only_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset) {
-
-    /*
-     * The structure of a search request: (primary key, read key offset)
-     */
-    LionMetisMessage message_type = LionMetisMessage::SEARCH_REQUEST_ROUTER_ONLY;
-    // if(is_metis){
-    //   message_type = LionMetisMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY;
-    //   // VLOG(DEBUG_V14) << "message_type = LionMetisMessage::METIS_SEARCH_REQUEST_ROUTER_ONLY";
-    // }
-
-    auto key_size = table.key_size();
-
-    auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(message_type), message_size,
-        table.tableID(), table.partitionID());
-    
-    VLOG(DEBUG_V14) << "SEND UPDATE ROUTER MESSAGE " << *(int*)key << " " << message.get_source_node_id() << " " << message.get_dest_node_id();
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
     message.flush();
     return message_size;
   }
@@ -917,18 +851,22 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
      */
 
     auto stringPiece = inputPiece.toStringPiece();
-    uint32_t key_offset;
+    uint32_t key_offset, txn_id;
     bool remaster, is_metis; // add by truth 22-04-22
     bool success;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster) + sizeof(is_metis));
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(txn_id) + 
+           sizeof(remaster) + 
+           sizeof(is_metis));
 
     // get row and offset
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> remaster >> is_metis; // index offset in the readSet from source request node
+    dec >> key_offset >> txn_id >> remaster >> is_metis; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
@@ -948,7 +886,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
-                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis) + 
+                        sizeof(uint64_t) + 
+                        sizeof(key_offset) + 
+                        sizeof(txn_id) + 
+                        sizeof(success) + 
+                        sizeof(remaster) + 
+                        sizeof(is_metis) + 
                         value_size;
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -964,7 +907,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
     success = table.contains(key);
     if(!success){
       VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
+      encoder << latest_tid 
+              << key_offset 
+              << txn_id 
+              << success 
+              << remaster 
+              << is_metis;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -976,7 +924,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     if(!success){
       VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
+      encoder << latest_tid 
+              << key_offset 
+              << txn_id 
+              << success 
+              << remaster 
+              << is_metis;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -1004,7 +957,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
             }
             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
-            encoder << latest_tid << key_offset << success << remaster << is_metis;
+            encoder << latest_tid 
+                    << key_offset 
+                    << txn_id 
+                    << success 
+                    << remaster 
+                    << is_metis;
             // reserve size for read
             responseMessage.data.append(value_size, 0);
             
@@ -1023,7 +981,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
           } else if(coordinator_id_new == coordinator_id_old) {
             success = false;
             VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
-            encoder << latest_tid << key_offset << success << remaster << is_metis;
+            encoder << latest_tid 
+                    << key_offset 
+                    << txn_id 
+                    << success 
+                    << remaster 
+                    << is_metis;
             responseMessage.data.append(value_size, 0);
             responseMessage.flush();
           
@@ -1033,7 +996,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     } else {
       VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key; //  << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << is_metis;
+      encoder << latest_tid 
+              << key_offset 
+              << txn_id 
+              << success 
+              << remaster 
+              << is_metis;
       responseMessage.data.append(value_size, 0);
       if(success == true && remaster == false){
         auto row = table.search(key);
@@ -1122,7 +1090,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         if(!remaster){
           // read value message piece
           stringPiece = inputPiece.toStringPiece();
-          stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + sizeof(is_metis));
+          stringPiece.remove_prefix(sizeof(tid) + 
+              sizeof(key_offset) + 
+              sizeof(txn_id) + 
+              sizeof(success) + 
+              sizeof(remaster) + 
+              sizeof(is_metis));
           // insert into local node
           dec = Decoder(stringPiece);
           dec.read_n_bytes(readKey.get_value(), value_size);
@@ -1236,11 +1209,14 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
      */
 
     auto stringPiece = inputPiece.toStringPiece();
-    uint32_t key_offset;
+    uint32_t key_offset, txn_id;
     bool is_metis;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(is_metis));
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(txn_id) + 
+           sizeof(is_metis));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -1248,19 +1224,24 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> is_metis; // index offset in the readSet from source request node
+    dec >> key_offset 
+        >> txn_id 
+        >> is_metis; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + sizeof(uint64_t) + sizeof(key_offset) + value_size;
+    auto message_size = MessagePiece::get_header_size() + sizeof(uint64_t) + 
+                        sizeof(key_offset) + 
+                        sizeof(txn_id) +
+                        value_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMetisMessage::METIS_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
         table_id, partition_id);
 
     uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
     star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header << tid << key_offset;
+    encoder << message_piece_header << tid << key_offset << txn_id;
 
     // reserve size for read
     responseMessage.data.append(value_size, 0);
@@ -1315,7 +1296,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         >> key_offset 
         >> txn_id; // index offset in the readSet from source request node
 
-    DCHECK(txn_id < txns.size());
+    DCHECK(txn_id < txns.size()) << txn_id << " " << txns.size();
     
     auto txn = txns[txn_id];
     txn->pendingResponses--;

@@ -173,13 +173,14 @@ public:
   }
 
   void replication_fence(ExecutorStatus status){
-    while(async_message_num.load() != async_message_respond_num.load()){
-      int a = async_message_num.load();
-      int b = async_message_respond_num.load();
+    LOG(INFO) << "replication_fence : " << async_message_num.load() << " " << async_message_respond_num.load();
+    // while(async_message_num.load() != async_message_respond_num.load()){
+    //   int a = async_message_num.load();
+    //   int b = async_message_respond_num.load();
 
-      process_request();
-      std::this_thread::yield();
-    }
+    //   process_request();
+    //   std::this_thread::yield();
+    // }
     async_message_num.store(0);
     async_message_respond_num.store(0);
   }
@@ -816,6 +817,7 @@ public:
     // uint64_t last_seed = 0;
 
     auto i = 0u;
+    int cnt = 0;
     size_t cur_queue_size = cur_trans.size();
     int router_txn_num = 0;
 
@@ -838,6 +840,11 @@ public:
       }
       sub_c_txn_id_queue.push_no_wait(i);
 
+      if(context.migration_only == true){
+        continue;
+      }
+
+      cnt += 1;
       cur_trans[i]->startTime = std::chrono::steady_clock::now();
       bool retry_transaction = false;
 
@@ -875,6 +882,9 @@ public:
 
       } while (retry_transaction);
 
+      n_migrate.fetch_add(cur_trans[i]->migrate_cnt);
+      n_remaster.fetch_add(cur_trans[i]->remaster_cnt);
+
       cur_trans[i]->reset();
       flush_messages(messages); 
 
@@ -892,10 +902,12 @@ public:
                      .count() * 1.0;
     
 
-    if(cur_queue_size > 0){
-      LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / cur_queue_size << " per/micros.";
+    if(cnt > 0){
+      LOG(INFO) << "rrrrremaster : " << total_sec / 1000 / 1000 << " s, " << total_sec / cnt << " per/micros.";
 
-      VLOG(DEBUG_V4) << time_read_remote << " "<< cur_queue_size  << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size;
+      VLOG(DEBUG_V4) << time_read_remote << " "<< cnt  << " prepare: " << time_prepare_read / cnt << "  execute: " << time_read_remote / cnt << "  commit: " << time3 / cnt;
+    } else {
+      LOG(INFO) << "skip remaster";
     }
 
   }
@@ -914,31 +926,31 @@ public:
   void push_message(Message *message) override { 
 
     // message will only be of type signal, COUNT
-    MessagePiece messagePiece = *(message->begin());
+    // MessagePiece messagePiece = *(message->begin());
 
-    auto message_type =
-    static_cast<int>(messagePiece.get_message_type());
+    // auto message_type =
+    // static_cast<int>(messagePiece.get_message_type());
 
     // sync_queue.push(message);
     // LOG(INFO) << "sync_queue: " << sync_queue.read_available(); 
-    for (auto it = message->begin(); it != message->end(); it++) {
-      auto messagePiece = *it;
-      auto message_type = messagePiece.get_message_type();
-      //!TODO replica 
-      if(message_type == static_cast<int>(LionMessage::REPLICATION_RESPONSE)){
-        auto message_length = messagePiece.get_message_length();
+    // for (auto it = message->begin(); it != message->end(); it++) {
+    //   auto messagePiece = *it;
+    //   auto message_type = messagePiece.get_message_type();
+    //   //!TODO replica 
+    //   if(message_type == static_cast<int>(LionMessage::REPLICATION_RESPONSE)){
+    //     auto message_length = messagePiece.get_message_length();
         
-        ////  // LOG(INFO) << "recv : " << ++total_async;
-        // async_message_num.fetch_sub(1);
-        int debug_key;
-        auto stringPiece = messagePiece.toStringPiece();
-        Decoder dec(stringPiece);
-        dec >> debug_key;
+    //     ////  // LOG(INFO) << "recv : " << ++total_async;
+    //     // async_message_num.fetch_sub(1);
+    //     int debug_key;
+    //     auto stringPiece = messagePiece.toStringPiece();
+    //     Decoder dec(stringPiece);
+    //     dec >> debug_key;
 
-        // async_message_respond_num.fetch_add(1);
-        VLOG(DEBUG_V16) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
-      }
-    }
+    //     // async_message_respond_num.fetch_add(1);
+    //     VLOG(DEBUG_V16) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
+    //   }
+    // }
     // if(static_cast<int>(LionMessage::METIS_SEARCH_REQUEST) <= message_type && 
     //    message_type <= static_cast<int>(LionMessage::METIS_IGNORE)){
     //   in_queue_metis.push(message);
@@ -1108,7 +1120,7 @@ private:
         if(!context.read_on_replica){
           remaster = false;
         }
-        if(remaster){
+        if(remaster && !context.migration_only){
           txn.remaster_cnt ++ ;
           VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
         } else {

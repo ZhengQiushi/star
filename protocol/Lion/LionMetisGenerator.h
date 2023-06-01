@@ -37,7 +37,7 @@ public:
 
   using StorageType = typename WorkloadType::StorageType;
 
-  int pin_thread_id_ = 8;
+  // int pin_thread_id_ = 8;
 
   LionMetisGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,

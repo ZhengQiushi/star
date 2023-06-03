@@ -144,7 +144,7 @@ public:
       uint32_t txn_id;
       std::unique_ptr<TransactionType> null_txn(nullptr);
       
-      if(simple_txn.is_distributed){
+      if(!simple_txn.is_distributed){
         {
           std::lock_guard<std::mutex> l(txn_meta.s_l);
           txn_id = txn_meta.s_transactions_queue.size();
@@ -365,6 +365,11 @@ public:
         process_request();
       }
 
+      if(id == 0){
+        txn_meta.s_transactions_queue.clear();
+        txn_meta.c_transactions_queue.clear();
+      }
+      
       VLOG_IF(DEBUG_V, id==0) << "wait back "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)

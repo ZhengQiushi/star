@@ -941,7 +941,7 @@ public:
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     table.deserialize_value(key, valueStringPiece);
 
-    SiloHelper::unlock(tid, commit_tid);
+    SiloHelper::unlock_if_locked(tid); // , commit_tid);
   }
 
   static void replication_request_handler(MessagePiece inputPiece,
@@ -984,13 +984,15 @@ public:
     if(!success){
       return;
     }
-    uint64_t last_tid = SiloHelper::lock(tid);
+    uint64_t last_tid = SiloHelper::lock(tid, success);
 
-    if (commit_tid > last_tid) {
-      table.deserialize_value(key, valueStringPiece);
-      SiloHelper::unlock(tid, commit_tid);
-    } else {
-      SiloHelper::unlock(tid);
+    if(success){
+      if (commit_tid > last_tid) {
+        table.deserialize_value(key, valueStringPiece);
+        SiloHelper::unlock(tid, commit_tid);
+      } else {
+        SiloHelper::unlock(tid);
+      }
     }
 
     uint32_t txn_id = 0;

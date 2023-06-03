@@ -44,16 +44,8 @@ public:
                std::atomic<uint32_t> &n_started_workers, 
                std::atomic<uint32_t> &skip_s_phase, 
                std::atomic<uint32_t> &transactions_prepared, 
-               TransactionMeta<WorkloadType>& txn_meta
-              //  std::vector<std::unique_ptr<TransactionType>> &txn_meta.s_transactions_queue, 
-              //  std::vector<std::unique_ptr<TransactionType>> &txn_meta.c_transactions_queue,
-              //  std::mutex &txn_meta.s_l,
-              //  std::mutex &txn_meta.c_l, 
-              //  ShareQueue<simpleTransaction> &txn_meta.router_transactions_queue,
-              //  ShareQueue<int> &txn_meta.s_txn_id_queue,
-              //  ShareQueue<int> &txn_meta.c_txn_id_queue,
-              //  std::vector<StorageType> &txn_meta.storages
-               ) // ,
+               lion::TransactionMeta<WorkloadType>& txn_meta
+               )
                // HashMap<9916, std::string, int> &data_pack_map)
       : Worker(coordinator_id, id), db(db), context(context),
         batch_size(batch_size),
@@ -67,15 +59,6 @@ public:
         skip_s_phase(skip_s_phase),
         transactions_prepared(transactions_prepared),
         txn_meta(txn_meta),
-        // txn_meta.s_transactions_queue(txn_meta.s_transactions_queue),
-        // txn_meta.c_transactions_queue(txn_meta.c_transactions_queue),
-        // txn_meta.s_l(txn_meta.s_l),
-        // txn_meta.c_l(txn_meta.c_l),
-        // txn_meta.router_transactions_queue(txn_meta.router_transactions_queue),
-        // txn_meta.s_txn_id_queue(txn_meta.s_txn_id_queue),
-        // txn_meta.c_txn_id_queue(txn_meta.c_txn_id_queue),
-        // txn_meta.storages(txn_meta.storages),
-        // data_pack_map(data_pack_map),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -89,22 +72,13 @@ public:
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
 
-      // record_messages.emplace_back(std::make_unique<Message>());
-      // init_message(record_messages[i].get(), i);
-
-      // messages_mutex.emplace_back(std::make_unique<std::mutex>());
-
-      // 
       metis_messages.emplace_back(std::make_unique<Message>());
       init_message(metis_messages[i].get(), i);
 
       metis_sync_messages.emplace_back(std::make_unique<Message>());
       init_message(metis_sync_messages[i].get(), i);
 
-      // metis_messages_mutex.emplace_back(std::make_unique<std::mutex>());
     }
-
-    // storages_self.resize(context.batch_size);
 
     messageHandlers = MessageHandlerType::get_message_handlers();
     controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
@@ -322,9 +296,6 @@ public:
           commit_transactions();
           LOG(INFO) << "Executor " << id << " exits.";
           VLOG_IF(DEBUG_V, id==0) << "TIMES : " << times; 
-          // if(metis_transaction != nullptr){
-          //   metis_transaction->status = ExecutorStatus::EXIT;
-          // }
 
           LOG(INFO) << " router : " << router_percentile.nth(50) << " " <<
           router_percentile.nth(80) << " " << router_percentile.nth(95) << " " << 
@@ -337,11 +308,6 @@ public:
           LOG(INFO) << " execution : " << execute_latency.nth(50) << " " <<
           execute_latency.nth(80) << " " << execute_latency.nth(95) << " " << 
           execute_latency.nth(99);
-          return;
-
-          // for(auto& t: transmiter){
-          //   t.join();
-          // }
           return;
         }
       } while (status != ExecutorStatus::C_PHASE);
@@ -360,8 +326,6 @@ public:
 
       int router_recv_txn_num = 0;
       // 准备transaction
-      // if (id == 0) {
-        
         while(!is_router_stopped(router_recv_txn_num)){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -1348,7 +1312,7 @@ private:
   std::atomic<uint32_t> cur_real_distributed_cnt;
 
 
-  TransactionMeta<WorkloadType>& txn_meta;
+  lion::TransactionMeta<WorkloadType>& txn_meta;
   StorageType storage;
 
 

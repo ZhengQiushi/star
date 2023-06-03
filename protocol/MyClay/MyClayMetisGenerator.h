@@ -234,6 +234,7 @@ public:
 
       metis_txns.push_back(metis_new_txn);
       cur_moves.push_back(cur_move);
+      
     }
 
     // scheduler_transactions(metis_txns, router_send_txn_cnt);

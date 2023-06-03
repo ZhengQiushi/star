@@ -388,10 +388,12 @@ public:
       readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
 
       bool remaster = false;
-      if (coordinatorID == context.coordinator_id ||
-          (this->context.read_on_replica && 
-           this->partitioner->is_partition_replicated_on(partition_id, this->coordinator_id)
-           )) {
+      if (coordinatorID == context.coordinator_id 
+      // ||
+      //     (this->context.read_on_replica && 
+      //      this->partitioner->is_partition_replicated_on(partition_id, this->coordinator_id)
+      //      )
+           ) {
         local_read = true;
       } else {
         // remaster = table->contains(key); // current coordniator

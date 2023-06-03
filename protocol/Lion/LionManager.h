@@ -13,6 +13,7 @@
 
 namespace star {
 
+namespace lion {
 #define MAX_COORDINATOR_NUM 20
 
 struct ScheduleMeta {
@@ -438,4 +439,5 @@ public:
   TransactionMeta<WorkloadType> txn_meta;
 
 };
+} // namespace lion
 } // namespace star

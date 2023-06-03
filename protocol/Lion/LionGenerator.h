@@ -43,16 +43,12 @@ public:
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &skip_s_phase,
-           ShareQueue<simpleTransaction*, 40960>& transactions_queue,
-           std::atomic<uint32_t>& is_full_signal,
-           ScheduleMeta &schedule_meta
+           lion::ScheduleMeta &schedule_meta
            )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
         skip_s_phase(skip_s_phase),
-        transactions_queue(transactions_queue),
-        is_full_signal(is_full_signal),
         schedule_meta(schedule_meta),
         partitioner(std::make_unique<LionDynamicPartitioner<WorkloadType>>(
             coordinator_id, context.coordinator_num, db)),
@@ -101,17 +97,12 @@ public:
     }
 
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      // if(id == 0){
-        dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
-      // } else {
-      //   dispatcher_core_id[i] = pin_thread_id_ ++ + 5;
-      // }
+      dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
     }
     dispatcher_num = context.worker_num * context.coordinator_num;
     cur_txn_num = context.batch_size / dispatcher_num ; // * context.coordinator_num
 
-      // if(id == 0){
-        for (auto n = 0u; n < context.coordinator_num; n++) {
+    for (auto n = 0u; n < context.coordinator_num; n++) {
           
             dispatcher.emplace_back([&](int n, int worker_id) {
               
@@ -151,14 +142,7 @@ public:
                   std::vector<std::shared_ptr<simpleTransaction>> &txns = schedule_meta.node_txns;
 
                   scheduler_transactions(dispatcher_num, dispatcher_id);
-                  // while(true){
-                  //   bool success = false;
-                  //   auto i = schedule_meta.send_txn_id.pop_no_wait(success);
-                  //   if(!success) break;
 
-                  // int cur_txn_num = context.batch_size / dispatcher_num;
-
-                  // while(schedule_meta.txn_id.load() < batch_size){
                   int idx_offset = dispatcher_id * cur_txn_num;
 
                   for(size_t j = 0; j < cur_txn_num; j ++ ){
@@ -202,50 +186,6 @@ public:
             }
         }
 
-        // for (auto n = 0u; n < context.coordinator_num; n++) {
-        //   int dispatcher_id  = this->id * context.coordinator_num + n;
-        //     while(is_full_signal_self[dispatcher_id].load() == false){
-        //       std::this_thread::sleep_for(std::chrono::microseconds(5));
-        //     }
-        // }
-      // for (auto n = 0u; n < generator_num; n++) {
-      //   generators.emplace_back([&](int n) {
-      //     StorageType storage;
-      //     ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
-      //     while(status != ExecutorStatus::EXIT){
-      //       // 
-      //       if(is_full_signal.load() == 1){
-      //           std::this_thread::sleep_for(std::chrono::microseconds(5));
-      //           status = static_cast<ExecutorStatus>(worker_status.load());
-      //           continue;
-      //       }
-
-      //       bool is_not_full = prepare_transactions_to_run(workload, storage);
-      //       if(!is_not_full){
-      //         is_full_signal.store(1);
-      //       }
-      //       status = static_cast<ExecutorStatus>(worker_status.load());
-      //     }
-      //     LOG(INFO) << "generators " << n << " exits.";
-      //   }, n);
-
-      //   if (context.cpu_affinity) {
-      //     ControlMessageFactory::pin_thread_to_core(context, generators[n], generator_core_id[n]);
-      //   }
-      // }
-
-
-    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-    //   sender_core_id[i] = pin_thread_id_ ++ ;
-    // }
-
-    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-    // }
-    
-    // for(int i = 0 ; i < txns_coord_cost.size(); i ++ ){
-    //   txns_coord_cost[i] = std::make_unique<int[]>(context.coordinator_num);
-    // }
-
     pure_single_txn_cnt = 0;
     
   }
@@ -287,7 +227,6 @@ public:
       }
     
 
-    // VLOG_IF(DEBUG_V6, id == 0) << "transactions_queue: " << transactions_queue.size();
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
 
@@ -412,20 +351,20 @@ public:
 
 
   void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn) {
-            // router transaction to coordinators
-            size_t coordinator_id_dst = txn->destination_coordinator;
+    // router transaction to coordinators
+    size_t coordinator_id_dst = txn->destination_coordinator;
 
-            messages_mutex[coordinator_id_dst]->lock();
-            size_t router_size = ControlMessageFactory::new_router_transaction_message(
-                *async_messages[coordinator_id_dst].get(), 0, *txn, 
-                context.coordinator_id);
-            // flush_message(async_messages, coordinator_id_dst);
-            messages_mutex[coordinator_id_dst]->unlock();
+    messages_mutex[coordinator_id_dst]->lock();
+    size_t router_size = ControlMessageFactory::new_router_transaction_message(
+        *async_messages[coordinator_id_dst].get(), 0, *txn, 
+        context.coordinator_id);
+    // flush_message(async_messages, coordinator_id_dst);
+    messages_mutex[coordinator_id_dst]->unlock();
 
-            router_send_txn_cnt[coordinator_id_dst]++;
-            n_network_size.fetch_add(router_size);
-            router_transactions_send.fetch_add(1);
-          };
+    router_send_txn_cnt[coordinator_id_dst]++;
+    n_network_size.fetch_add(router_size);
+    router_transactions_send.fetch_add(1);
+  };
 
   struct cmp{
     bool operator()(const std::shared_ptr<simpleTransaction>& a, 
@@ -491,7 +430,7 @@ public:
     
     std::vector<int> busy_local(context.coordinator_num, 0);
     int real_distribute_num = 0;
-    // while(schedule_meta.txn_id.load() < batch_size){
+
     for(size_t i = 0; i < cur_txn_num; i ++ ){
       bool success = false;
       std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
@@ -503,13 +442,6 @@ public:
       // }
       auto& txn = txns[idx];
       txn->idx_ = idx;      
-      // {
-      //   std::lock_guard<std::mutex> l(schedule_meta.l);
-      //   txn->idx_ = schedule_meta.txn_id.load();
-      //   schedule_meta.send_txn_id.push_no_wait(txn->idx_);
-      //   schedule_meta.txn_id.fetch_add(1);
-      //   txns.push_back(txn);
-      // }
 
       DCHECK(success == true);
 
@@ -688,19 +620,6 @@ public:
       outfile_excel << "timestamp" << "\t" << "txn-items" << "\n";
     }
 
-    // distributed_outfile_excel.open(context.data_src_path_dir + "resultss_generator.xls", std::ios::trunc); // ios::trunc
-    // for(int i = 0 ; i < 4; i ++ ){
-    //   test_distributed_outfile_excel[i].open(context.data_src_path_dir + "resultss_generator.xls." + std::to_string(i), std::ios::trunc); // ios::trunc
-    // }
-    
-
-
-    // }
-    // wait 
-    // while(is_full_signal.load() == 0){
-    //   std::this_thread::sleep_for(std::chrono::microseconds(5));
-    // }
-    // }
     // main loop
     for (;;) {
       auto test = std::chrono::steady_clock::now();
@@ -712,9 +631,6 @@ public:
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "Executor " << id << " exits.";
 
-            for (auto &t : generators) {
-              t.join();
-            }
             for(auto& n: dispatcher){
               n.join();
             }
@@ -750,7 +666,6 @@ public:
       VLOG(DEBUG_V) << "Generator " << id << " ready to process_request";
 
       // thread to router the transaction generated by LionGenerator
-      
       for(int i = 0 ; i < MAX_COORDINATOR_NUM; i ++ ){
         coordinator_send[i] = 0;
       }
@@ -765,43 +680,30 @@ public:
         status = static_cast<ExecutorStatus>(worker_status.load());
       }
 
-          auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                      std::chrono::steady_clock::now() - test)
-                      .count() * 1.0 / 1000;
-          LOG(INFO) << "send : " << cur_timestamp__;
+      auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - test)
+                  .count() * 1.0 / 1000;
+      LOG(INFO) << "send : " << cur_timestamp__;
 
-          // 
-          for (auto l = 0u; l < context.coordinator_num; l++){
-            if(l == context.coordinator_id){
-              continue;
-            }
-            LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
-            messages_mutex[l]->lock();
-            ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
-            flush_message(async_messages, l);
-            messages_mutex[l]->unlock();
-          }
+      // 
+      for (auto l = 0u; l < context.coordinator_num; l++){
+        if(l == context.coordinator_id){
+          continue;
+        }
+        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+        messages_mutex[l]->lock();
+        ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
+        flush_message(async_messages, l);
+        messages_mutex[l]->unlock();
+      }
 
-          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-            LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-          }
+      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
+      }
 
-          if(id == 0 && pure_single_txn_cnt == 0){
-            skip_s_phase.store(true);
-          }
-          // if(id == 0){
-          //     is_full_signal.store(0);
-          // }
-      // }
-
-      //// 
-      // LOG(INFO) << "NEW";
-      // std::vector<std::shared_ptr<simpleTransaction>> &txns = node_txns[0];
-      // size_t cnt_per_thread = txns.size() / context.worker_num;
-
-
-
-      // test = std::chrono::steady_clock::now();
+      if(id == 0 && pure_single_txn_cnt == 0){
+        skip_s_phase.store(true);
+      }
 
       n_complete_workers.fetch_add(1);
       VLOG(DEBUG_V) << "Generator " << id << " finish C_PHASE";
@@ -1063,11 +965,9 @@ protected:
   std::vector<int> generator_core_id;
   std::vector<int> dispatcher_core_id;
 
-  std::vector<std::thread> generators;
   std::vector<std::thread> dispatcher;
 
   std::vector<int> router_send_txn_cnt;
-  // std::vector<int> sender_core_id;
   std::mutex mm;
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
   int pure_single_txn_cnt;
@@ -1076,17 +976,15 @@ protected:
   const ContextType &context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
-
   std::atomic<uint32_t> &skip_s_phase;
+  lion::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 40960> &transactions_queue;// [20];// [20];
-  ShareQueue<simpleTransaction*, 40960> transactions_queue_self[20];
-  StorageType storages[20];
+  ShareQueue<simpleTransaction*, 40960> transactions_queue_self[MAX_COORDINATOR_NUM];
+  StorageType storages[MAX_COORDINATOR_NUM];
+  std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
+  std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];
 
-  std::atomic<uint32_t>& is_full_signal;
-  std::atomic<uint32_t> is_full_signal_self[20];
-
-  ScheduleMeta &schedule_meta;
+  
   // std::vector<std::shared_ptr<simpleTransaction>>& node_txns;
   // std::unordered_map<size_t, int> &node_busy_;
   // std::vector<std::vector<int>> &txns_coord_cost;
@@ -1130,7 +1028,7 @@ protected:
   std::mutex out_;
 
   std::chrono::steady_clock::time_point trace_log; 
-  std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];
+
   // 
 
   int dispatcher_num;

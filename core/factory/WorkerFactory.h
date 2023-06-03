@@ -208,7 +208,7 @@ public:
         manager_thread_id += 1;
       // }
 
-      auto manager = std::make_shared<LionManager<WorkloadType>>(
+      auto manager = std::make_shared<lion::LionManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag, db);
 
       // add recorder for data-transformation
@@ -257,7 +257,7 @@ public:
     //   using WorkloadType =
     //       typename InferType<Context>::template WorkloadType<TransactionType>;
 
-    //   auto manager = std::make_shared<LionManager<WorkloadType>>(
+    //   auto manager = std::make_shared<lion::LionManager<WorkloadType>>(
     //       coordinator_id, context.worker_num, context, stop_flag, db);
 
     //   // add recorder for data-transformation
@@ -444,7 +444,7 @@ public:
         manager_thread_id += 1;
       // }
 
-      auto manager = std::make_shared<group_commit::MyClayManager<WorkloadType>>(
+      auto manager = std::make_shared<clay::MyClayManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
@@ -452,8 +452,7 @@ public:
             coordinator_id, i, db, context, manager->worker_status,
             manager->n_completed_workers, manager->n_started_workers,
             manager->transactions_prepared,
-            manager->r_transactions_queue,
-            manager->txn_id_queue,
+            manager->txn_meta,
             manager->storages
             ));
       }
@@ -534,7 +533,7 @@ public:
 
       int manager_thread_id = context.worker_num + 1;
 
-      auto manager = std::make_shared<LionManager<WorkloadType>>(
+      auto manager = std::make_shared<lion::LionManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag, db);
 
       for (auto i = 0u; i < context.worker_num; i++) {
@@ -542,7 +541,6 @@ public:
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers, 
               manager->skip_s_phase,
-              manager->transactions_queue, manager->is_full_signal,
               manager->schedule_meta));
       }
       // 
@@ -570,15 +568,14 @@ public:
         manager_thread_id += 1;
       // }
 
-      auto manager = std::make_shared<group_commit::MyClayManager<WorkloadType>>(
+      auto manager = std::make_shared<clay::MyClayManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::MyClayGenerator<WorkloadType, MyClay<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers,
-              manager->transactions_queue, 
-              manager->is_full_signal
+              manager->schedule_meta
               ));
       }
 
@@ -601,7 +598,7 @@ public:
     //   using WorkloadType =
     //       typename InferType<Context>::template WorkloadType<TransactionType>;
 
-    //   auto manager = std::make_shared<LionManager<WorkloadType>>(
+    //   auto manager = std::make_shared<lion::LionManager<WorkloadType>>(
     //       coordinator_id, context.worker_num, context, stop_flag, db);
 
     //   for (auto i = 0u; i < context.worker_num; i++) {

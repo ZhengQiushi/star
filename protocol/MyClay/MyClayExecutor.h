@@ -13,6 +13,7 @@
 #include "glog/logging.h"
 
 #include "common/ShareQueue.h"
+#include "protocol/MyClay/MyClayManager.h"
 #include "protocol/MyClay/MyClayMessage.h"
 
 #include <chrono>
@@ -38,16 +39,14 @@ public:
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
            std::atomic<uint32_t> &transactions_prepared,
-           std::vector<std::unique_ptr<TransactionType>> &r_transactions_queue,
-           ShareQueue<int> &txn_id_queue,
+           clay::TransactionMeta<WorkloadType>& txn_meta,
            std::vector<StorageType> &storages
            )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
         transactions_prepared(transactions_prepared),
-        r_transactions_queue(r_transactions_queue),
-        txn_id_queue(txn_id_queue), 
+        txn_meta(txn_meta),
         storages(storages),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
@@ -58,6 +57,9 @@ public:
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
     for (auto i = 0u; i <= context.coordinator_num; i++) {
+      messages.emplace_back(std::make_unique<Message>());
+      init_message(messages[i].get(), i);
+      
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
 
@@ -75,53 +77,37 @@ public:
   }
 
 
-  void unpack_route_transaction(WorkloadType& workload, 
-                                int router_recv_txn_num){
-
-
-    // int size_ = router_transactions_queue.size();
-    r_transactions_queue.clear();
-    int idx = 0;
-
+  void unpack_route_transaction(){
     while(true){
-      // size_ -- ;
-      // bool is_ok = false;
       bool success = false;
       simpleTransaction simple_txn = 
         router_transactions_queue.pop_no_wait(success);
       if(!success) break;
-
-
-    // while(size_ > 0){ // && router_recv_txn_num > 0
-    //   size_ -- ;
-      // bool success = false;
-      // simpleTransaction simple_txn = router_transactions_queue.front();
-      // router_transactions_queue.pop_front();
-
-      // DCHECK(success == true);
-      
       n_network_size.fetch_add(simple_txn.size);
-      auto p = workload.unpack_transaction(context, 0, storages[idx], simple_txn);
-      txn_id_queue.push_no_wait(idx);
 
-      idx += 1;
-
-      r_transactions_queue.push_back(std::move(p));
-      router_recv_txn_num -- ;
+      uint32_t txn_id;
+      std::unique_ptr<TransactionType> null_txn(nullptr);
+      {
+        std::lock_guard<std::mutex> l(txn_meta.c_l);
+        txn_id = txn_meta.c_transactions_queue.size();
+        if(txn_id >= txn_meta.storages.size()){
+          DCHECK(false);
+        }
+        txn_meta.c_transactions_queue.push_back(std::move(null_txn));
+        txn_meta.c_txn_id_queue.push_no_wait(txn_id);
+      }
+      auto p = workload.unpack_transaction(context, 0, storages[txn_id], simple_txn);
+      txn_meta.c_transactions_queue[txn_id] = std::move(p);
     }
   }
 
-    void run_transaction(const ContextType& phase_context,
-                         Partitioner *partitioner,
-                         std::vector<std::unique_ptr<TransactionType>> & cur_txns) {
+    void run_transaction(std::vector<std::unique_ptr<TransactionType>> & cur_txns, 
+                         ShareQueue<int>& txn_id_queue) {
     /**
      * @brief 
      * @note modified by truth 22-01-24
      *       
     */
-    ProtocolType protocol(db, phase_context, *partitioner);
-    WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner, start_time);
-
     uint64_t last_seed = 0;
 
     // int time1 = 0;
@@ -136,6 +122,8 @@ public:
     auto i = 0u;
     size_t cur_queue_size = cur_txns.size(); 
     int count = 0;   
+    int router_txn_num = 0;
+
     // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
     for(;;) {
       bool success = false;
@@ -147,6 +135,7 @@ public:
         // DCHECK(false) << i << " " << cur_trans.size();
         continue;
       }
+
       auto now = std::chrono::steady_clock::now();
       bool retry_transaction = false;
       count += 1;
@@ -257,7 +246,7 @@ public:
 
       // cur_txns.pop_front();
 
-      if (i % phase_context.batch_flush == 0) {
+      if (i % context.batch_flush == 0) {
         flush_async_messages();
         flush_sync_messages();
       }
@@ -289,7 +278,7 @@ public:
   }
   bool is_router_stopped(int& router_recv_txn_num){
     bool ret = false;
-    size_t num = context.coordinator_num; // 1
+    size_t num = 1; // context.coordinator_num; // 1
     if(router_stop_queue.size() < num){
       ret = false;
     } else {
@@ -360,13 +349,10 @@ public:
       single_txn_num = 0;
       cross_txn_num = 0;
 
-      if (id == 0) {
         while(!is_router_stopped(router_recv_txn_num)){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
-
-
 
         VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -374,30 +360,28 @@ public:
                       .count()
                 << " milliseconds.";
         // now = std::chrono::steady_clock::now();
-        unpack_route_transaction(workload, router_recv_txn_num); // 
+        unpack_route_transaction(); // 
 
 
         VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now() - begin)
                       .count()
-                << " milliseconds." 
-                << r_transactions_queue.size() << " "
-                << txn_id_queue.size();
+                << " milliseconds.";
 
-        transactions_prepared.store(true);
-      }
+        VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size() << transactions_prepared.load();
 
-      while(transactions_prepared.load() == false){
+      transactions_prepared.fetch_add(1);
+      while(transactions_prepared.load() < context.worker_num){
         std::this_thread::yield();
         process_request();
       }
 
+      LOG(INFO) << "transactions_prepared: " << transactions_prepared.load();
+
       n_started_workers.fetch_add(1);
 
-
-      size_t r_size = r_transactions_queue.size();
-      run_transaction(context, partitioner.get(), r_transactions_queue); // 
+      run_transaction(txn_meta.c_transactions_queue, txn_meta.c_txn_id_queue); // 
 
       VLOG_IF(DEBUG_V, id==0) << "run_transaction "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -405,7 +389,7 @@ public:
                      .count()
               << " milliseconds.";
 
-      LOG(INFO) << "single_txn_num: " << single_txn_num << " " << " cross_txn_num: " << cross_txn_num << " " << r_size;
+      LOG(INFO) << "single_txn_num: " << single_txn_num << " " << " cross_txn_num: " << cross_txn_num;//  << " " << r_size;
       // for(size_t r = 0; r < r_size; r ++ ){
       //   // 发回原地...
       //   size_t generator_id = context.coordinator_num;
@@ -416,6 +400,7 @@ public:
 
       status = static_cast<ExecutorStatus>(worker_status.load());
 
+      flush_sync_messages();
       flush_async_messages();
 
       n_complete_workers.fetch_add(1);
@@ -436,7 +421,9 @@ public:
       }
 
       if(id == 0){
-        transactions_prepared.store(false);
+        transactions_prepared.store(0);
+        txn_meta.s_transactions_queue.clear();
+        txn_meta.c_transactions_queue.clear();
       }
 
       VLOG_IF(DEBUG_V, id==0) << "sync "
@@ -494,7 +481,9 @@ public:
     return partition_id;
   }
 
-  void push_message(Message *message) override { in_queue.push(message); }
+  void push_message(Message *message) override { 
+    in_queue.push(message); 
+    }
 
   Message *pop_message() override {
     if (out_queue.empty())
@@ -538,13 +527,13 @@ public:
           // transaction router from Generator
           controlMessageHandlers[type](
             messagePiece,
-            *async_messages[message->get_source_node_id()], db,
+            *messages[message->get_source_node_id()], db,
             &router_transactions_queue,
             &router_stop_queue
           );
         } else {
           messageHandlers[type](messagePiece,
-                              *async_messages[message->get_source_node_id()], 
+                              *messages[message->get_source_node_id()], 
                               db, context, partitioner.get(),
                               transaction.get());
         }
@@ -553,7 +542,8 @@ public:
       }
 
       size += message->get_message_count();
-      flush_async_messages();
+      // flush_async_messages();
+      flush_messages(messages);
     }
     return size;
   }
@@ -628,7 +618,10 @@ public:
     };
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
-    txn.message_flusher = [this]() { this->flush_sync_messages(); };
+    txn.message_flusher = [this]() { 
+      this->flush_sync_messages();
+      this->flush_async_messages();
+     };
   };
 
 protected:
@@ -666,10 +659,11 @@ protected:
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::atomic<uint32_t> &transactions_prepared;
-  std::vector<std::unique_ptr<TransactionType>>  &r_transactions_queue;
-  ShareQueue<int> &txn_id_queue;
+  // std::vector<std::unique_ptr<TransactionType>>  &r_transactions_queue;
+  // ShareQueue<int> &txn_id_queue;
+  clay::TransactionMeta<WorkloadType>& txn_meta;
   std::vector<StorageType> &storages;
-
+  
 
   std::unique_ptr<Partitioner> partitioner;
   // Partitioner* partitioner_ptr;
@@ -697,7 +691,7 @@ protected:
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *> in_queue, out_queue;
+  LockfreeQueue<Message *, 100860> in_queue, out_queue;
 
   std::queue<std::unique_ptr<TransactionType>> q;
   Percentile<int64_t> percentile;

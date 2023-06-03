@@ -11,6 +11,90 @@
 
 namespace star {
 
+namespace mystar {
+#define MAX_COORDINATOR_NUM 20
+
+struct ScheduleMeta {
+  ScheduleMeta(int coordinator_num, int batch_size){
+    this->coordinator_num = coordinator_num;
+    this->batch_size = 2 * batch_size * coordinator_num;
+    for(size_t i = 0 ; i < coordinator_num; i ++ ){
+      node_busy[i] = 0;
+    }
+    node_txns.resize(this->batch_size);
+    
+    txns_coord_cost.resize(this->batch_size, std::vector<int>(coordinator_num, 0));
+    txn_id.store(0);
+    reorder_done.store(false);
+
+    start_schedule.store(0);
+    done_schedule.store(0);
+  }
+  void clear(){
+    for(size_t i = 0 ; i < coordinator_num; i ++ ){
+      node_busy[i] = 0;
+    }
+    node_txns.resize(this->batch_size);
+    txn_id.store(0);
+    reorder_done.store(false);
+    LOG(INFO) << " CLEAR !!!! " << txn_id.load();
+
+    start_schedule.store(0);
+    done_schedule.store(0);
+  }
+  int coordinator_num;
+  int batch_size;
+  
+  std::mutex l;
+  std::vector<std::shared_ptr<simpleTransaction>> node_txns;
+  std::unordered_map<size_t, int> node_busy;
+  std::vector<std::vector<int>> txns_coord_cost;
+
+  std::atomic<uint32_t> txn_id;
+  std::atomic<uint32_t> reorder_done;
+  ShareQueue<uint32_t> send_txn_id;
+
+  std::atomic<uint32_t> start_schedule;
+  std::atomic<uint32_t> done_schedule;
+};
+
+
+template <class Workload> 
+struct TransactionMeta {
+  using TransactionType = SiloTransaction;
+  using WorkloadType = Workload;
+  using StorageType = typename WorkloadType::StorageType;
+  TransactionMeta(int coordinator_num, int batch_size){
+    this->batch_size = batch_size;
+    this->coordinator_num = coordinator_num;
+    storages.resize(batch_size * coordinator_num * 2);
+  }
+  void clear(){
+    s_txn_id.store(0);
+    c_txn_id.store(0);
+  }
+
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  
+  std::atomic<uint32_t> s_txn_id;
+  std::atomic<uint32_t> c_txn_id;
+
+  std::vector<std::unique_ptr<TransactionType>> s_transactions_queue;
+  std::vector<std::unique_ptr<TransactionType>> c_transactions_queue;
+
+  std::vector<StorageType> storages;
+  
+  ShareQueue<int> s_txn_id_queue;
+  ShareQueue<int> c_txn_id_queue;
+
+  std::mutex s_l;
+  std::mutex c_l;
+
+  int batch_size;
+  int coordinator_num;
+};
+
+
 
 template <class Workload>
 class StarManager : public star::Manager {
@@ -26,7 +110,9 @@ public:
       : base_type(coordinator_id, id, context, stopFlag),
         db(db),
         c_partitioner(std::make_unique<StarCPartitioner>(
-            coordinator_id, context.coordinator_num)) {
+            coordinator_id, context.coordinator_num)),
+        schedule_meta(context.coordinator_num, context.batch_size),
+        txn_meta(context.coordinator_num, context.batch_size) {
 
     batch_size = context.batch_size;
     recorder_status.store(static_cast<int32_t>(ExecutorStatus::STOP));
@@ -287,5 +373,10 @@ public:
   std::atomic<uint32_t> recorder_status;
   std::atomic<uint32_t> transmit_status;
   std::unique_ptr<Partitioner> c_partitioner;
+
+  ScheduleMeta schedule_meta;
+  TransactionMeta<WorkloadType> txn_meta;
+
 };
+} // namespace mystar
 } // namespace star

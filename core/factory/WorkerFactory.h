@@ -174,7 +174,7 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<StarManager<WorkloadType>>(
+      auto manager = std::make_shared<star::mystar::StarManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       // add recorder for data-transformation
@@ -187,7 +187,8 @@ public:
         workers.push_back(std::make_shared<StarExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->batch_size,
             manager->worker_status, manager->n_completed_workers,
-            manager->n_started_workers)); // , manager->recorder_status
+            manager->n_started_workers,
+            manager->txn_meta)); // , manager->recorder_status
       }
       workers.push_back(manager);
       // workers.push_back(recorder);
@@ -506,13 +507,15 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
           
-      auto manager = std::make_shared<StarManager<WorkloadType>>(
+      auto manager = std::make_shared<star::mystar::StarManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::StarGenerator<WorkloadType, Silo<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->schedule_meta
+              ));
       }
       workers.push_back(manager);
       // workers.push_back(recorder);

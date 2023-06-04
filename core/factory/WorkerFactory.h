@@ -7,24 +7,27 @@
 #include "core/Defs.h"
 #include "core/Executor.h"
 #include "core/Manager.h"
-#include "core/group_commit/Generator.h"
+// #include "core/group_commit/Generator.h"
 
 
 
 #include "benchmark/tpcc/Workload.h"
 #include "benchmark/ycsb/Workload.h"
 
-#include "protocol/Silo/Silo.h"
-#include "protocol/Silo/SiloExecutor.h"
 #include "protocol/TwoPL/TwoPL.h"
 #include "protocol/TwoPL/TwoPLExecutor.h"
 
-#include "core/group_commit/Executor.h"
-#include "core/group_commit/Manager.h"
+// #include "core/group_commit/Executor.h"
+// #include "core/group_commit/Manager.h"
+
+#include "protocol/Silo/Silo.h"
 #include "protocol/SiloGC/SiloGC.h"
+#include "protocol/SiloGC/SiloGCManager.h"
+#include "protocol/SiloGC/SiloGCGenerator.h"
 #include "protocol/SiloGC/SiloGCExecutor.h"
-#include "protocol/TwoPLGC/TwoPLGC.h"
-#include "protocol/TwoPLGC/TwoPLGCExecutor.h"
+
+// #include "protocol/TwoPLGC/TwoPLGC.h"
+// #include "protocol/TwoPLGC/TwoPLGCExecutor.h"
 
 #include "protocol/Star/Star.h"
 #include "protocol/Star/StarExecutor.h"
@@ -132,34 +135,38 @@ public:
 
     if (context.protocol == "Silo") {
 
-      using TransactionType = star::SiloTransaction;
-      using WorkloadType =
-          typename InferType<Context>::template WorkloadType<TransactionType>;
+      // using TransactionType = star::SiloTransaction;
+      // using WorkloadType =
+      //     typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<Manager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+      // auto manager = std::make_shared<Manager>(
+      //     coordinator_id, context.worker_num, context, stop_flag);
 
-      for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<SiloExecutor<WorkloadType>>(
-            coordinator_id, i, db, context, manager->worker_status,
-            manager->n_completed_workers, manager->n_started_workers));
-      }
+      // for (auto i = 0u; i < context.worker_num; i++) {
+      //   workers.push_back(std::make_shared<SiloExecutor<WorkloadType>>(
+      //       coordinator_id, i, db, context, manager->worker_status,
+      //       manager->n_completed_workers, manager->n_started_workers,
+      //       manager->txn_meta));
+      // }
 
-      workers.push_back(manager);
+      // workers.push_back(manager);
 
     } else if (context.protocol == "SiloGC") {
 
       using TransactionType = star::SiloTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
 
-      auto manager = std::make_shared<group_commit::Manager>(
+      auto manager = std::make_shared<silo::SiloGCManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<SiloGCExecutor<WorkloadType>>(
+        workers.push_back(std::make_shared<SiloGCExecutor<WorkloadType, SiloGC<DatabaseType>>>(
             coordinator_id, i, db, context, manager->worker_status,
-            manager->n_completed_workers, manager->n_started_workers));
+            manager->n_completed_workers, manager->n_started_workers,
+            manager->txn_meta));
       }
       workers.push_back(manager);
 
@@ -308,36 +315,36 @@ public:
     
     else if (context.protocol == "TwoPL") {
 
-      using TransactionType = star::TwoPLTransaction;
-      using WorkloadType =
-          typename InferType<Context>::template WorkloadType<TransactionType>;
+      // using TransactionType = star::TwoPLTransaction;
+      // using WorkloadType =
+      //     typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<Manager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+      // auto manager = std::make_shared<Manager<WorkloadType>>(
+      //     coordinator_id, context.worker_num, context, stop_flag);
 
-      for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<TwoPLExecutor<WorkloadType>>(
-            coordinator_id, i, db, context, manager->worker_status,
-            manager->n_completed_workers, manager->n_started_workers));
-      }
+      // for (auto i = 0u; i < context.worker_num; i++) {
+      //   workers.push_back(std::make_shared<TwoPLExecutor<WorkloadType>>(
+      //       coordinator_id, i, db, context, manager->worker_status,
+      //       manager->n_completed_workers, manager->n_started_workers));
+      // }
 
-      workers.push_back(manager);
+      // workers.push_back(manager);
     } else if (context.protocol == "TwoPLGC") {
 
-      using TransactionType = star::TwoPLTransaction;
-      using WorkloadType =
-          typename InferType<Context>::template WorkloadType<TransactionType>;
+      // using TransactionType = star::TwoPLTransaction;
+      // using WorkloadType =
+      //     typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<group_commit::Manager>(
-          coordinator_id, context.worker_num, context, stop_flag);
+      // auto manager = std::make_shared<silo::SiloGCManager<WorkloadType>>(
+      //     coordinator_id, context.worker_num, context, stop_flag);
 
-      for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<TwoPLGCExecutor<WorkloadType>>(
-            coordinator_id, i, db, context, manager->worker_status,
-            manager->n_completed_workers, manager->n_started_workers));
-      }
+      // for (auto i = 0u; i < context.worker_num; i++) {
+      //   workers.push_back(std::make_shared<TwoPLGCExecutor<WorkloadType>>(
+      //       coordinator_id, i, db, context, manager->worker_status,
+      //       manager->n_completed_workers, manager->n_started_workers));
+      // }
 
-      workers.push_back(manager);
+      // workers.push_back(manager);
     } else if (context.protocol == "Calvin") {
 
       using TransactionType = star::CalvinTransaction;
@@ -484,13 +491,14 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
-      auto manager = std::make_shared<group_commit::Manager>(
+      auto manager = std::make_shared<silo::SiloGCManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<group_commit::Generator<WorkloadType, Silo<DatabaseType>>>(
+        workers.push_back(std::make_shared<SiloGCGenerator<WorkloadType, SiloGC<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->schedule_meta));
       }
 
       workers.push_back(manager);
@@ -511,7 +519,7 @@ public:
           coordinator_id, context.worker_num, context, stop_flag, db);
 
       for (auto i = 0u; i < context.worker_num; i++) {
-        workers.push_back(std::make_shared<group_commit::StarGenerator<WorkloadType, Silo<DatabaseType>>>(
+        workers.push_back(std::make_shared<group_commit::StarGenerator<WorkloadType, SiloGC<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers,
               manager->schedule_meta
@@ -605,7 +613,7 @@ public:
     //       coordinator_id, context.worker_num, context, stop_flag, db);
 
     //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
+    //     workers.push_back(std::make_shared<SiloGCGenerator<WorkloadType>>(
     //           coordinator_id, i, db, context, manager->worker_status,
     //           manager->n_completed_workers, manager->n_started_workers));
     //   }
@@ -626,7 +634,7 @@ public:
     //       coordinator_id, context.worker_num, context, stop_flag, db);
 
     //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
+    //     workers.push_back(std::make_shared<SiloGCGenerator<WorkloadType>>(
     //           coordinator_id, i, db, context, manager->worker_status,
     //           manager->n_completed_workers, manager->n_started_workers));
     //   }
@@ -643,7 +651,7 @@ public:
     //       coordinator_id, context.worker_num, context, stop_flag);
 
     //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
+    //     workers.push_back(std::make_shared<SiloGCGenerator<WorkloadType>>(
     //           coordinator_id, i, db, context, manager->worker_status,
     //           manager->n_completed_workers, manager->n_started_workers));
     //   }
@@ -655,11 +663,11 @@ public:
     //   using WorkloadType =
     //       typename InferType<Context>::template WorkloadType<TransactionType>;
 
-    //   auto manager = std::make_shared<group_commit::Manager>(
+    //   auto manager = std::make_shared<silo::SiloGCManager>(
     //       coordinator_id, context.worker_num, context, stop_flag);
 
     //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<group_commit::Generator<WorkloadType>>(
+    //     workers.push_back(std::make_shared<SiloGCGenerator<WorkloadType>>(
     //           coordinator_id, i, db, context, manager->worker_status,
     //           manager->n_completed_workers, manager->n_started_workers));
     //   }

@@ -73,7 +73,8 @@ public:
   bool commit(TransactionType &txn,
               std::vector<std::unique_ptr<Message>> &syncMessages,
               std::vector<std::unique_ptr<Message>> &asyncMessages) {
-
+    
+    VLOG(DEBUG_V16) << "commit: " << *(int*)txn.readSet[0].get_key() << " " << *(int*)txn.readSet[1].get_key();
     // lock write set
     if (lock_write_set(txn, syncMessages)) {
       abort(txn, syncMessages, asyncMessages);
@@ -119,6 +120,7 @@ private:
           txn.abort_lock = true;
           break;
         }
+        VLOG(DEBUG_V16) << "w-lock " << *(int*) key;
 
         writeKey.set_write_lock_bit();
 
@@ -265,6 +267,7 @@ private:
         std::atomic<uint64_t> &tid = table->search_metadata(key);
         table->update(key, value);
         SiloHelper::unlock(tid, commit_tid);
+        VLOG(DEBUG_V16) << "w-unlock " << *(int*) key;
       } else {
         auto coordinatorID = partitioner.master_coordinator(partitionId);
         txn.network_size += MessageFactoryType::new_write_message(

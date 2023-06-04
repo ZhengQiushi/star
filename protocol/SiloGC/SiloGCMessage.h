@@ -300,6 +300,8 @@ public:
 
     bool success;
     uint64_t latest_tid = SiloHelper::lock(tid, success);
+    if(success)
+      VLOG(DEBUG_V16) << "w-lock " << *(int*) key;
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
@@ -530,6 +532,8 @@ public:
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     table.deserialize_value(key, valueStringPiece);
 
+    VLOG(DEBUG_V16) << "w-unlock " << *(int*) key;
+    
     SiloHelper::unlock(tid, commit_tid);
   }
 

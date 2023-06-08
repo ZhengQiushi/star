@@ -140,7 +140,7 @@ public:
 
     // unlock_all_read_locks(txn);
     
-    // sync_messages(txn, false);
+    sync_messages(txn, false);
   }
 
 
@@ -307,15 +307,22 @@ private:
       // }
 
       if(send_replica == false && context.coordinator_num > 1){
-        DCHECK(false);
+        // DCHECK(false);
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 
-    // sync_messages(txn, false);
+    sync_messages(txn, false);
   }
 
-
+  void sync_messages(TransactionType &txn, bool wait_response = true) {
+    txn.message_flusher();
+    if (wait_response) {
+      while (txn.pendingResponses > 0) {
+        txn.remote_request_handler();
+      }
+    }
+  }
 
 private:
   DatabaseType &db;

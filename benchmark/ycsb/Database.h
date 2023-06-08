@@ -242,10 +242,18 @@ public:
 
     for (auto threadID = 0u; threadID < threadsNum; threadID++) {
       v.emplace_back([=]() {
+        auto now1 = std::chrono::steady_clock::now();
+
         for (auto i = threadID; i < all_parts.size(); i += threadsNum) {
           auto partitionID = all_parts[i];
           initFunc(partitionID);
         }
+
+        LOG(INFO) << " threadID: " << threadID << " " << all_parts.size() << " " 
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - now1)
+                        .count()
+                  << " milliseconds. "; 
       });
     }
     for (auto &t : v) {
@@ -255,7 +263,7 @@ public:
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
-              << " milliseconds.";
+              << " milliseconds. "  << threadsNum; 
   }
 
   template <class InitFunc>

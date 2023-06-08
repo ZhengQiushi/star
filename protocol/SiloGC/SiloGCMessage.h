@@ -25,6 +25,7 @@ enum class SiloGCMessage {
   ABORT_REQUEST,
   WRITE_REQUEST,
   REPLICATION_REQUEST,
+  REPLICATION_RESPONSE,
   NFIELDS
 };
 
@@ -582,7 +583,46 @@ public:
     } else {
       SiloHelper::unlock(tid);
     }
+
+    auto message_size = MessagePiece::get_header_size();
+                        
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(SiloGCMessage::REPLICATION_RESPONSE), message_size,
+        table_id, partition_id);
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+
+    responseMessage.flush();
+
   }
+
+  static void replication_response_handler(MessagePiece inputPiece,
+                                          Message &responseMessage,
+                                          ITable &table, Transaction *txn
+) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(SiloGCMessage::REPLICATION_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size());
+
+    // auto stringPiece = inputPiece.toStringPiece();
+    // Decoder dec(stringPiece);
+    // dec >> txn_id;
+
+    // stringPiece = inputPiece.toStringPiece();
+    // stringPiece.remove_prefix(sizeof(txn_id));
+
+    // const void *key_ = stringPiece.data();
+    // key = *(int*) key_;
+
+    // VLOG(DEBUG_V16) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " " << key;
+  }
+
 
   static std::vector<
       std::function<void(MessagePiece, Message &, ITable &, Transaction *)>>
@@ -600,6 +640,7 @@ public:
     v.push_back(SiloGCMessageHandler::abort_request_handler);
     v.push_back(SiloGCMessageHandler::write_request_handler);
     v.push_back(SiloGCMessageHandler::replication_request_handler);
+    v.push_back(SiloGCMessageHandler::replication_response_handler);
     return v;
   }
 };

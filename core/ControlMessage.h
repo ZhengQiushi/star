@@ -36,6 +36,18 @@ public:
 #endif
   }
 
+  static int pin_process_to_core(const Context &context, std::size_t core_id) {
+#ifndef __APPLE__
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    int rc =
+        sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
+    // CHECK(rc == 0) << rc;
+    return core_id;
+#endif
+  }
+
   static void pin_thread_to_core(const Context &context, std::thread &t, std::size_t core_id) {
 #ifndef __APPLE__
     cpu_set_t cpuset;

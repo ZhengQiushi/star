@@ -68,6 +68,20 @@ public:
   ~Coordinator() = default;
 
   void start() {
+    std::vector<std::thread> threads;
+
+    LOG(INFO) << "Coordinator starts to run " << workers.size() << " workers.";
+
+    // if(context.protocol == "Lion" && context.coordinator_num != id){ // metis
+    //   ControlMessageFactory::pin_process_to_core(context, workers.size() - 2);
+    // }
+
+    for (auto i = 0u; i < workers.size(); i++) {
+      threads.emplace_back(&Worker::start, workers[i].get());
+      if (context.cpu_affinity) {
+        ControlMessageFactory::pin_thread_to_core(context, threads[i]);
+      }
+    }
 
     // init dispatcher vector
     iDispatchers.resize(context.io_thread_num);
@@ -96,16 +110,7 @@ public:
       }
     }
 
-    std::vector<std::thread> threads;
 
-    LOG(INFO) << "Coordinator starts to run " << workers.size() << " workers.";
-
-    for (auto i = 0u; i < workers.size(); i++) {
-      threads.emplace_back(&Worker::start, workers[i].get());
-      if (context.cpu_affinity) {
-        ControlMessageFactory::pin_thread_to_core(context, threads[i]);
-      }
-    }
 
     // if(context.lion_with_metis_init){
     //   LOG(INFO) << "wait initialization done ... ";

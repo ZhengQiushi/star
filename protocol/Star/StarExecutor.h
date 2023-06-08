@@ -148,22 +148,25 @@ public:
         {
           std::lock_guard<std::mutex> l(txn_meta.s_l);
           txn_id = txn_meta.s_transactions_queue.size();
+          if(txn_id >= txn_meta.s_storages.size()){
+            DCHECK(false);
+          }
           txn_meta.s_transactions_queue.push_back(std::move(null_txn));
           txn_meta.s_txn_id_queue.push_no_wait(txn_id);
         }
-        auto p = s_workload->unpack_transaction(context, 0, storage, simple_txn);
+        auto p = s_workload->unpack_transaction(context, 0, txn_meta.s_storages[txn_id], simple_txn);
         txn_meta.s_transactions_queue[txn_id] = std::move(p);
       } else {
         {
           std::lock_guard<std::mutex> l(txn_meta.c_l);
           txn_id = txn_meta.c_transactions_queue.size();
-          if(txn_id >= txn_meta.storages.size()){
+          if(txn_id >= txn_meta.c_storages.size()){
             DCHECK(false);
           }
           txn_meta.c_transactions_queue.push_back(std::move(null_txn));
           txn_meta.c_txn_id_queue.push_no_wait(txn_id);
         }
-        auto p = c_workload->unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+        auto p = c_workload->unpack_transaction(context, 0, txn_meta.c_storages[txn_id], simple_txn);
         
         if(simple_txn.is_transmit_request){
           DCHECK(false);
@@ -245,6 +248,13 @@ public:
         // std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
       unpack_route_transaction(); // 
+
+      txn_meta.transactions_prepared.fetch_add(1);
+      while(txn_meta.transactions_prepared.load() < context.worker_num){
+        std::this_thread::yield();
+        process_request();
+      }
+
 
         VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size();
 
@@ -328,8 +338,8 @@ public:
       // size_t r_size = s_transactions_queue.size();
       // LOG(INFO) << "s_transactions_queue.size() : " <<  r_size;
       run_transaction(ExecutorStatus::S_PHASE, 
-              txn_meta.c_transactions_queue,
-              txn_meta.c_txn_id_queue,
+              txn_meta.s_transactions_queue,
+              txn_meta.s_txn_id_queue,
               async_message_num);
       // for(int r = 0; r < router_recv_txn_num; r ++ ){
       //   // 发回原地...
@@ -341,12 +351,12 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
 
-      VLOG_IF(DEBUG_V, id==0) << "S_phase done "
+      LOG(INFO) << "S_phase done "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
       
       replication_fence(ExecutorStatus::S_PHASE);
       n_complete_workers.fetch_add(1);
@@ -355,7 +365,7 @@ public:
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
 
       // once all workers are stop, we need to process the replication
       // requests
@@ -366,16 +376,15 @@ public:
       }
 
       if(id == 0){
-        txn_meta.s_transactions_queue.clear();
-        txn_meta.c_transactions_queue.clear();
+        txn_meta.clear();
       }
       
-      VLOG_IF(DEBUG_V, id==0) << "wait back "
+      LOG(INFO) << "wait back "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
                      .count()
               << " milliseconds.";
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
 
 
       // n_complete_workers has been cleared
@@ -447,17 +456,21 @@ public:
       CHECK(false);
     }
     
-    int time1 = 0;
+    int time_prepare_read = 0;  
+    int time_before_prepare_set = 0;
+    int time_before_prepare_read = 0;  
+    int time_before_prepare_request = 0;
     int time_read_remote = 0;
+    int time1 = 0;
+    int time2 = 0;
     int time3 = 0;
-    int time_prepare_read = 0;
-
+    int time4 = 0;
 
     uint64_t last_seed = 0;
 
     auto i = 0u;
     size_t cur_queue_size = cur_txns.size(); 
-    int count = 0;   
+    auto count = 0u;
     int router_txn_num = 0;
 
     for(;;) {
@@ -472,6 +485,7 @@ public:
       }
 
       auto now = std::chrono::steady_clock::now();
+      count += 1;
       bool retry_transaction = false;
       count += 1;
       transaction = std::move(cur_txns[i]);
@@ -479,8 +493,16 @@ public:
 
       do {
         // // LOG(INFO) << "StarExecutor: "<< id << " " << "process_request" << i;
+          time_before_prepare_request += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+
         process_request();
         last_seed = random.get_seed();
+
+          time_before_prepare_set += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
 
         if (retry_transaction) {
           transaction->reset();
@@ -489,12 +511,10 @@ public:
           setupHandlers(*transaction, *protocol);
         }
         // // LOG(INFO) << "StarExecutor: "<< id << " " << "transaction->execute" << i;
+          time_before_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
 
-        // auto result = transaction->execute(id);
-
-        auto now = std::chrono::steady_clock::now();
-
-          // auto result = transaction->execute(id);
           transaction->prepare_read_execute(id);
 
           time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
@@ -566,8 +586,15 @@ public:
     flush_record_messages();
     flush_sync_messages();
 
-    if(cur_queue_size > 0)
-      VLOG_IF(DEBUG_V4, id == 0) << "prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
+    if(count > 0)
+      LOG(INFO) << "  nums: "    << count 
+                << " pre: "     << time_before_prepare_request / count
+                << " set: "     << time_before_prepare_set / count 
+                << " gap: "     << time_before_prepare_read / count
+                << "  prepare: " << time_prepare_read / count  << " " << time_prepare_read
+                << "  execute: " << time_read_remote / count   << " " << time_read_remote
+                << "  commit: "  << time3 / count              << " " << time3
+                << "  router : " << time1 / count              << " " << time1; 
 
   }
 

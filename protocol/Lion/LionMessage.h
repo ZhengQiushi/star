@@ -636,9 +636,9 @@ public:
     if(success){
       TwoPLHelper::write_lock(tid, success);
       if(success){
-        auto test = table.search_value(key);
+        // auto test = table.search_value(key);
 
-        VLOG(DEBUG_V11) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key << " " << (char*)test;
+        // VLOG(DEBUG_V11) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key << " " << (char*)test;
 
         //! TODO logic needs to be checked
         // DCHECK(last_tid < commit_tid);
@@ -649,17 +649,17 @@ public:
       LOG(INFO) << " replication failed: " << debug_key;
     }
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + 
-                        sizeof(txn_id) + 
-                        sizeof(debug_key);
+    auto message_size = MessagePiece::get_header_size();//  + 
+                        // sizeof(txn_id) + 
+                        // sizeof(debug_key);
                         
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionMessage::REPLICATION_RESPONSE), message_size,
         table_id, partition_id);
     star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header 
-            << txn_id
-            << debug_key;
+    encoder << message_piece_header;
+            // << txn_id
+            // << debug_key;
             
     responseMessage.flush();
   }
@@ -681,9 +681,9 @@ public:
     DCHECK(partition_id == table.partitionID());
     int key = 0;
     uint32_t txn_id;
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() + 
-          sizeof(txn_id) + 
-          sizeof(key));
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size());// + 
+          // sizeof(txn_id) + 
+          // sizeof(key));
 
     // auto stringPiece = inputPiece.toStringPiece();
     // Decoder dec(stringPiece);

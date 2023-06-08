@@ -125,9 +125,18 @@ void unpack_route_transaction(){
      *       
     */
     uint64_t last_seed = 0;
-    int time_prepare_read = 0;
+
+    int time_prepare_read = 0;  
+    int time_before_prepare_set = 0;
+    int time_before_prepare_read = 0;  
+    int time_before_prepare_request = 0;
     int time_read_remote = 0;
+    int time_read_remote1 = 0;
+    int time1 = 0;
+    int time2 = 0;
     int time3 = 0;
+    int time4 = 0;
+
     auto begin = std::chrono::steady_clock::now();
 
     auto i = 0u;
@@ -153,8 +162,16 @@ void unpack_route_transaction(){
 
 
       do {
+          time_before_prepare_request += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+
         process_request();
         last_seed = random.get_seed();
+
+          time_before_prepare_set += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
 
         if (retry_transaction) {
           transaction->reset();
@@ -163,11 +180,35 @@ void unpack_route_transaction(){
           setupHandlers(*transaction);
         }
 
-        auto now = std::chrono::steady_clock::now();
 
-        auto result = transaction->execute(id);
+          time_before_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          
+          transaction->prepare_read_execute(id);
 
           time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+          
+          auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
+
+          time_read_remote1 += std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - now)
+              .count();
+          now = std::chrono::steady_clock::now();
+
+          if(result != TransactionResult::READY_TO_COMMIT){
+            retry_transaction = false;
+            protocol.abort(*transaction, sync_messages, async_messages);
+            n_abort_no_retry.fetch_add(1);
+            continue;
+          } else {
+            result = transaction->prepare_update_execute(id);
+          }
+
+          time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - now)
               .count();
           now = std::chrono::steady_clock::now();
@@ -218,9 +259,16 @@ void unpack_route_transaction(){
 
 
     if(count > 0){
-      LOG(INFO) << time_read_remote << " "<< count  << " prepare: " << time_prepare_read / count << "  execute: " << time_read_remote / count << "  commit: " << time3 / count ;// << "  router : " << time1 / count; 
-      // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
-      // remaster_delay_transactions = 0;
+      LOG(INFO) << "  nums: "    << count 
+                << " pre: "     << time_before_prepare_request / count
+                << " set: "     << time_before_prepare_set / count 
+                << " gap: "     << time_before_prepare_read / count
+                << "  prepare: " << time_prepare_read / count  << " " << time_prepare_read
+                << "  execute: " << time_read_remote / count   << " " << time_read_remote
+                << " execute1: " << time_read_remote1 / count 
+                << "  commit: "  << time3 / count              << " " << time3
+                << "  router : " << time1 / count              << " " << time1; 
+
     }
   }
 

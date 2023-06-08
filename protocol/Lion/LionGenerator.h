@@ -243,7 +243,8 @@ public:
 
 
   void txn_nodes_involved(simpleTransaction* t, bool is_dynamic, 
-                          std::vector<std::vector<int>>& txns_coord_cost_) {
+                          std::vector<std::vector<int>>& txns_coord_cost_,
+                          std::vector<int>& busy_local) {
     
       std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
       std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
@@ -292,18 +293,19 @@ public:
       int max_node = -1;
 
       for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
-        int cur_score = 0;
+        int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
+
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
         if(context.migration_only){
-          cur_score = 100 * cnt_master;
+          cur_score += 100 * cnt_master;
         } else {
           if(cnt_master == query_keys.size()){
-            cur_score = 100 * (int)query_keys.size();
+            cur_score += 100 * (int)query_keys.size();
           } else if(cnt_secondary + cnt_master == query_keys.size()){
-            cur_score = 50 * cnt_master + 25 * cnt_secondary;
+            cur_score += 50 * cnt_master + 25 * cnt_secondary;
           } else {
-            cur_score = 25 * cnt_master + 15 * cnt_secondary;
+            cur_score += 25 * cnt_master + 15 * cnt_secondary;
           }
         }
 
@@ -463,7 +465,7 @@ public:
       if(txn->is_distributed){ 
         // static-distribute
         // std::unordered_map<int, int> result;
-        txn_nodes_involved(txn.get(), true, txns_coord_cost);
+        txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
       } else {
         DCHECK(txn->is_distributed == 0);
         pure_single_txn_cnt += 1;

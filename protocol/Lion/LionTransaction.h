@@ -40,6 +40,7 @@ public:
     local_validated = false;
     si_in_serializable = false;
     distributed_transaction = false;
+    fully_single_transaction = false;
     execution_phase = true;
 
     remaster_cnt = 0;
@@ -49,7 +50,7 @@ public:
     readSet.clear();
     writeSet.clear();
 
-    routerSet.clear(); // add by truth 22-03-25
+    // routerSet.clear(); // add by truth 22-03-25
   }
   virtual bool is_transmit_requests() = 0;
   virtual ExecutorStatus get_worker_status() = 0;
@@ -90,7 +91,7 @@ public:
 
     add_to_read_set(readKey);
     // add by truth 22-03-25
-    add_to_router_set(readKey);
+    // add_to_router_set(readKey);
     
   }
 
@@ -111,7 +112,7 @@ public:
     add_to_read_set(readKey);
     
     // add by truth 22-03-25
-    add_to_router_set(readKey);
+    // add_to_router_set(readKey);
 
   }
 
@@ -134,7 +135,7 @@ public:
     add_to_read_set(readKey);
 
     // add by truth 22-03-25
-    add_to_router_set(readKey);
+    // add_to_router_set(readKey);
 
   }
 
@@ -323,7 +324,7 @@ public:
         return true;
       } 
       
-      routerSet[i].set_write_lock_bit();
+      // routerSet[i].set_write_lock_bit();
 
       readSet[i].clear_read_request_bit();
       readSet[i].set_tid(tid);
@@ -363,10 +364,10 @@ public:
     return writeSet.size() - 1;
   }
 
-  std::size_t add_to_router_set(const LionRWKey &key) {
-    routerSet.push_back(key);
-    return routerSet.size() - 1;
-  }
+  // std::size_t add_to_router_set(const LionRWKey &key) {
+  //   routerSet.push_back(key);
+  //   return routerSet.size() - 1;
+  // }
 
   bool is_abort(){
     return abort_lock || abort_read_validation;
@@ -386,6 +387,7 @@ public:
 
   bool abort_lock, abort_read_validation, local_validated, si_in_serializable;
   bool distributed_transaction;
+  bool fully_single_transaction;
   bool execution_phase;
   // bool is_transmit_request;
 
@@ -419,7 +421,7 @@ public:
 
   Partitioner &partitioner;
   Operation operation;
-  std::vector<LionRWKey> readSet, writeSet, routerSet;
+  std::vector<LionRWKey> readSet, writeSet; // , routerSet;
 
   ExecutorStatus status;
   uint32_t id;

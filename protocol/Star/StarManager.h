@@ -67,12 +67,20 @@ struct TransactionMeta {
   TransactionMeta(int coordinator_num, int batch_size){
     this->batch_size = batch_size;
     this->coordinator_num = coordinator_num;
-    storages.resize(batch_size * coordinator_num * 2);
+    s_storages.resize(batch_size * coordinator_num * 2);
+    c_storages.resize(batch_size * coordinator_num * 2);
+    s_txn_id.store(0);
+    c_txn_id.store(0);
+    transactions_prepared.store(0);
   }
   void clear(){
     s_txn_id.store(0);
     c_txn_id.store(0);
+    transactions_prepared.store(0);
+    s_transactions_queue.clear();
+    c_transactions_queue.clear();
   }
+  std::atomic<uint32_t> transactions_prepared;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   
@@ -82,7 +90,8 @@ struct TransactionMeta {
   std::vector<std::unique_ptr<TransactionType>> s_transactions_queue;
   std::vector<std::unique_ptr<TransactionType>> c_transactions_queue;
 
-  std::vector<StorageType> storages;
+  std::vector<StorageType> s_storages;
+  std::vector<StorageType> c_storages;
   
   ShareQueue<int> s_txn_id_queue;
   ShareQueue<int> c_txn_id_queue;

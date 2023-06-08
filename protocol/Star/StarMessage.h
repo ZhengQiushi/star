@@ -17,6 +17,7 @@ namespace star {
 
 enum class StarMessage {
   ASYNC_VALUE_REPLICATION_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
+  ASYNC_VALUE_REPLICATION_RESPONSE,
   SYNC_VALUE_REPLICATION_REQUEST,
   SYNC_VALUE_REPLICATION_RESPONSE,
   OPERATION_REPLICATION_REQUEST,
@@ -245,6 +246,46 @@ public:
       // if(SiloHelper::is_locked(tid)){
       SiloHelper::unlock(tid);
     }
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(StarMessage::ASYNC_VALUE_REPLICATION_RESPONSE),
+        message_size, table_id, partition_id);
+    
+    // static int recv_ = 0;
+    // LOG(INFO) << "SYNC_VALUE_REPLICATION_RESPONSE "<< recv_++ << " " << responseMessage.get_source_node_id() << " " << responseMessage.get_dest_node_id();
+
+    // LOG(INFO) << "recv : " << ++recv_;
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    responseMessage.flush();
+  }
+
+  static void async_value_replication_response_handler(MessagePiece inputPiece,
+                                                      Message &responseMessage,
+                                                      Database &db,
+                                                      Transaction *txn
+                                      ){ // ShareQueue<simpleTransaction>* router_txn_queue) {
+    return ;
+    // DCHECK(false);
+    // never come in
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(StarMessage::ASYNC_VALUE_REPLICATION_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto field_size = table.field_size();
+
+    /*
+     * The structure of a sync value replication response: ()
+     */
+
+    // txn->pendingResponses--;
+    // txn->network_size += inputPiece.get_message_length();
   }
 
   static void sync_value_replication_request_handler(MessagePiece inputPiece,
@@ -431,6 +472,7 @@ public:
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(StarMessageHandler::async_value_replication_request_handler);
+    v.push_back(StarMessageHandler::async_value_replication_response_handler);
     v.push_back(StarMessageHandler::sync_value_replication_request_handler);
     v.push_back(StarMessageHandler::sync_value_replication_response_handler);
     v.push_back(StarMessageHandler::operation_replication_request_handler);

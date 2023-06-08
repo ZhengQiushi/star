@@ -387,7 +387,9 @@ public:
       metis_txns.push_back(metis_new_txn);
       cur_moves.push_back(cur_move);
     }
-
+    if(cur_move_size == 0){
+      return cur_move_size;
+    }
     access_freq_aver /= cur_move_size;
 
     scheduler_transactions(metis_txns, router_send_txn_cnt, access_freq_aver);

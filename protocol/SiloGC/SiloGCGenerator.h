@@ -446,6 +446,8 @@ public:
         }
       } 
 
+      max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
+
 
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;

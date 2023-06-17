@@ -1,9 +1,9 @@
-scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.237:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.236:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.237:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.250:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.250:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.250:/home/centos/
 
 
-ssh centos@10.77.70.235 -i .ssh/zzh_cloud
+ssh centos@10.77.70.250 -i .ssh/zzh_cloud
 
 tar zxf docker-18.03.0-ce.tgz && sudo mv docker/* /usr/bin/
 sudo mv docker.service /etc/systemd/system/

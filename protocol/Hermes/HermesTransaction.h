@@ -46,6 +46,22 @@ public:
     readSet.clear();
     writeSet.clear();
   }
+
+  void refresh() {
+    pendingResponses = 0;
+
+    abort_lock = false;
+    abort_no_retry = false;
+    abort_read_validation = false;
+
+    // local_read.store(0);
+    // saved_local_read = 0;
+    // remote_read.store(0);
+    // saved_remote_read = 0;
+    // distributed_transaction = false;
+    // execution_phase = false;
+  }
+
   virtual bool is_transmit_requests() = 0;
   virtual ExecutorStatus get_worker_status() = 0;
   virtual TransactionResult prepare_read_execute(std::size_t worker_id) = 0;
@@ -248,7 +264,9 @@ public:
         read_handler(worker_id, readKey.get_table_id(),
                      readKey.get_partition_id(), id, i, readKey.get_key(),
                      readKey.get_value());
-
+        if(this->abort_lock){
+          return true;
+        }
         readSet[i].set_execution_processed_bit();
       }
 

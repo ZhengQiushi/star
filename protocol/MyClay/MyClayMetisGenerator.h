@@ -167,7 +167,7 @@ public:
   // long long cal_load_distribute(int aver_val, 
   //                         std::unordered_map<int, long long>& busy_){
   //   long long cur_val = 0;
-  //   for(int i = 0 ; i < context.coordinator_num; i ++ ){
+  //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
   //     // 
   //     cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
   //   }
@@ -178,7 +178,7 @@ public:
   
   // long long cal_load_average(std::unordered_map<int, long long>& busy_){
   //   long long cur_val = 0;
-  //   for(int i = 0 ; i < context.coordinator_num; i ++ ){
+  //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
   //     // 
   //     cur_val += busy_[i];
   //   }

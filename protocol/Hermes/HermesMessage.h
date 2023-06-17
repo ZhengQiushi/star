@@ -163,7 +163,7 @@ public:
       HermesHelper::read(row, value_transfer, value_size);
 
       VLOG(DEBUG_V12) << "  DELETE " << *(int*)key << " " << coordinator_id_old << " --> " << coordinator_id_new;
-      table.delete_(key);
+      // table.delete_(key);
       is_delete = true;
 
       encoder << latest_tid << key_offset << txn_id;
@@ -177,7 +177,7 @@ public:
 
       message.flush();
 
-      delete[] value_transfer;
+      // delete[] value_transfer;
 
       readKey.set_master_coordinator_id(coordinator_id_new);
       
@@ -381,7 +381,7 @@ public:
     encoder << message_piece_header;
 
     if(!success){
-      VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+      LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
       encoder << txn_id << latest_tid << key_offset << replica_id << success;
       encoder.write_n_bytes(key, key_size);
       responseMessage.data.append(value_size, 0);
@@ -394,7 +394,7 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
+      LOG(INFO) << "  can't Lock " << *(int*)key; // << " " << tid_int;
       encoder << txn_id << latest_tid << key_offset << replica_id << success;
       encoder.write_n_bytes(key, key_size);
       responseMessage.data.append(value_size, 0);
@@ -435,7 +435,7 @@ public:
       HermesHelper::read(row, dest, value_size);
       responseMessage.flush();
 
-      table.delete_(key);
+      // table.delete_(key);
 
     } else if(coordinator_id_new == coordinator_id_old) {
       success = false;
@@ -513,7 +513,7 @@ public:
 
     uint64_t last_tid = 0;
 
-    VLOG(DEBUG_V8) << *(int*) key << " async_search_response_handler ";
+    VLOG(DEBUG_V8) << *(int*) key << " async_search_response_handler " << " " << txn_id << " " << replica_id;
 
     if(success == true){
       // read value message piece
@@ -558,8 +558,8 @@ public:
         VLOG(DEBUG_V12) << "[FAIL]Same?" << table_id <<" " << *(int*) key << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << " on " << replica_id;
       }
     } else {
-      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-      // txn->abort_lock = true;
+      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      txn->abort_lock = true;
     }
   }
 
@@ -812,7 +812,7 @@ public:
     auto& readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    VLOG(DEBUG_V11) << " R   " << txn_id << " " << *(int*)key << "response get " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " pending: " << txn->pendingResponses;
+    VLOG(DEBUG_V8) << " TRANSFER_RESPONSE_ROUTER_ONLY   " << txn_id << " " << *(int*)key << "response get " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " pending: " << txn->pendingResponses;
 
   }
 

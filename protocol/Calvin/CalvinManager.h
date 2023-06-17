@@ -10,12 +10,12 @@
 #include "protocol/Calvin/CalvinExecutor.h"
 #include "protocol/Calvin/CalvinHelper.h"
 #include "protocol/Calvin/CalvinTransaction.h"
+#include "protocol/Calvin/CalvinMeta.h"
 
 #include <thread>
 #include <vector>
 
 namespace star {
-
 template <class Workload> class CalvinManager : public star::Manager {
 public:
   using base_type = star::Manager;
@@ -35,7 +35,9 @@ public:
                 const ContextType &context, std::atomic<bool> &stopFlag)
       : base_type(coordinator_id, id, context, stopFlag), db(db),
         partitioner(coordinator_id, context.coordinator_num,
-                    CalvinHelper::string_to_vint(context.replica_group)) {
+                    CalvinHelper::string_to_vint(context.replica_group)),
+        schedule_meta(context.coordinator_num, context.batch_size),
+        txn_meta(context.coordinator_num, context.batch_size)  {
 
     storages.resize(context.batch_size);
     transactions.resize(context.batch_size);// 由manager统一生成txn
@@ -149,5 +151,8 @@ public:
   std::vector<std::shared_ptr<CalvinExecutor<WorkloadType>>> workers;
   std::vector<StorageType> storages;
   std::vector<std::unique_ptr<TransactionType>> transactions;
+public:
+  calvin::ScheduleMeta schedule_meta;
+  calvin::TransactionMeta<WorkloadType> txn_meta;
 };
 } // namespace star

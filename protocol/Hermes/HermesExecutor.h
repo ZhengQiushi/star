@@ -14,6 +14,7 @@
 #include "protocol/Hermes/Hermes.h"
 #include "protocol/Hermes/HermesHelper.h"
 #include "protocol/Hermes/HermesMessage.h"
+#include "protocol/Hermes/HermesMeta.h"
 
 #include <chrono>
 #include <thread>
@@ -42,17 +43,19 @@ public:
 
   HermesExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                  const ContextType &context,
-                 std::vector<std::unique_ptr<TransactionType>> &transactions,
+                //  std::vector<std::unique_ptr<TransactionType>> &transactions,
                  std::vector<StorageType> &storages,
                  std::atomic<uint32_t> &lock_manager_status,
                  std::atomic<uint32_t> &worker_status,
                  std::atomic<uint32_t> &n_complete_workers,
-                 std::atomic<uint32_t> &n_started_workers)
+                 std::atomic<uint32_t> &n_started_workers,
+                 hermes::TransactionMeta<WorkloadType>& txn_meta)
       : Worker(coordinator_id, id), db(db), context(context),
         transactions(transactions), storages(storages),
         lock_manager_status(lock_manager_status), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        txn_meta(txn_meta),
         partitioner(coordinator_id, context.coordinator_num,
                     HermesHelper::string_to_vint(context.replica_group), db),
         workload(coordinator_id, worker_status, db, random, partitioner, start_time),
@@ -126,28 +129,31 @@ public:
       } while (status != ExecutorStatus::Analysis);
 
       n_started_workers.fetch_add(1);
-      if (id < n_lock_manager) {
-        router_recv_txn_num = 0;
-        // 准备transaction
-        while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
-          process_request();
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
-
-        auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count();
-        VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
-                << router_time
-                << " milliseconds.";
-
-        if(cur_time > 40)
-        router_percentile.add(router_time);
-        
-        unpack_route_transaction(); // 
-
-        VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << "  unpack_route_transaction : " << transactions.size();
+      router_recv_txn_num = 0;
+      // 准备transaction
+      while(!is_router_stopped(router_recv_txn_num)){ //  &&router_transactions_queue.size() < context.batch_size 
+        process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
+
+      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin)
+                    .count();
+      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
+              << router_time
+              << " milliseconds.";
+
+      if(cur_time > 40)
+      router_percentile.add(router_time);
+      
+      unpack_route_transaction(); // 
+      txn_meta.transactions_prepared.fetch_add(1);
+      while(txn_meta.transactions_prepared.load() < context.worker_num){
+        std::this_thread::yield();
+        process_request();
+      }
+
+      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << "  unpack_route_transaction : " << txn_meta.s_transactions_queue.size();
 
       n_complete_workers.fetch_add(1);
 
@@ -172,16 +178,7 @@ public:
       n_started_workers.fetch_add(1);
       // work as lock manager
       if (id < n_lock_manager) {
-        // schedule transactions
         schedule_transactions();
-
-        // for(int r = 0; r < router_recv_txn_num; r ++ ){
-        //   // 发回原地...
-        //   size_t generator_id = context.coordinator_num;
-        //   // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
-        //   ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
-        //   flush_messages();
-        // }
       } else {
         // work as executor
         run_transactions();
@@ -216,6 +213,10 @@ public:
           break;
         }
         process_request();
+      }
+
+      if(id == 0){
+        txn_meta.clear();
       }
     }
   }
@@ -272,17 +273,7 @@ public:
 
 
   void unpack_route_transaction(){
-    int s = router_transactions_queue.size();
-    DCHECK(s == router_recv_txn_num);
-    transactions.clear();
-
-    // while(s -- > 0){
-    //   simpleTransaction simple_txn = router_transactions_queue.front();
-    //   // txn_replica_involved(&simple_txn, context.coordinator_id);
-    //   router_transactions_queue.pop_front();
     while(true){
-      // size_ -- ;
-      // bool is_ok = false;
       bool success = false;
       simpleTransaction simple_txn = 
         router_transactions_queue.pop_no_wait(success);
@@ -290,15 +281,17 @@ public:
 
       n_network_size.fetch_add(simple_txn.size);
       // router_planning(&simple_txn);
-      size_t t_id = transactions.size();
-      auto p = workload.unpack_transaction(context, 0, storages[t_id], simple_txn);
-      p->set_id(t_id);
+      size_t txn_id = simple_txn.idx_;
+      auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+      p->set_id(txn_id);
       p->on_replica_id = simple_txn.on_replica_id;      
       p->router_coordinator_id = simple_txn.destination_coordinator;
       p->is_real_distributed = simple_txn.is_real_distributed;
-      prepare_transaction(*p);
-      // LOG(INFO) << *(int*) p->readSet[0].get_key() << " " << *(int*) p->readSet[1].get_key();
-      transactions.push_back(std::move(p));
+      if(p->on_replica_id != -1){
+        prepare_transaction(*p);
+      }
+      // LOG(INFO) << txn_id;
+      txn_meta.s_transactions_queue[txn_id] = std::move(p);
     }
   }
 
@@ -408,70 +401,15 @@ public:
           VLOG(DEBUG_V8) << "ASYNC ROUTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size() << " on replica " << replica_id;
         } 
         txn.pendingResponses++;
-
-        // txn.asyncPendingResponses++;
-        // this->async_pend_num.fetch_add(1);
       }
-
-
-    // //   readKey.set_secondary_coordinator_id(secondary_coordi_id);
-    //   VLOG(DEBUG_V12) << *(int*) key << " " << master_coordi_id; 
-    
-
-    
-
-    //   if(coordinator_id == target_coordi_id){
-    //     // local, then receive all info away
-    //     if(master_coordi_id == target_coordi_id){
-    //       // key already at local, pass...
-    //     } else {
-    //       // mastership of the key is not at local, wait for transfer/remaster from other nodes
-    //       txn.pendingResponses ++; // wait for transfer
-    //     }
-
-    //     // wait for router
-    //     for(std::size_t c = 0; c < context.coordinator_num; c ++ ){
-    //       if(c == target_coordi_id || c == master_coordi_id){
-    //         continue;
-    //       }
-    //       int32_t sz = MessageFactoryType::transfer_request_router_only_message(*worker->messages[c], 
-    //                                     *table, txn, k, target_coordi_id);
-    //       // txn.pendingResponses ++ ;
-    //       txn.network_size.fetch_add(sz);
-    //     }
-
-    //   } else {
-    //     // remote, then send all info you need 
-    //     if(coordinator_id == master_coordi_id){
-    //       // has mastership of relational key, send key to the target
-    //       bool success = true;
-
-    //       int32_t sz = MessageFactoryType::transfer_request_message(*worker->messages[target_coordi_id], 
-    //                                       db, context, &partitioner,
-    //                                       *table, k, txn, success);
-    //       txn.pendingResponses ++ ;
-    //       txn.network_size.fetch_add(sz);
-    //     } else if(master_coordi_id != target_coordi_id){
-    //       // 不是主副本，但是主副本发生改变 wait master's only router-message to update local router
-    //       // txn.pendingResponses ++ ;
-    //     }
-    //   }
-
     }
 
     txn.message_flusher(id);
 
-    // if(coordinator_id == target_coordi_id){
-    // spin on local & remote read
-    // VLOG(DEBUG_V8) << "WAIT remote" << txn.id << " " << txn.pendingResponses << " " << txn.local_read.load() << " " << txn.remote_read.load();
     while (txn.pendingResponses > 0) {
       // process remote reads for other workers
       txn.remote_request_handler(id);
     }
-    // VLOG(DEBUG_V8) << "WAIT remote" << txn.id << " " << txn.pendingResponses << " " << txn.local_read.load() << " " << txn.remote_read.load();
-
-    // }
-
   }
 
   void schedule_transactions() {
@@ -491,10 +429,16 @@ public:
     int last = 0;
     
     auto begin = std::chrono::steady_clock::now();
+
+    auto& transactions = txn_meta.s_transactions_queue;
+
     int worker_execution_num[20] = {0};
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
       auto& txn = transactions[i];
+      if(txn.get() == nullptr){
+        continue;
+      }
       // LOG(INFO) << i << " : " << *(int*)txn->readSet[0].get_key() << " " << *(int*)txn->readSet[1].get_key() 
       //           << " " << txn->on_replica_id << " " << txn->router_coordinator_id;
       // target replica is not at local
@@ -508,7 +452,16 @@ public:
       auto now = std::chrono::steady_clock::now();
       if(txn->is_real_distributed){
         // do transactions remote
-        transfer_request_messages(*txn);
+        // LOG(INFO) << *(int*)txn->readSet[0].get_key() << " " << *(int*)txn->readSet[1].get_key();
+        do{
+          transfer_request_messages(*txn);
+          if(!txn->abort_lock) break;
+          txn->refresh();
+          process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        }while(1);
+        
+
         distributed_num += 1;
       }
 
@@ -561,7 +514,8 @@ public:
 
           now = std::chrono::steady_clock::now();
           grant_lock = true;
-          std::atomic<uint64_t> &tid = table->search_metadata(key);
+          bool success = false;
+          std::atomic<uint64_t> &tid = table->search_metadata(key, success);
           if (readKey.get_write_lock_bit()) {
             VLOG(DEBUG_V12) << "      " << *(int*)key << " LOCK";
             HermesHelper::write_lock(tid);
@@ -588,12 +542,12 @@ public:
           }
         }
         // only count once
-        if (i % n_lock_manager == id) {
+        if (i % n_lock_manager == id && txn->on_replica_id == 0) {
           n_commit.fetch_add(1);
         }
       } else {
         // only count once
-        if (i % n_lock_manager == id) {
+        if (i % n_lock_manager == id  && txn->on_replica_id == 0) {
           n_abort_no_retry.fetch_add(1);
         }
       }
@@ -714,11 +668,12 @@ public:
       // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
       // flush_messages();
     }
-    LOG(INFO) << "total: " << cnt << " " 
-              << idle_time / cnt  << " "
-              << execution_time / cnt << " "
-              << commit_time / cnt;
-
+    if(cnt > 0){
+      LOG(INFO) << "total: " << cnt << " " 
+                << idle_time / cnt  << " "
+                << execution_time / cnt << " "
+                << commit_time / cnt;
+    }
   }
 
   void setup_execute_handlers(TransactionType &txn) {
@@ -763,7 +718,9 @@ public:
         // }
         txn.local_read.fetch_add(-1);
       } else {
-        DCHECK(false);
+        // DCHECK(false) << *(int*)readKey.get_key() << " " << 
+        //                  "master_coordi : " << readKey.get_master_coordinator_id() << coordinator_id;
+        txn.abort_lock = true;
       }
     };
 
@@ -859,7 +816,7 @@ public:
                                 *messages[message->get_source_node_id()], 
                                 db, context, &partitioner,
                                 // *table,
-                                transactions);
+                                txn_meta.s_transactions_queue);
         }
       }
 
@@ -876,6 +833,8 @@ private:
   std::vector<StorageType> &storages;
   std::atomic<uint32_t> &lock_manager_status, &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+  hermes::TransactionMeta<WorkloadType>& txn_meta;
+
   HermesPartitioner<Workload> partitioner;
   WorkloadType workload;
   std::size_t n_lock_manager, n_workers;

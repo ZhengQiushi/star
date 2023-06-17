@@ -138,20 +138,20 @@ public:
 
                   int idx_offset = dispatcher_id * cur_txn_num;
 
-                  for(size_t j = 0; j < cur_txn_num; j ++ ){
+                  for(int j = 0; j < cur_txn_num; j ++ ){
                     int idx = idx_offset + j;
                     coordinator_send[txns[idx]->destination_coordinator] ++ ;
                     router_request(router_send_txn_cnt, txns[idx]);   
 
                     if(j % context.batch_flush == 0){
-                      for(int i = 0 ; i < context.coordinator_num; i ++ ){
+                      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
                         messages_mutex[i]->lock();
                         flush_message(async_messages, i);
                         messages_mutex[i]->unlock();
                       }
                     }
                   }
-                  for(int i = 0 ; i < context.coordinator_num; i ++ ){
+                  for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
                     messages_mutex[i]->lock();
                     flush_message(async_messages, i);
                     messages_mutex[i]->unlock();
@@ -272,7 +272,7 @@ public:
 
   void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
-    if(transactions_queue_self[dispatcher_id].size() < cur_txn_num * dispatcher_num){
+    if(transactions_queue_self[dispatcher_id].size() < (size_t)cur_txn_num * dispatcher_num){
       DCHECK(false);
     }
     // int cur_txn_num = context.batch_size * context.coordinator_num / dispatcher_num;
@@ -293,7 +293,7 @@ public:
     
     std::vector<int> busy_local(context.coordinator_num, 0);
     int real_distribute_num = 0;
-    for(size_t i = 0; i < cur_txn_num; i ++ ){
+    for(int i = 0; i < cur_txn_num; i ++ ){
       bool success = false;
       std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
       int idx = i + idx_offset;
@@ -315,7 +315,7 @@ public:
     schedule_meta.txn_id.fetch_add(1);
     {
       std::lock_guard<std::mutex> l(schedule_meta.l);
-      for(int i = 0; i < context.coordinator_num; i ++ ){
+      for(size_t i = 0; i < context.coordinator_num; i ++ ){
           busy_[i] += busy_local[i];
       }
     }
@@ -331,7 +331,7 @@ public:
     }
 
     LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
-    while(schedule_meta.txn_id.load() < dispatcher_num){
+    while((int)schedule_meta.txn_id.load() < dispatcher_num){
       auto i = schedule_meta.txn_id.load();
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }

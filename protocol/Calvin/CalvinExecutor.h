@@ -14,6 +14,7 @@
 #include "protocol/Calvin/Calvin.h"
 #include "protocol/Calvin/CalvinHelper.h"
 #include "protocol/Calvin/CalvinMessage.h"
+#include "protocol/Calvin/CalvinMeta.h"
 
 #include <chrono>
 #include <thread>
@@ -42,17 +43,21 @@ public:
 
   CalvinExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                  const ContextType &context,
-                 std::vector<std::unique_ptr<TransactionType>> &transactions,
+                //  std::vector<std::unique_ptr<TransactionType>> &transactions,
                  std::vector<StorageType> &storages,
                  std::atomic<uint32_t> &lock_manager_status,
                  std::atomic<uint32_t> &worker_status,
                  std::atomic<uint32_t> &n_complete_workers,
-                 std::atomic<uint32_t> &n_started_workers)
+                 std::atomic<uint32_t> &n_started_workers,
+                 calvin::TransactionMeta<WorkloadType>& txn_meta
+                 )
       : Worker(coordinator_id, id), db(db), context(context),
-        transactions(transactions), storages(storages),
+        // transactions(transactions), 
+        storages(storages),
         lock_manager_status(lock_manager_status), worker_status(worker_status),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        txn_meta(txn_meta),
         partitioner(coordinator_id, context.coordinator_num,
                     CalvinHelper::string_to_vint(context.replica_group)),
         workload(coordinator_id, worker_status, db, random, partitioner, start_time),
@@ -124,8 +129,6 @@ public:
       need_remote_read_num = 0;
 
       n_started_workers.fetch_add(1);
-      if (id < n_lock_manager) {
-        // my_generate_transactions(); // active // 感觉只要id == 0 进行操作就行了... 
       router_recv_txn_num = 0;
       // 准备transaction
       while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
@@ -143,10 +146,14 @@ public:
         router_percentile.add(router_time);
       
       unpack_route_transaction(); // 
-
-      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << "  unpack_route_transaction : " << transactions.size();
-      
+      txn_meta.transactions_prepared.fetch_add(1);
+      while(txn_meta.transactions_prepared.load() < context.worker_num){
+        std::this_thread::yield();
+        process_request();
       }
+
+      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << "  unpack_route_transaction : " << txn_meta.s_transactions_queue.size();
+      
       n_complete_workers.fetch_add(1);
 
       // wait to Execute
@@ -206,6 +213,10 @@ public:
         process_request();
       }
 
+      if(id == 0){
+        txn_meta.clear();
+      }
+
     }
   }
 
@@ -259,53 +270,29 @@ public:
     message->set_worker_id(id);
   }
 
-  void unpack_route_transaction(){
-    // int s = router_transactions_queue.size();
-    // DCHECK(s == router_recv_txn_num);
-    transactions.clear();
-
-    // while(s -- > 0){
-    //   simpleTransaction simple_txn = router_transactions_queue.front();
-    //   router_transactions_queue.pop_front();
+void unpack_route_transaction(){
     while(true){
-      // size_ -- ;
-      // bool is_ok = false;
       bool success = false;
       simpleTransaction simple_txn = 
         router_transactions_queue.pop_no_wait(success);
       if(!success) break;
-
       n_network_size.fetch_add(simple_txn.size);
-      size_t t_id = transactions.size();
-      auto p = workload.unpack_transaction(context, 0, storages[t_id], simple_txn);
-      p->set_id(t_id);
+
+      uint32_t txn_id = simple_txn.idx_;
+      DCHECK(txn_id < txn_meta.s_transactions_queue.size());
+      {
+        std::lock_guard<std::mutex> l(txn_meta.s_l);
+        txn_meta.s_txn_id_queue.push_no_wait(txn_id);
+      }
+      auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+      // 
+      p->set_id(txn_id);
+      p->on_replica_id = simple_txn.on_replica_id;
       prepare_transaction(*p);
-      // LOG(INFO) << *(int*) p->readSet[0].get_key() << " " << *(int*) p->readSet[1].get_key();
-      transactions.push_back(std::move(p));
+      // 
+      txn_meta.s_transactions_queue[txn_id] = std::move(p);
     }
   }
-
-  void my_generate_transactions() {
-      router_recv_txn_num = 0;
-      // 准备transaction
-      while(!is_router_stopped(router_recv_txn_num)){ //  && router_transactions_queue.size() < context.batch_size 
-        process_request();
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
-
-      // VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
-      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                std::chrono::steady_clock::now() - begin)
-      //                .count()
-      //         << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
-
-      unpack_route_transaction(); // 
-
-      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction : " << transactions.size();
-
-  }
-
 
   void prepare_transaction(TransactionType &txn) {
     /**
@@ -370,6 +357,8 @@ public:
     int last = 0;
     auto begin = std::chrono::steady_clock::now();
 
+    auto& transactions = txn_meta.s_transactions_queue;
+
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
       if (!transactions[i]->abort_no_retry) {
@@ -423,12 +412,14 @@ public:
           skip_num += 1;
         }
         // only count once
-        if (i % n_lock_manager == id) {
+        if (i % n_lock_manager == id && 
+            transactions[i]->on_replica_id == (int)context.coordinator_id) {
           n_commit.fetch_add(1);
         }
       } else {
         // only count once
-        if (i % n_lock_manager == id) {
+        if (i % n_lock_manager == id && 
+            transactions[i]->on_replica_id == (int)context.coordinator_id) {
           n_abort_no_retry.fetch_add(1);
         }
       }
@@ -505,11 +496,12 @@ public:
       // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
       // flush_messages();
     }
-    LOG(INFO) << "total: " << cnt << " " 
-              << idle_time / cnt  << " "
-              << execution_time / cnt << " "
-              << commit_time / cnt;
-
+    if(cnt > 0){
+      LOG(INFO) << "total: " << cnt << " " 
+                << idle_time / cnt  << " "
+                << execution_time / cnt << " "
+                << commit_time / cnt;
+    }
   }
 
   void setup_execute_handlers(TransactionType &txn) {
@@ -632,7 +624,7 @@ public:
         } else {
           messageHandlers[type](messagePiece,
                                 *messages[message->get_source_node_id()], *table,
-                                transactions);
+                                txn_meta.s_transactions_queue);
         }
       }
 
@@ -645,10 +637,12 @@ public:
 private:
   DatabaseType &db;
   const ContextType &context;
-  std::vector<std::unique_ptr<TransactionType>>& transactions;
+  // std::vector<std::unique_ptr<TransactionType>>& transactions;
   std::vector<StorageType> &storages;
   std::atomic<uint32_t> &lock_manager_status, &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
+  calvin::TransactionMeta<WorkloadType>& txn_meta;
+
   CalvinPartitioner partitioner;
   WorkloadType workload;
   std::size_t n_lock_manager, n_workers;

@@ -89,7 +89,7 @@ public:
     }
 
     // LOG(INFO) << cur_timestamp << " " << context.init_time << " TXN = partitionID: " << partitionID << " is_init: " << is_init << " type: " << workload_type << " " << first_key;
-
+    int first_key_index = random.uniform_dist(0, query_size - 1);
     for (auto i = 0u; i < query_size; i++) {
       // read or write
       if (readOnly <= context.readOnlyTransaction) {
@@ -104,7 +104,7 @@ public:
       }
 
       // first key 
-      if(i == 0){
+      if(i == 0){ // first_key_index
         query.Y_KEY[i] = first_key;
         continue;
       }

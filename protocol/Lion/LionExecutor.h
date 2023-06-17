@@ -583,7 +583,7 @@ public:
 
     // while(!cur_trans->empty()){ // 为什么不能这样？ 不是太懂
     // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
-    auto i = 0l;
+    size_t i = 0;
     for(;;) {
       bool success = false;
       if(status == ExecutorStatus::C_PHASE){
@@ -804,11 +804,11 @@ public:
     // for(;;) {
     for (auto x = id; x < cur_queue_size; x += context.worker_num) {
       bool success = false;
-      auto i = txn_meta.c_txn_id_queue.pop_no_wait(success);
+      int i = txn_meta.c_txn_id_queue.pop_no_wait(success);
       if(!success){
         break;
       }
-      if(i >= cur_trans.size() || cur_trans[i].get() == nullptr){
+      if(i >= (int)cur_trans.size() || cur_trans[i].get() == nullptr){
         // DCHECK(false) << i << " " << cur_trans.size();
         continue;
       }

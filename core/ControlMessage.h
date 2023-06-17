@@ -70,6 +70,8 @@ public:
     uint64_t is_distributed = txn.is_distributed;
     uint64_t is_real_distributed = txn.is_real_distributed;
     uint64_t is_transmit_request = txn.is_transmit_request;
+    uint64_t txn_id = txn.idx_;
+
     int on_replica_id = txn.on_replica_id;
     int destination_coordinator  = txn.destination_coordinator;
 
@@ -78,6 +80,7 @@ public:
                       sizeof(is_distributed) + 
                       sizeof(is_real_distributed) + 
                       sizeof(is_transmit_request) + 
+                      sizeof(txn_id) + 
                       sizeof(on_replica_id) + 
                       sizeof(destination_coordinator) + 
                       sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
@@ -87,12 +90,15 @@ public:
 
     Encoder encoder(message.data);
     encoder << message_piece_header;
-    encoder << op << is_distributed << 
-                     is_real_distributed << 
-                     is_transmit_request << 
-                     on_replica_id << 
-                     destination_coordinator << 
-                     txn_size;
+    encoder << op 
+            << is_distributed 
+            << is_real_distributed 
+            << is_transmit_request 
+            << txn_id              
+            << on_replica_id 
+            << destination_coordinator 
+            << txn_size;
+
     for(size_t i = 0 ; i < txn_size; i ++ ){
       uint64_t key = key_[i];
       bool update = update_[i];
@@ -304,6 +310,8 @@ public:
 
     auto stringPiece = inputPiece.toStringPiece();
     uint64_t txn_size, op, is_distributed, is_real_distributed, is_transmit_request;
+    uint64_t txn_id;
+
     int on_replica_id;
     int destination_coordinator;
     simpleTransaction new_router_txn;
@@ -322,6 +330,9 @@ public:
     is_transmit_request = *(uint64_t*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(is_transmit_request));
 
+    txn_id = *(uint64_t*)stringPiece.data();
+    stringPiece.remove_prefix(sizeof(txn_id));
+
     on_replica_id = *(int*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(on_replica_id));
 
@@ -338,6 +349,7 @@ public:
            sizeof(is_distributed) + 
            sizeof(is_real_distributed) + 
            sizeof(is_transmit_request) + 
+           sizeof(txn_id) + 
            sizeof(on_replica_id) + 
            sizeof(destination_coordinator) + 
            sizeof(txn_size) + 
@@ -363,6 +375,7 @@ public:
     new_router_txn.is_distributed = is_distributed;
     new_router_txn.is_real_distributed = is_real_distributed;
     new_router_txn.is_transmit_request = is_transmit_request;
+    new_router_txn.idx_ = txn_id;
     new_router_txn.on_replica_id = on_replica_id;
     new_router_txn.destination_coordinator = destination_coordinator;
     VLOG(DEBUG_V14) << " GET ROUTER " << is_transmit_request << " " << 

@@ -10,6 +10,7 @@
 #include "protocol/Hermes/HermesExecutor.h"
 #include "protocol/Hermes/HermesHelper.h"
 #include "protocol/Hermes/HermesTransaction.h"
+#include "protocol/Hermes/HermesMeta.h"
 
 #include <thread>
 #include <vector>
@@ -35,7 +36,9 @@ public:
                 const ContextType &context, std::atomic<bool> &stopFlag)
       : base_type(coordinator_id, id, context, stopFlag), db(db),
         partitioner(coordinator_id, context.coordinator_num,
-                    HermesHelper::string_to_vint(context.replica_group), db) {
+                    HermesHelper::string_to_vint(context.replica_group), db),
+        schedule_meta(context.coordinator_num, context.batch_size),
+        txn_meta(context.coordinator_num, context.batch_size){
 
     storages.resize(context.batch_size);
     transactions.resize(context.batch_size);// 由manager统一生成txn
@@ -51,7 +54,7 @@ public:
 
         // if(WorkloadType::which_workload == myTestSet::YCSB){
         //   int replica_num = partitioner.replica_num();
-        //   for(int r = 0 ; r < replica_num; r ++ ){
+        //   for(size_t r = 0 ; r < replica_num; r ++ ){
         //     VLOG(DEBUG_V) << "Replica[" << r << "] : ";
         //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
         //       ITable *dest_table = db.find_table(ycsb::ycsb::tableID, i, r);
@@ -132,7 +135,7 @@ public:
     for (;;) {
         // if(WorkloadType::which_workload == myTestSet::YCSB){
         //   int replica_num = partitioner.replica_num();
-        //   for(int r = 0 ; r < replica_num; r ++ ){
+        //   for(size_t r = 0 ; r < replica_num; r ++ ){
         //     VLOG(DEBUG_V8) << "Replica[" << r << "] : ";
 
         //     for(size_t i = 0 ; i < context.partition_num; i ++ ){
@@ -224,5 +227,8 @@ public:
   std::vector<std::shared_ptr<HermesExecutor<WorkloadType>>> workers;
   std::vector<StorageType> storages;
   std::vector<std::unique_ptr<TransactionType>> transactions;
+public:
+  hermes::ScheduleMeta schedule_meta;
+  hermes::TransactionMeta<WorkloadType> txn_meta;
 };
 } // namespace star

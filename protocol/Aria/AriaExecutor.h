@@ -14,6 +14,7 @@
 #include "protocol/Aria/Aria.h"
 #include "protocol/Aria/AriaHelper.h"
 #include "protocol/Aria/AriaMessage.h"
+#include "protocol/Aria/AriaMeta.h"
 
 #include <chrono>
 #include <thread>
@@ -42,19 +43,19 @@ public:
 
   AriaExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context,
-               std::vector<std::unique_ptr<TransactionType>> &transactions,
-               std::vector<StorageType> &storages, std::atomic<uint32_t> &epoch,
+              //  std::vector<std::unique_ptr<TransactionType>> &transactions,
+               std::atomic<uint32_t> &epoch,
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &total_abort,
                std::atomic<uint32_t> &n_complete_workers,
                std::atomic<uint32_t> &n_started_workers,
-               std::atomic<uint32_t> &transactions_prepared)
+               aria::TransactionMeta<WorkloadType>& txn_meta)
       : Worker(coordinator_id, id), db(db), context(context),
-        transactions(transactions), storages(storages), epoch(epoch),
+        epoch(epoch),
         worker_status(worker_status), total_abort(total_abort),
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        transactions_prepared(transactions_prepared),
+        txn_meta(txn_meta),
         partitioner(PartitionerFactory::create_partitioner(
             context.partitioner, coordinator_id, context.coordinator_num)),
         workload(coordinator_id, worker_status, db, random, *partitioner, start_time),
@@ -77,10 +78,6 @@ public:
 
 
   void unpack_route_transaction(){
-    auto n_abort = total_abort.load();
-
-    // erase committed transactions;
-    transactions.erase(transactions.begin() + n_abort, transactions.end());
     // storages.erase(storages.begin() + n_abort, storages.end());
 
     // int size_ = router_transactions_queue.size();
@@ -91,25 +88,22 @@ public:
       simpleTransaction simple_txn = 
         router_transactions_queue.pop_no_wait(success);
       if(!success) break;
-    // int s = router_transactions_queue.size();
-    // DCHECK(s == router_recv_txn_num);
-    // while(s -- > 0){
-    //   simpleTransaction simple_txn = router_transactions_queue.front();
-    //   // txn_replica_involved(&simple_txn, context.coordinator_id);
-    //   router_transactions_queue.pop_front();
-
       n_network_size.fetch_add(simple_txn.size);
       // router_planning(&simple_txn);
-      size_t t_id = transactions.size();
+      size_t txn_id;
+      std::unique_ptr<TransactionType> null_txn(nullptr);
+      {
+        std::lock_guard<std::mutex> l(txn_meta.s_l);
+        txn_id = txn_meta.s_transactions_queue.size();
+        txn_meta.s_transactions_queue.push_back(std::move(null_txn));
+      }
       // storages.push_back(StorageType());
-      auto p = workload.unpack_transaction(context, 0, storages[t_id], simple_txn);
-      p->set_id(t_id);
+      auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+      p->set_id(txn_id);
       p->on_replica_id = simple_txn.on_replica_id;      
       p->router_coordinator_id = simple_txn.destination_coordinator;
       p->is_real_distributed = simple_txn.is_real_distributed;
-      // prepare_transaction(*p);
-      // LOG(INFO) << *(int*) p->readSet[0].get_key() << " " << *(int*) p->readSet[1].get_key();
-      transactions.push_back(std::move(p));
+      txn_meta.s_transactions_queue[txn_id] = std::move(p);
     }
   }
 
@@ -158,30 +152,31 @@ public:
       } while (status != ExecutorStatus::Aria_READ);
 
       n_started_workers.fetch_add(1);
+      
+      VLOG_IF(DEBUG_V, id==0) << "wait for router stop";
 
-      if (id == 0) {
-        router_recv_txn_num = 0;
-        // 准备transaction
-        while(!is_router_stopped(router_recv_txn_num)){
-          process_request();
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
-
-        auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count();
-        VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
-                << router_time
-                << " milliseconds.";
-
-        router_percentile.add(router_time);
-        
-        unpack_route_transaction(); // 
-
-        VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << "  unpack_route_transaction : " << transactions.size();
-        transactions_prepared.store(true);
+      router_recv_txn_num = 0;
+      // 准备transaction
+      while(!is_router_stopped(router_recv_txn_num)){
+        process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-      while(transactions_prepared.load() == false){
+
+      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin)
+                    .count();
+      VLOG_IF(DEBUG_V, id==0) << "Unpack end time: "
+              << router_time
+              << " milliseconds.";
+
+      router_percentile.add(router_time);
+      
+      unpack_route_transaction(); // 
+
+      VLOG_IF(DEBUG_V, id==0) << "cur_time : " << cur_time << " unpack_route_transaction : " << txn_meta.s_transactions_queue.size();
+
+      txn_meta.transactions_prepared.fetch_add(1);
+      while(txn_meta.transactions_prepared.load() < context.worker_num){
         std::this_thread::yield();
         process_request();
       }
@@ -210,9 +205,7 @@ public:
         process_request();
       }
 
-      if(id == 0){
-        transactions_prepared.store(false);
-      }
+
 
       auto execution_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now() - begin)
@@ -247,6 +240,13 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Aria_COMMIT) {
         process_request();
+      }
+
+      if(id == 0){
+        txn_meta.clear();
+        auto n_abort = total_abort.load();
+        // erase committed transactions;
+        txn_meta.s_transactions_queue.erase(txn_meta.s_transactions_queue.begin() + n_abort, txn_meta.s_transactions_queue.end());
       }
 
       auto commit_time =                std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -285,7 +285,8 @@ public:
     std::size_t count = 0;
     
     auto test = std::chrono::steady_clock::now();
-
+    auto& transactions = txn_meta.s_transactions_queue;
+    
     for (auto i = id; i < transactions.size(); i += context.worker_num) {
 
       process_request();
@@ -293,11 +294,9 @@ public:
       // if null, generate a new transaction, on this node.
       // else only reset the query
 
-      if (transactions[i] == nullptr || i >= n_abort) {
+      if (transactions[i] == nullptr) { // || i >= n_abort
         // pass
-        // auto partition_id = get_partition_id();
-        // transactions[i] =
-        //     workload.next_transaction(context, partition_id, storages[i]);
+        continue;
       } else {
         transactions[i]->reset();
       }
@@ -333,7 +332,10 @@ public:
     // reserve
     count = 0;
     for (auto i = id; i < transactions.size(); i += context.worker_num) {
-
+      
+      if (transactions[i] == nullptr) {
+        continue;
+      }
       if (transactions[i]->abort_no_retry) {
         continue;
       }
@@ -501,8 +503,10 @@ public:
 
   void commit_transactions() {
     std::size_t count = 0;
+
+    auto& transactions = txn_meta.s_transactions_queue;
     for (auto i = id; i < transactions.size(); i += context.worker_num) {
-      if (transactions[i]->abort_no_retry) {
+      if (transactions[i] == nullptr || transactions[i]->abort_no_retry) {
         continue;
       }
 
@@ -517,7 +521,7 @@ public:
 
     count = 0;
     for (auto i = id; i < transactions.size(); i += context.worker_num) {
-      if (transactions[i]->abort_no_retry) {
+      if (transactions[i] == nullptr || transactions[i]->abort_no_retry) {
         n_abort_no_retry.fetch_add(1);
         continue;
       }
@@ -530,7 +534,8 @@ public:
 
       if (context.aria_read_only_optmization &&
           transactions[i]->is_read_only()) {
-        n_commit.fetch_add(1);
+        if(transactions[i]->on_replica_id == 0)
+          n_commit.fetch_add(1);
         auto latency =
             std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - transactions[i]->startTime)
@@ -541,13 +546,15 @@ public:
 
       if (transactions[i]->waw) {
         protocol.abort(*transactions[i], messages);
-        n_abort_lock.fetch_add(1);
+        if(transactions[i]->on_replica_id == 0)
+          n_abort_lock.fetch_add(1);
         continue;
       }
 
       if (context.aria_snapshot_isolation) {
         protocol.commit(*transactions[i], messages);
-        n_commit.fetch_add(1);
+        if(transactions[i]->on_replica_id == 0)
+          n_commit.fetch_add(1);
         auto latency =
             std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - transactions[i]->startTime)
@@ -557,7 +564,8 @@ public:
         if (context.aria_reordering_optmization) {
           if (transactions[i]->war == false || transactions[i]->raw == false) {
             protocol.commit(*transactions[i], messages);
-            n_commit.fetch_add(1);
+            if(transactions[i]->on_replica_id == 0)
+              n_commit.fetch_add(1);
             auto latency =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() -
@@ -565,16 +573,19 @@ public:
                     .count();
             percentile.add(latency);
           } else {
-            n_abort_lock.fetch_add(1);
+            if(transactions[i]->on_replica_id == 0)
+              n_abort_lock.fetch_add(1);
             protocol.abort(*transactions[i], messages);
           }
         } else {
           if (transactions[i]->raw) {
-            n_abort_lock.fetch_add(1);
+            if(transactions[i]->on_replica_id == 0)
+              n_abort_lock.fetch_add(1);
             protocol.abort(*transactions[i], messages);
           } else {
             protocol.commit(*transactions[i], messages);
-            n_commit.fetch_add(1);
+            if(transactions[i]->on_replica_id == 0)
+              n_commit.fetch_add(1);
             auto latency =
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() -
@@ -716,7 +727,7 @@ public:
         } else {
           messageHandlers[type](messagePiece,
                                 *messages[message->get_source_node_id()], *table,
-                                transactions);
+                                txn_meta.s_transactions_queue);
         }
       }
 
@@ -729,11 +740,9 @@ public:
 private:
   DatabaseType &db;
   const ContextType &context;
-  std::vector<std::unique_ptr<TransactionType>> &transactions;
-  std::vector<StorageType> &storages;
   std::atomic<uint32_t> &epoch, &worker_status, &total_abort;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
-  std::atomic<uint32_t> &transactions_prepared;
+  aria::TransactionMeta<WorkloadType>& txn_meta;
   std::unique_ptr<Partitioner> partitioner;
   WorkloadType workload;
   RandomType random;

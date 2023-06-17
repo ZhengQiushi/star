@@ -327,5 +327,8 @@ public:
   std::vector<bool> active_coordinators;
   Operation operation; // never used
   std::vector<CalvinRWKey> readSet, writeSet;
+
+  //
+  int on_replica_id;
 };
 } // namespace star

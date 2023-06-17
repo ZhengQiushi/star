@@ -62,6 +62,7 @@
 #include "protocol/Calvin/CalvinManager.h"
 #include "protocol/Calvin/CalvinTransaction.h"
 #include "protocol/Calvin/CalvinGenerator.h"
+#include "protocol/Calvin/CalvinMeta.h"
 
 #include "protocol/Hermes/Hermes.h"
 #include "protocol/Hermes/HermesExecutor.h"
@@ -233,14 +234,6 @@ public:
             manager->skip_s_phase,
             manager->transactions_prepared,
             manager->txn_meta
-            // manager->s_transactions_queue,
-            // manager->c_transactions_queue,
-            // manager->s_l,
-            // manager->c_l,
-            // manager->router_transactions_queue,
-            // manager->s_txn_id_queue,
-            // manager->c_txn_id_queue,
-            // manager->storages
             )); // , manager->recorder_status // recorder->data_pack_map
       }
       // 
@@ -364,11 +357,13 @@ public:
 
         auto w = std::make_shared<CalvinExecutor<WorkloadType>>(
             coordinator_id, i, db, context, 
-            manager->transactions,
+            // manager->transactions,
             manager->storages, 
             manager->lock_manager_status,
             manager->worker_status, manager->n_completed_workers,
-            manager->n_started_workers);
+            manager->n_started_workers,
+            manager->txn_meta
+            );
         workers.push_back(w);
         manager->add_worker(w);
         all_executors.push_back(w.get());
@@ -399,10 +394,14 @@ public:
       for (auto i = 0u; i < context.worker_num; i++) {
 
         auto w = std::make_shared<HermesExecutor<WorkloadType>>(
-            coordinator_id, i, db, context, manager->transactions,
-            manager->storages, manager->lock_manager_status,
+            coordinator_id, i, db, context, 
+            // manager->transactions,
+            manager->storages, 
+            manager->lock_manager_status,
             manager->worker_status, manager->n_completed_workers,
-            manager->n_started_workers);
+            manager->n_started_workers,
+            manager->txn_meta
+            );
         workers.push_back(w);
         manager->add_worker(w);
         all_executors.push_back(w.get());
@@ -429,10 +428,11 @@ public:
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<AriaExecutor<WorkloadType>>(
-            coordinator_id, i, db, context, manager->transactions,
-            manager->storages, manager->epoch, manager->worker_status,
+            coordinator_id, i, db, context, 
+            manager->epoch, manager->worker_status,
             manager->total_abort, manager->n_completed_workers,
-            manager->n_started_workers, manager->transactions_prepared));
+            manager->n_started_workers, 
+            manager->txn_meta));
       }
 
       workers.push_back(manager);
@@ -689,7 +689,8 @@ public:
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::CalvinGenerator<WorkloadType, Calvin<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->schedule_meta));
       }
       
       // push manager to workers
@@ -709,8 +710,11 @@ public:
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<group_commit::HermesGenerator<WorkloadType, Hermes<DatabaseType>>>(
-              coordinator_id, i, db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+              coordinator_id, i, db, context, 
+              manager->worker_status,
+              manager->n_completed_workers, 
+              manager->n_started_workers,
+              manager->schedule_meta));
       }
       // push manager to workers
       workers.push_back(manager);
@@ -732,8 +736,7 @@ public:
         workers.push_back(std::make_shared<group_commit::AriaGenerator<WorkloadType, Aria<DatabaseType>>>(
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers,
-              manager->is_full_signal,
-              manager->schedule_done));
+              manager->schedule_meta));
       }
 
       workers.push_back(manager);

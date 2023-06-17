@@ -145,20 +145,20 @@ public:
 
                   int idx_offset = dispatcher_id * cur_txn_num;
 
-                  for(size_t j = 0; j < cur_txn_num; j ++ ){
+                  for(int j = 0; j < cur_txn_num; j ++ ){
                     int idx = idx_offset + j;
                     coordinator_send[txns[idx]->destination_coordinator] ++ ;
                     router_request(router_send_txn_cnt, txns[idx]);   
 
                     if(j % context.batch_flush == 0){
-                      for(int i = 0 ; i < context.coordinator_num; i ++ ){
+                      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
                         messages_mutex[i]->lock();
                         flush_message(async_messages, i);
                         messages_mutex[i]->unlock();
                       }
                     }
                   }
-                  for(int i = 0 ; i < context.coordinator_num; i ++ ){
+                  for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
                     messages_mutex[i]->lock();
                     flush_message(async_messages, i);
                     messages_mutex[i]->unlock();
@@ -328,6 +328,7 @@ public:
           }
           max_node = coordi_nums_[random_coord_id];
         }
+        max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
       } 
 
 
@@ -336,7 +337,7 @@ public:
       t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
       // if(t->is_real_distributed){
       //   std::string debug = "";
-      //   for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       //     debug += std::to_string(txns_coord_cost_[t->idx_][i]) + " ";
       //   }
       //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
@@ -411,7 +412,7 @@ public:
   }
   void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
-    if(transactions_queue_self[dispatcher_id].size() < cur_txn_num * dispatcher_num){
+    if(transactions_queue_self[dispatcher_id].size() < (size_t)cur_txn_num * dispatcher_num){
       DCHECK(false);
     }
     // int cur_txn_num = context.batch_size * context.coordinator_num / dispatcher_num;
@@ -433,7 +434,7 @@ public:
     std::vector<int> busy_local(context.coordinator_num, 0);
     int real_distribute_num = 0;
 
-    for(size_t i = 0; i < cur_txn_num; i ++ ){
+    for(int i = 0; i < cur_txn_num; i ++ ){
       bool success = false;
       std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
       int idx = i + idx_offset;
@@ -462,15 +463,29 @@ public:
       }
 
       // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
-      if(txn->is_distributed){ 
-        // static-distribute
-        // std::unordered_map<int, int> result;
-        txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
-      } else {
-        DCHECK(txn->is_distributed == 0);
+
+      txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
+      if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
         pure_single_txn_cnt += 1;
-        txn->destination_coordinator = txn->partition_id % context.coordinator_num;
-      } 
+      } else {
+        txn->is_distributed = true;
+      }
+      
+      // txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
+      // if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
+      //   pure_single_txn_cnt += 1;
+      // } 
+      // txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
+
+      // if(txn->is_distributed){ 
+      //   // static-distribute
+      //   // std::unordered_map<int, int> result;
+        
+      // } else {
+      //   DCHECK(txn->is_distributed == 0);
+      //   pure_single_txn_cnt += 1;
+      //   // txn->destination_coordinator = txn->partition_id % context.coordinator_num;
+      // } 
 
       if(txn->is_real_distributed){
         real_distribute_num += 1;
@@ -481,7 +496,7 @@ public:
     schedule_meta.txn_id.fetch_add(1);
     {
       std::lock_guard<std::mutex> l(schedule_meta.l);
-      for(int i = 0; i < context.coordinator_num; i ++ ){
+      for(size_t i = 0; i < context.coordinator_num; i ++ ){
           busy_[i] += busy_local[i];
       }
     }
@@ -495,7 +510,7 @@ public:
     if(real_distribute_num > 0){
       LOG(INFO) << "real_distribute_num = " << real_distribute_num;
     }
-    while(schedule_meta.txn_id.load() < dispatcher_num){
+    while((int)schedule_meta.txn_id.load() < dispatcher_num){
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 
@@ -507,7 +522,7 @@ public:
 
     if(dispatcher_id == 0){
     
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
     }
     if(cur_val > threshold && context.random_router == 0){ 
@@ -562,6 +577,7 @@ public:
             if(--overload_node[t->destination_coordinator] <= 0){
               overload_node.erase(t->destination_coordinator);
             }
+            t->is_distributed = true;
             // add dest busy
             t->is_real_distributed = true;
             t->destination_coordinator = idle_coord_id;
@@ -584,6 +600,10 @@ public:
       } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
     }
 
+    LOG(INFO) << " after: ";
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
+    }
 
     schedule_meta.reorder_done.store(true);
     }

@@ -1291,7 +1291,7 @@ namespace star
         long long cal_load_distribute(int aver_val, 
                                 std::map<int32_t, int32_t>& busy_){
             int cur_val = 0;
-            for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
             // 
             cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
             }

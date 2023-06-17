@@ -10,6 +10,7 @@
 #include "protocol/Aria/AriaExecutor.h"
 #include "protocol/Aria/AriaHelper.h"
 #include "protocol/Aria/AriaTransaction.h"
+#include "protocol/Aria/AriaMeta.h"
 
 #include <atomic>
 #include <thread>
@@ -34,13 +35,12 @@ public:
 
   AriaManager(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
               const ContextType &context, std::atomic<bool> &stopFlag)
-      : base_type(coordinator_id, id, context, stopFlag), db(db), epoch(0) {
+      : base_type(coordinator_id, id, context, stopFlag), db(db), epoch(0),
+        schedule_meta(context.coordinator_num, context.batch_size),
+        txn_meta(context.coordinator_num, context.batch_size) {
 
     storages.resize(context.batch_size * 5);
     transactions.resize(context.batch_size);
-    transactions_prepared.store(false);
-    is_full_signal.store(false);
-    schedule_done.store(false);
   }
 
   void coordinator_start() override {
@@ -113,17 +113,21 @@ public:
 
       n_started_workers.store(0);
       n_completed_workers.store(0);
+      LOG(INFO) << "Aria_READ";
       set_worker_status(ExecutorStatus::Aria_READ);
       wait_all_workers_start();
       wait_all_workers_finish();
       broadcast_stop();
+      LOG(INFO) << "broadcast_stop";
       wait4_stop(n_coordinators - 1);
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
       send_ack();
+      LOG(INFO) << "send_ack";
 
       status = wait4_signal();
+      LOG(INFO) << "Aria_COMMIT";
       DCHECK(status == ExecutorStatus::Aria_COMMIT);
       n_started_workers.store(0);
       n_completed_workers.store(0);
@@ -131,11 +135,13 @@ public:
       wait_all_workers_start();
       wait_all_workers_finish();
       broadcast_stop();
+      LOG(INFO) << "broadcast_stop";
       wait4_stop(n_coordinators - 1);
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
       send_ack();
+      LOG(INFO) << "send_ack";
     }
   }
 
@@ -160,9 +166,8 @@ public:
   std::vector<std::unique_ptr<TransactionType>> transactions;
   std::vector<std::shared_ptr<simpleTransaction>> txns;
   std::atomic<uint32_t> total_abort;
-  std::atomic<uint32_t> transactions_prepared;
-
-  std::atomic<uint32_t> is_full_signal;
-  std::atomic<uint32_t> schedule_done;
+public:
+  aria::ScheduleMeta schedule_meta;
+  aria::TransactionMeta<WorkloadType> txn_meta;
 };
 } // namespace star

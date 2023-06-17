@@ -97,26 +97,6 @@ void unpack_route_transaction(){
     }
   }
 
-
-  // void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
-  //                               ShareQueue<simpleTransaction>& router_transactions_queue_,
-  //                               std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_,
-  //                               int router_recv_txn_num, 
-  //                               int router_recv_txn_num_indeed){
-
-    
-  //   while(!router_transactions_queue_.empty() && router_recv_txn_num > router_recv_txn_num_indeed){
-  //     simpleTransaction simple_txn = router_transactions_queue_.front();
-  //     router_transactions_queue_.pop_front();
-      
-  //     n_network_size.fetch_add(simple_txn.size);
-
-  //     auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
-  //     r_transactions_queue_.push_back(std::move(p));
-  //     router_recv_txn_num -- ;
-  //   }
-  // }
-
     void run_transaction(std::vector<std::unique_ptr<TransactionType>>& cur_txns,
                           ShareQueue<int>& txn_id_queue) {
     /**

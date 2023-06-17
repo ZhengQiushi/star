@@ -15,6 +15,9 @@ namespace star {
 
 class RouterValue {
 public:
+  RouterValue(){}
+  ~RouterValue(){}
+  
   // dynamic coordinator id
   void set_dynamic_coordinator_id(uint64_t dynamic_coordinator_id) {
     DCHECK(dynamic_coordinator_id < (1 << 8));

@@ -54,6 +54,45 @@ public:
   virtual void clear() = 0;
 };
 
+
+class ImyRouterTable {
+public:
+  virtual ~ImyRouterTable() = default;
+  virtual void update(const void *key, const void *value) = 0;
+  virtual void insert(const void *key, const void *value) = 0;
+  virtual void *search_value(const void *key) = 0;
+};
+
+template <class KeyType, class ValueType>
+class myRouterTable: public ImyRouterTable {
+public:
+  myRouterTable(std::size_t N, std::size_t tableID, std::size_t partitionID)
+      : tableID_(tableID), partitionID_(partitionID) {
+        val = std::make_unique<ValueType[]>(N);
+  }
+  virtual ~myRouterTable() override = default;
+
+  void update(const void *key, const void *value){
+    const auto &k = *static_cast<const KeyType *>(key);
+    const auto &v = *static_cast<const ValueType *>(value);
+    val[*(int*)key] = v;
+  }
+  void insert(const void *key, const void *value){
+    update(key, value);
+  }
+  void *search_value(const void *key) override {
+    const auto &k = *static_cast<const KeyType *>(key);
+    return &val[*(int*)key];
+  }
+  // myRouterTable
+private:
+  // HashMap<N, KeyType, std::tuple<MetaDataType, ValueType>> map_;
+  std::unique_ptr<ValueType[]> val;
+  std::size_t tableID_;
+  std::size_t partitionID_;
+};
+
+
 template <std::size_t N, class KeyType, class ValueType>
 class Table : public ITable {
 public:

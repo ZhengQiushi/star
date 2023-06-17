@@ -35,7 +35,7 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
+  ImyRouterTable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
     // 找某个节点的路由表
     // DCHECK(table_id < tbl_vecs.size());
     // DCHECK(coordinator_id < tbl_vecs[table_id].size());
@@ -49,7 +49,7 @@ public:
      * 
      */
     DCHECK(isolation_replica == false);
-    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    ImyRouterTable* tab = find_router_table(table_id); // , coordinator_id);
     return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
   }
 
@@ -59,7 +59,7 @@ public:
      * 
      */
     DCHECK(isolation_replica == false);
-    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    ImyRouterTable* tab = find_router_table(table_id); // , coordinator_id);
     return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
   }
   // 
@@ -70,7 +70,7 @@ public:
     return tbl_vecs_[replica_id][table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id, int replica_id) { // , std::size_t coordinator_id
+  ImyRouterTable *find_router_table(std::size_t table_id, int replica_id) { // , std::size_t coordinator_id
     // 找某个节点的路由表
     // DCHECK(table_id < tbl_vecs.size());
     // DCHECK(coordinator_id < tbl_vecs[table_id].size());
@@ -84,7 +84,7 @@ public:
      * 
      */
     DCHECK(isolation_replica == true && replica_id != -1);
-    ITable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
+    ImyRouterTable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
     return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
   }
 
@@ -94,7 +94,7 @@ public:
      * 
      */
     DCHECK(isolation_replica == true && replica_id != -1);
-    ITable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
+    ImyRouterTable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
     return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
   }
 
@@ -128,7 +128,7 @@ public:
           int router_coordinator = (partitionID + 1) % context.coordinator_num;
           size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
 
-          ITable *table_router = tbl_vecs_router[0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
+          ImyRouterTable *table_router = tbl_vecs_router[0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
 
           RouterValue router;
           router.set_dynamic_coordinator_id(router_coordinator);
@@ -168,7 +168,7 @@ public:
 
           int router_coordinator = (partitionID + replica_id) % context.coordinator_num;
 
-          ITable *table_router = tbl_vecs_router_[replica_id][0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
+          ImyRouterTable *table_router = tbl_vecs_router_[replica_id][0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
 
           RouterValue router;
           router.set_dynamic_coordinator_id(router_coordinator);
@@ -204,7 +204,7 @@ public:
           ycsb::key key(i);
 
           int router_coordinator = partitionID % context.coordinator_num;
-          ITable *table_router = tbl_vecs_router[0];
+          ImyRouterTable *table_router = tbl_vecs_router[0];
 
           RouterValue router;
           router.set_dynamic_coordinator_id(0);
@@ -339,7 +339,9 @@ public:
     
     // initalize_router_table
     // quick look-up for certain-key on which node, pre-allocate space
-    tbl_ycsb_vec_router = (std::make_unique<Table<100860, ycsb::key, RouterValue>>(ycsbTableID, 0));
+    const size_t sz = context.partition_num * context.keysPerPartition * context.coordinator_num;
+
+    tbl_ycsb_vec_router = (std::make_unique<myRouterTable<ycsb::key, RouterValue>>(sz,ycsbTableID, 0));
     tbl_vecs_router.resize(1);
     tbl_vecs_router[0] = tbl_ycsb_vec_router.get();
 
@@ -372,7 +374,7 @@ public:
                   partitionNum, threadsNum, partitioner.get(), i);
       }
       for(size_t i = 0; i < replica_num; i ++ ){
-        tbl_ycsb_vec_router_[i] = (std::make_unique<Table<100860, ycsb::key, RouterValue>>(ycsbTableID, 0));
+        tbl_ycsb_vec_router_[i] = (std::make_unique<myRouterTable<ycsb::key, RouterValue>>(sz, ycsbTableID, 0));
 
         std::vector<ITable *> tt;
         tbl_vecs_router_[i].resize(1);
@@ -477,19 +479,20 @@ private:
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs; // [table_id][tbl_ycsb_vec]
-  std::vector<ITable *> tbl_vecs_router;
+  std::vector<ImyRouterTable *> tbl_vecs_router;
   
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec; // partition -> table
-  std::unique_ptr<ITable> tbl_ycsb_vec_router; // table_id, coordinator_id
+  std::unique_ptr<ImyRouterTable> tbl_ycsb_vec_router; // table_id, coordinator_id
                                                             // key
                                                             // 
+
 
   bool isolation_replica;
 
   std::vector<std::vector<ITable *>> tbl_vecs_[2]; // [table_id][tbl_ycsb_vec]
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_[2]; // partition -> table
-  std::vector<ITable *> tbl_vecs_router_[2];
-  std::unique_ptr<ITable> tbl_ycsb_vec_router_[2]; // table_id, coordinator_id
+  std::vector<ImyRouterTable *> tbl_vecs_router_[2];
+  std::unique_ptr<ImyRouterTable> tbl_ycsb_vec_router_[2]; // table_id, coordinator_id
 
   std::size_t coordinator_id; // = context.coordinator_id;
   std::size_t partitionNum; // = context.partition_num;

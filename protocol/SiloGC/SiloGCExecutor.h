@@ -64,35 +64,24 @@ public:
   }
 
 void unpack_route_transaction(){
-
-    // int size_ = router_transactions_queue.size();
-    // while(size_ > 0){
-    //   size_ -- ;
-    //   // bool is_ok = false;
-    //   simpleTransaction simple_txn = router_transactions_queue.front();
-    //   router_transactions_queue.pop_front();
-    // int size_ = router_transactions_queue.size();
     while(true){
-      // size_ -- ;
-      // bool is_ok = false;
       bool success = false;
       simpleTransaction simple_txn = 
         router_transactions_queue.pop_no_wait(success);
       if(!success) break;
-      // DCHECK(is_ok == true);
       
       n_network_size.fetch_add(simple_txn.size);
 
       uint32_t txn_id;
-      std::unique_ptr<TransactionType> null_txn(nullptr);
-        {
-          std::lock_guard<std::mutex> l(txn_meta.s_l);
-          txn_id = txn_meta.s_transactions_queue.size();
-          txn_meta.s_transactions_queue.push_back(std::move(null_txn));
-          txn_meta.s_txn_id_queue.push_no_wait(txn_id);
-        }
-        auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
-        txn_meta.s_transactions_queue[txn_id] = std::move(p);
+      {
+        std::unique_ptr<TransactionType> null_txn(nullptr);
+        std::lock_guard<std::mutex> l(txn_meta.s_l);
+        txn_id = txn_meta.s_transactions_queue.size();
+        txn_meta.s_transactions_queue.push_back(std::move(null_txn));
+        txn_meta.s_txn_id_queue.push_no_wait(txn_id);
+      }
+      auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id],simple_txn);
+      txn_meta.s_transactions_queue[txn_id] = std::move(p);
 
     }
   }

@@ -94,6 +94,9 @@ struct simpleTransaction {
   uint64_t destination_coordinator;
   int execution_cost;
   uint64_t access_frequency;
+
+  int replica_heavy_node;
+  int replica_heavy_cnt;
 };
 
 struct ExecutionStep {

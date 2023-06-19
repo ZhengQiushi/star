@@ -47,7 +47,7 @@ public:
   void coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     while (!stopFlag.load()) {
 
@@ -130,7 +130,7 @@ public:
   void non_coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     for (;;) {
         // if(WorkloadType::which_workload == myTestSet::YCSB){

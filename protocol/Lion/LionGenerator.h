@@ -244,7 +244,8 @@ public:
 
   void txn_nodes_involved(simpleTransaction* t, bool is_dynamic, 
                           std::vector<std::vector<int>>& txns_coord_cost_,
-                          std::vector<int>& busy_local) {
+                          std::vector<int>& busy_local,
+                          std::vector<int>& replicate_busy_local) {
     
       std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
       std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
@@ -292,6 +293,9 @@ public:
       int max_cnt = INT_MIN;
       int max_node = -1;
 
+      int replica_most_cnt = INT_MIN;
+      int replica_max_node = -1;
+
       for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
 
@@ -313,21 +317,20 @@ public:
           max_node = cur_c_id;
           max_cnt = cur_score;
         }
+
+        if(cnt_secondary > replica_most_cnt){
+          replica_max_node = cur_c_id;
+          replica_most_cnt = cnt_secondary;
+        }
+
         txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+        replicate_busy_local[cur_c_id] += cnt_secondary;
       }
 
 
       if(context.random_router > 0){
         // 
-        int coords_num = (int)coordi_nums_.size();
-        size_t random_value = random.uniform_dist(0, 100);
-        if(random_value > context.random_router){
-          size_t random_coord_id = random.uniform_dist(0, coords_num - 1);
-          if(random_coord_id > context.coordinator_num){
-            VLOG(DEBUG_V8) << "bad  " << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << coordi_nums_[random_coord_id] << " " << from_nodes_id[coordi_nums_[random_coord_id]];
-          }
-          max_node = coordi_nums_[random_coord_id];
-        }
+        // size_t random_value = random.uniform_dist(0, 9);
         max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
       } 
 
@@ -335,6 +338,8 @@ public:
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
       t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
+
+      t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){
       //   std::string debug = "";
       //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
@@ -410,6 +415,8 @@ public:
     }
     return std::make_pair(idle_coord_id, min_cost);
   }
+
+  
   void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
     if(transactions_queue_self[dispatcher_id].size() < (size_t)cur_txn_num * dispatcher_num){
@@ -418,9 +425,10 @@ public:
     // int cur_txn_num = context.batch_size * context.coordinator_num / dispatcher_num;
     int idx_offset = dispatcher_id * cur_txn_num;
 
-    auto & txns            = schedule_meta.node_txns;
-    auto & busy_           = schedule_meta.node_busy;
-    auto & txns_coord_cost = schedule_meta.txns_coord_cost;
+    auto & txns              = schedule_meta.node_txns;
+    auto & busy_             = schedule_meta.node_busy;
+    auto & node_replica_busy = schedule_meta.node_replica_busy;
+    auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
     
     auto staart = std::chrono::steady_clock::now();
 
@@ -432,6 +440,7 @@ public:
     LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<int> busy_local(context.coordinator_num, 0);
+    std::vector<int> replicate_busy_local(context.coordinator_num, 0);
     int real_distribute_num = 0;
 
     for(int i = 0; i < cur_txn_num; i ++ ){
@@ -462,30 +471,30 @@ public:
 
       }
 
-      // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
+      txn_nodes_involved(txn.get(), true, txns_coord_cost, 
+                         busy_local, 
+                         replicate_busy_local);
 
-      txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
       if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
         pure_single_txn_cnt += 1;
       } else {
         txn->is_distributed = true;
       }
-      
-      // txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
-      // if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
-      //   pure_single_txn_cnt += 1;
-      // } 
-      // txn_nodes_involved(txn.get(), true, txns_coord_cost, busy_local);
 
       // if(txn->is_distributed){ 
       //   // static-distribute
       //   // std::unordered_map<int, int> result;
         
+      //   txn_nodes_involved(txn.get(), true, txns_coord_cost, 
+      //                     busy_local, 
+      //                     replicate_busy_local);
+
       // } else {
       //   DCHECK(txn->is_distributed == 0);
       //   pure_single_txn_cnt += 1;
-      //   // txn->destination_coordinator = txn->partition_id % context.coordinator_num;
+      //   txn->destination_coordinator = txn->partition_id % context.coordinator_num;
       // } 
+
 
       if(txn->is_real_distributed){
         real_distribute_num += 1;
@@ -498,6 +507,7 @@ public:
       std::lock_guard<std::mutex> l(schedule_meta.l);
       for(size_t i = 0; i < context.coordinator_num; i ++ ){
           busy_[i] += busy_local[i];
+          node_replica_busy[i] += replicate_busy_local[i];
       }
     }
 
@@ -520,12 +530,59 @@ public:
     int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
     long long cur_val = cal_load_distribute(aver_val, busy_);
 
+
+    long long replica_threshold = 200 * 200 * context.keysPerPartition * context.keysPerPartition;
+    int replica_aver_val = context.keysPerPartition * cur_txn_num * dispatcher_num / context.coordinator_num;
+    long long replica_cur_val = cal_load_distribute(replica_aver_val, node_replica_busy);
+
+
     if(dispatcher_id == 0){
-    
+
+    LOG(INFO) << "busy: ";
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
     }
+    LOG(INFO) << "replicate_busy: ";
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
+    }
+
     if(cur_val > threshold && context.random_router == 0){ 
+      balance_master(aver_val, threshold);
+    }
+
+    if(replica_cur_val > replica_threshold && context.random_router == 0){
+      // balance_replica(node_replica_busy, replica_cur_val);
+    }
+
+    LOG(INFO) << " after: ";
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
+    }
+
+    schedule_meta.reorder_done.store(true);
+    }
+
+
+    while(schedule_meta.reorder_done.load() == false){
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+    }
+    cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - staart)
+                 .count() * 1.0 / 1000 ;
+    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
+
+  }
+
+
+  void balance_master(long long aver_val, 
+                      long long threshold){
+
+      auto & txns              = schedule_meta.node_txns;
+      auto & busy              = schedule_meta.node_busy;
+      auto & node_replica_busy = schedule_meta.node_replica_busy;
+      auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
+
       std::priority_queue<std::shared_ptr<simpleTransaction>, 
                         std::vector<std::shared_ptr<simpleTransaction>>, 
                         cmp> q_;
@@ -547,15 +604,8 @@ public:
           std::unordered_map<size_t, int> overload_node;
           std::unordered_map<size_t, int> idle_node;
 
-          for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
-            if((long long) (busy_[j] - aver_val) * (busy_[j] - aver_val) > threshold){
-              if((busy_[j] - aver_val) > 0){
-                overload_node[j] = busy_[j] - aver_val;
-              } else {
-                idle_node[j] = aver_val - busy_[j];
-              } 
-            }
-          }
+          find_imbalanced_node(overload_node, idle_node, 
+                               busy, aver_val, threshold);
           if(overload_node.size() == 0 || idle_node.size() == 0){
             is_ok = false;
             break;
@@ -573,7 +623,7 @@ public:
             }
 
             // minus busy
-            busy_[t->destination_coordinator] -= 1;
+            busy[t->destination_coordinator] -= 1;
             if(--overload_node[t->destination_coordinator] <= 0){
               overload_node.erase(t->destination_coordinator);
             }
@@ -581,7 +631,7 @@ public:
             // add dest busy
             t->is_real_distributed = true;
             t->destination_coordinator = idle_coord_id;
-            busy_[t->destination_coordinator] += 1;
+            busy[t->destination_coordinator] += 1;
             idle_node[idle_coord_id] -= 1;
             if(idle_node[idle_coord_id] <= 0){
               idle_node.erase(idle_coord_id);
@@ -597,29 +647,88 @@ public:
           is_ok = false;
         }
         
-      } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
-    }
-
-    LOG(INFO) << " after: ";
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
-    }
-
-    schedule_meta.reorder_done.store(true);
-    }
-
-
-    while(schedule_meta.reorder_done.load() == false){
-      std::this_thread::sleep_for(std::chrono::microseconds(5));
-    }
-    cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - staart)
-                 .count() * 1.0 / 1000 ;
-    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
-
+      } while(cal_load_distribute(aver_val, busy) > threshold && is_ok);
   }
-  
-  
+
+  // void balance_replica(std::unordered_map<size_t, int>& busy,
+  //                     long long aver_val){
+  //     // start tradeoff for balancing
+  //     int batch_num = 50; // 
+  //     bool is_ok = true;
+  //     int idx = 0;
+  //     size_t sz = cur_txn_num * dispatcher_num;
+  //     do {
+  //       for(int i = 0 ; i < batch_num && idx < sz; i ++ ){
+  //         std::unordered_map<size_t, int> overload_node;
+  //         std::unordered_map<size_t, int> idle_node;
+  //         find_imbalanced_node(overload_node, idle_node, 
+  //                              node_replica_busy, replica_aver_val);
+
+  //         if(overload_node.size() == 0 || idle_node.size() == 0){
+  //           is_ok = false;
+  //           break;
+  //         }
+  //         std::shared_ptr<simpleTransaction> t = txns[i];
+
+  //         if(overload_node.count(t->replica_heavy_node)){
+  //           // find minial cost in idle_node
+  //           // auto [idle_coord_id, min_cost] = find_idle_node(idle_node, 
+  //           //                                    txns_coord_cost[t->idx_], 
+  //           //                                    (workload_type == 1 || context.lion_with_metis_init == 0));
+
+  //           int idle_coord_id = -1;
+  //           for(auto& i : idle_node){
+  //             if(i != t->replica_heavy_node){
+  //               idle_coord_id = i;
+  //               break;
+  //             }
+  //           }
+  //           if(idle_coord_id == -1){
+  //             continue;
+  //           }
+
+  //           // minus busy
+  //           busy[t->replica_heavy_node] -= t->replica_heavy_cnt;
+  //           if(--overload_node[t->replica_heavy_node] <= 0){
+  //             overload_node.erase(t->replica_heavy_node);
+  //           }
+  //           busy[idle_coord_id] += t->replica_heavy_cnt;
+  //           idle_node[idle_coord_id] -= t->replica_heavy_cnt;
+  //           if(idle_node[idle_coord_id] <= 0){
+  //             idle_node.erase(idle_coord_id);
+  //           }
+  //         }
+
+  //         if(overload_node.size() == 0 || idle_node.size() == 0){
+  //           break;
+  //         }
+
+  //       }
+  //       if(q_.empty()){
+  //         is_ok = false;
+  //       }
+        
+  //     } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
+
+
+  // }
+
+  void find_imbalanced_node(std::unordered_map<size_t, int>& overload_node,
+                            std::unordered_map<size_t, int>& idle_node,
+                            std::unordered_map<size_t, int>& busy,
+                            long long aver_val,
+                            long long threshold
+                            ){
+    for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
+      if((long long) (busy[j] - aver_val) * (busy[j] - aver_val) > threshold){
+        if((busy[j] - aver_val) > 0){
+          overload_node[j] = busy[j] - aver_val;
+        } else {
+          idle_node[j] = aver_val - busy[j];
+        } 
+      }
+    }    
+  }
   
   void start() override {
 

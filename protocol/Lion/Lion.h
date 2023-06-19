@@ -171,7 +171,7 @@ public:
       // write
       auto key = readKey.get_key();
 
-      DCHECK(txn.tids[i] != nullptr && readKey.get_read_respond_bit());
+      DCHECK(txn.tids[i] != nullptr && readKey.get_read_respond_bit()) << txn.tids[i] << " " << readKey.get_read_respond_bit();
       if (coordinatorID == context.coordinator_id) {
         if(readKey.get_write_lock_bit()){
           VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << *txn.tids[i] << " " << commit_tid << " " << is_metis;
@@ -291,7 +291,7 @@ private:
               readKey.get_value(), commit_tid, txn.id);
           
           DCHECK(strlen((char*)readKey.get_value()) > 0);
-          
+          async_message_num.fetch_add(1);
           VLOG(DEBUG_V11) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
           send_replica = true;
           replicate_count += 1;
@@ -302,7 +302,7 @@ private:
       }
 
       // if(replicate_count >= 2){
-      //   async_message_num.fetch_add(1);
+      
       //   // LOG(INFO) << "replicate_count : " << replicate_count;
       // }
 

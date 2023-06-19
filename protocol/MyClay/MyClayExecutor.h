@@ -86,8 +86,9 @@ public:
       n_network_size.fetch_add(simple_txn.size);
 
       uint32_t txn_id;
-      std::unique_ptr<TransactionType> null_txn(nullptr);
+      
       {
+        std::unique_ptr<TransactionType> null_txn(nullptr);
         std::lock_guard<std::mutex> l(txn_meta.c_l);
         txn_id = txn_meta.c_transactions_queue.size();
         if(txn_id >= txn_meta.storages.size()){

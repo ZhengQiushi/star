@@ -22,6 +22,7 @@ struct ScheduleMeta {
     this->batch_size = 2 * batch_size * coordinator_num;
     for(int i = 0 ; i < coordinator_num; i ++ ){
       node_busy[i] = 0;
+      node_replica_busy[i] = 0;
     }
     node_txns.resize(this->batch_size);
     
@@ -35,6 +36,7 @@ struct ScheduleMeta {
   void clear(){
     for(int i = 0 ; i < coordinator_num; i ++ ){
       node_busy[i] = 0;
+      node_replica_busy[i] = 0;
     }
     node_txns.resize(this->batch_size);
     txn_id.store(0);
@@ -50,6 +52,8 @@ struct ScheduleMeta {
   std::mutex l;
   std::vector<std::shared_ptr<simpleTransaction>> node_txns;
   std::unordered_map<size_t, int> node_busy;
+  std::unordered_map<size_t, int> node_replica_busy;
+  
   std::vector<std::vector<int>> txns_coord_cost;
 
   std::atomic<uint32_t> txn_id;
@@ -75,7 +79,13 @@ struct TransactionMeta {
   void clear(){
     s_txn_id.store(0);
     c_txn_id.store(0);
+
+    s_transactions_queue.clear();
+    c_transactions_queue.clear();
+
+    done.store(0);
   }
+  std::atomic<uint32_t> done;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   

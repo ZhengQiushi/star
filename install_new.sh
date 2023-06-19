@@ -16,6 +16,7 @@ sudo chmod 777 /var/run/docker.sock
 docker load < zqs_image.tar
 sudo docker volume create zqs-vol
 sudo chmod -R 777 /home/docker/volumes/
+# sudo chmod -R 777 /var/lib/docker/volumes/ 
 mkdir -p /home/docker/volumes/zqs-vol/_data/star
 
 docker run -it --mount source=zqs-vol,target=/home  --network host --security-opt seccomp=unconfined   --name zqs_0 413366511/ubuntu  /bin/bash 

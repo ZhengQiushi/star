@@ -91,8 +91,8 @@ public:
       n_network_size.fetch_add(simple_txn.size);
       // router_planning(&simple_txn);
       size_t txn_id;
-      std::unique_ptr<TransactionType> null_txn(nullptr);
       {
+        std::unique_ptr<TransactionType> null_txn(nullptr);
         std::lock_guard<std::mutex> l(txn_meta.s_l);
         txn_id = txn_meta.s_transactions_queue.size();
         txn_meta.s_transactions_queue.push_back(std::move(null_txn));

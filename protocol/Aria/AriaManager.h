@@ -46,7 +46,7 @@ public:
   void coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     while (!stopFlag.load()) {
 
@@ -93,10 +93,11 @@ public:
   void non_coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
-    std::size_t n_coordinators = context.coordinator_num;
+    std::size_t n_coordinators = context.coordinator_num + 1;
 
     for (;;) {
       // LOG(INFO) << "Seed: " << random.get_seed();
+      LOG(INFO) << "wait4_signal";
       ExecutorStatus status = wait4_signal();
       if (status == ExecutorStatus::EXIT) {
         set_worker_status(ExecutorStatus::EXIT);

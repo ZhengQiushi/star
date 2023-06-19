@@ -150,14 +150,15 @@ public:
   }
 
   void replication_fence(ExecutorStatus status){
-    LOG(INFO) << "replication_fence : " << async_message_num.load() << " " << async_message_respond_num.load();
-    // while(async_message_num.load() != async_message_respond_num.load()){
-    //   int a = async_message_num.load();
-    //   int b = async_message_respond_num.load();
+    while(async_message_num.load() != async_message_respond_num.load()){
+      int a = async_message_num.load();
+      int b = async_message_respond_num.load();
 
-    //   process_request();
-    //   std::this_thread::yield();
-    // }
+      process_request();
+      std::this_thread::yield();
+    }
+    LOG(INFO) << "replication_fence : " << async_message_num.load() << " " << async_message_respond_num.load();
+
     async_message_num.store(0);
     async_message_respond_num.store(0);
   }
@@ -182,9 +183,10 @@ public:
       n_network_size.fetch_add(simple_txn.size);
       
       uint32_t txn_id;
-      std::unique_ptr<TransactionType> null_txn(nullptr);
+      
       if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
         {
+          std::unique_ptr<TransactionType> null_txn(nullptr);
           std::lock_guard<std::mutex> l(txn_meta.s_l);
           txn_id = txn_meta.s_transactions_queue.size();
           if(txn_id >= txn_meta.s_storages.size()){
@@ -195,9 +197,11 @@ public:
         }
         auto p = s_workload->unpack_transaction(context, 0, txn_meta.s_storages[txn_id], simple_txn);
         p->fully_single_transaction = true;
+        // if(p.get() == nullptr) continue;
         txn_meta.s_transactions_queue[txn_id] = std::move(p);
       } else {
         {
+          std::unique_ptr<TransactionType> null_txn(nullptr);
           std::lock_guard<std::mutex> l(txn_meta.c_l);
           txn_id = txn_meta.c_transactions_queue.size();
           if(txn_id >= txn_meta.c_storages.size()){
@@ -220,6 +224,7 @@ public:
           } 
           p->id = txn_id;
         }
+        // if(p.get() == nullptr) continue;
         txn_meta.c_transactions_queue[txn_id] = std::move(p);
       }
     }
@@ -395,7 +400,7 @@ public:
       // now = std::chrono::steady_clock::now();
       // wait to s_phase
       
-      replication_fence(ExecutorStatus::C_PHASE);
+      // replication_fence(ExecutorStatus::C_PHASE);
 
       // commit transaction in c_phase;
       // commit_transactions();
@@ -449,7 +454,7 @@ public:
                 << " milliseconds.";
         // now = std::chrono::steady_clock::now();
         
-        replication_fence(ExecutorStatus::S_PHASE);
+        // replication_fence(ExecutorStatus::S_PHASE);
         n_complete_workers.fetch_add(1);
         VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] fence "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -477,15 +482,22 @@ public:
         // n_complete_workers has been cleared
         process_request();
         n_complete_workers.fetch_add(1);
-
+        txn_meta.done.fetch_add(1);
       } else {
         VLOG_IF(DEBUG_V, id==0) << "skip s phase";
         process_request();
         n_complete_workers.fetch_add(1);
+
+        txn_meta.done.fetch_add(1);
       }
+
+      while(txn_meta.done.load() < context.worker_num){
+        int a = txn_meta.done.load();
+        process_request();
+      }
+
       if(id == 0){
-        txn_meta.s_transactions_queue.clear();
-        txn_meta.c_transactions_queue.clear();
+        txn_meta.clear();
       }
         auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now() - begin)
@@ -494,7 +506,7 @@ public:
         if(cur_time > 10)
           execute_latency.add(execution_schedule_time);
 
-      VLOG_IF(DEBUG_V, id==0) << "whole batch "
+      LOG(INFO) << "whole batch "
               << execution_schedule_time
               << " milliseconds.";
     }
@@ -915,31 +927,24 @@ public:
   void push_message(Message *message) override { 
 
     // message will only be of type signal, COUNT
-    // MessagePiece messagePiece = *(message->begin());
+    MessagePiece messagePiece = *(message->begin());
+    auto message_type =
+    static_cast<int>(messagePiece.get_message_type());
+    for (auto it = message->begin(); it != message->end(); it++) {
+      auto messagePiece = *it;
+      auto message_type = messagePiece.get_message_type();
+      //!TODO replica 
+      if(message_type == static_cast<int>(LionMessage::REPLICATION_RESPONSE)){
+        auto message_length = messagePiece.get_message_length();
+        // int debug_key;
+        // auto stringPiece = messagePiece.toStringPiece();
+        // Decoder dec(stringPiece);
+        // dec >> debug_key;
 
-    // auto message_type =
-    // static_cast<int>(messagePiece.get_message_type());
-
-    // sync_queue.push(message);
-    // LOG(INFO) << "sync_queue: " << sync_queue.read_available(); 
-    // for (auto it = message->begin(); it != message->end(); it++) {
-    //   auto messagePiece = *it;
-    //   auto message_type = messagePiece.get_message_type();
-    //   //!TODO replica 
-    //   if(message_type == static_cast<int>(LionMessage::REPLICATION_RESPONSE)){
-    //     auto message_length = messagePiece.get_message_length();
-        
-    //     ////  // LOG(INFO) << "recv : " << ++total_async;
-    //     // async_message_num.fetch_sub(1);
-    //     int debug_key;
-    //     auto stringPiece = messagePiece.toStringPiece();
-    //     Decoder dec(stringPiece);
-    //     dec >> debug_key;
-
-    //     // async_message_respond_num.fetch_add(1);
-    //     VLOG(DEBUG_V16) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
-    //   }
-    // }
+        async_message_respond_num.fetch_add(1);
+        // VLOG(DEBUG_V16) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
+      }
+    }
     // if(static_cast<int>(LionMessage::METIS_SEARCH_REQUEST) <= message_type && 
     //    message_type <= static_cast<int>(LionMessage::METIS_IGNORE)){
     //   in_queue_metis.push(message);

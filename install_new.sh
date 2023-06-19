@@ -1,6 +1,6 @@
-scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.250:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.250:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.250:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.249:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.249:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.249:/home/centos/
 
 
 ssh centos@10.77.70.250 -i .ssh/zzh_cloud
@@ -33,4 +33,5 @@ docker exec -it zqs_0 bash
 235
 
 232-253
-
+scp -r docker.service  zqs@10.77.110.144:/home/zqs/
+scp -r zqs_image.tar zqs@10.77.110.144:/home/zqs/

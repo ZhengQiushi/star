@@ -32,6 +32,7 @@ struct ScheduleMeta {
 
     start_schedule.store(0);
     done_schedule.store(0);
+
   }
   void clear(){
     for(int i = 0 ; i < coordinator_num; i ++ ){
@@ -75,6 +76,7 @@ struct TransactionMeta {
     this->coordinator_num = coordinator_num;
     s_storages.resize(batch_size * coordinator_num * 2);
     c_storages.resize(batch_size * coordinator_num * 2);
+    transactions_prepared.store(0);
   }
   void clear(){
     s_txn_id.store(0);
@@ -83,6 +85,7 @@ struct TransactionMeta {
     s_transactions_queue.clear();
     c_transactions_queue.clear();
 
+    transactions_prepared.store(0);
     done.store(0);
   }
   std::atomic<uint32_t> done;
@@ -91,6 +94,8 @@ struct TransactionMeta {
   
   std::atomic<uint32_t> s_txn_id;
   std::atomic<uint32_t> c_txn_id;
+
+  std::atomic<uint32_t> transactions_prepared;
 
   std::vector<std::unique_ptr<TransactionType>> s_transactions_queue;
   std::vector<std::unique_ptr<TransactionType>> c_transactions_queue;

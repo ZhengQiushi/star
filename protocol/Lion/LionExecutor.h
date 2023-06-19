@@ -338,28 +338,28 @@ public:
 
       int router_recv_txn_num = 0;
       // 准备transaction
-        while(!is_router_stopped(router_recv_txn_num)){
-          process_request();
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
+      while(!is_router_stopped(router_recv_txn_num)){
+        process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
 
-        auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count();
+      auto router_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin)
+                    .count();
 
-        LOG(INFO) << "prepare_transactions_to_run "
-                << router_time
-                << " milliseconds.";
+      LOG(INFO) << "prepare_transactions_to_run "
+              << router_time
+              << " milliseconds.";
 
-        if(cur_time > 10)
-          router_percentile.add(router_time);
+      if(cur_time > 10)
+        router_percentile.add(router_time);
 
-        cur_real_distributed_cnt = 0;
-        unpack_route_transaction(); // 
+      cur_real_distributed_cnt = 0;
+      unpack_route_transaction(); // 
 
-        VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size() << " OMG : " << cur_real_distributed_cnt;
+      VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  <<txn_meta.s_transactions_queue.size() << " OMG : " << cur_real_distributed_cnt;
 
-        transactions_prepared.fetch_add(1);
+      txn_meta.transactions_prepared.fetch_add(1);
       // // }
       LOG(INFO) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -367,7 +367,7 @@ public:
                      .count()
               << " milliseconds.";
 
-      while(transactions_prepared.load() < context.worker_num){
+      while(txn_meta.transactions_prepared.load() < context.worker_num){
         std::this_thread::yield();
         process_request();
       }
@@ -422,9 +422,9 @@ public:
                      .count()
               << " milliseconds.";
 
-      if(id == 0){
-        transactions_prepared.store(0);
-      }
+      // if(id == 0){
+      //   transactions_prepared.store(0);
+      // }
 
       if(skip_s_phase.load() == false){
         // s_phase
@@ -491,10 +491,10 @@ public:
         txn_meta.done.fetch_add(1);
       }
 
-      while(txn_meta.done.load() < context.worker_num){
-        int a = txn_meta.done.load();
-        process_request();
-      }
+      // while(txn_meta.done.load() < context.worker_num){
+      //   int a = txn_meta.done.load();
+      //   process_request();
+      // }
 
       if(id == 0){
         txn_meta.clear();
@@ -1071,6 +1071,7 @@ private:
           }
           local_read = true;
         } else {
+          DCHECK(txn.fully_single_transaction == false);
           // master not at local, but has a secondary one. need to be remastered
           // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
           remaster = table->contains(key); // current coordniator

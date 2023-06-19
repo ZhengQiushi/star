@@ -165,13 +165,17 @@ public:
     auto &readSet = txn.readSet;
     DCHECK(txn.tids.size() == readSet.size());
 
-    for (auto i = 0u; i < readSet.size(); i++) {
+    for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+      // early return
+      if (txn.tids[i] != nullptr) {
+        continue;
+      }
       auto &readKey = readSet[i];
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       // write
       auto key = readKey.get_key();
 
-      DCHECK(txn.tids[i] != nullptr && readKey.get_read_respond_bit()) << txn.tids[i] << " " << readKey.get_read_respond_bit();
+      // DCHECK(txn.tids[i] != nullptr && readKey.get_read_respond_bit()) << txn.tids[i] << " " << readKey.get_read_respond_bit();
       if (coordinatorID == context.coordinator_id) {
         if(readKey.get_write_lock_bit()){
           VLOG(DEBUG_V14) << "  unLOCK-write " << *(int*)key << " " << *txn.tids[i] << " " << commit_tid << " " << is_metis;
@@ -239,7 +243,12 @@ private:
 
     auto &readSet = txn.readSet;
 
-    for (auto i = 0u; i < readSet.size(); i++) {
+    for (int i = int(readSet.size()) - 1; i >= 0; i--) {
+      // early return
+      if (!readSet[i].get_read_request_bit()) {
+        continue;
+      }
+      
       auto &readKey = readSet[i];
       if(!readKey.get_write_lock_bit()){
         continue;

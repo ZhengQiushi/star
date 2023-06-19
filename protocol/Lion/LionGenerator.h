@@ -779,7 +779,7 @@ public:
       } while (status != ExecutorStatus::C_PHASE);
 
       if(id == 0){
-        skip_s_phase.store(false);
+        skip_s_phase.store(true);
       }
       
       while (!q.empty()) {
@@ -809,8 +809,11 @@ public:
       while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         status = static_cast<ExecutorStatus>(worker_status.load());
+        // 
       }
-
+      if(pure_single_txn_cnt != 0){
+        skip_s_phase.store(false);
+      }
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
@@ -830,10 +833,6 @@ public:
 
       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-      }
-
-      if(id == 0 && pure_single_txn_cnt == 0){
-        skip_s_phase.store(true);
       }
 
       n_complete_workers.fetch_add(1);

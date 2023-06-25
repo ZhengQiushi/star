@@ -510,6 +510,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Aria_READ) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
       process_request();
       n_complete_workers.fetch_add(1);
@@ -521,6 +522,7 @@ public:
              ExecutorStatus::Aria_COMMIT) {
         std::this_thread::yield();
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
       n_started_workers.fetch_add(1);
       LOG(INFO) << "Start Commit";
@@ -530,6 +532,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Aria_COMMIT) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       if(id == 0){

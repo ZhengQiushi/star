@@ -85,8 +85,16 @@ public:
     return p;
   }
 
-  
-  
+  std::unique_ptr<TransactionType> reset_transaction(const ContextType &context,
+                                                    std::size_t partition_id,
+                                                    StorageType &storage, 
+                                                    TransactionType& txn) {
+
+    std::unique_ptr<TransactionType> p(nullptr);
+    DCHECK(false);
+    return p;
+  }
+
 private:
   std::size_t coordinator_id;
   std::atomic<uint32_t> &worker_status;

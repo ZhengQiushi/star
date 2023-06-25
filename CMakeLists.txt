@@ -42,6 +42,10 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
     set(GTEST_LIBRARIES "/usr/local/lib/libgtest.a")
     set(METIS_LIBRARIES "/usr/local/lib/libmetis.a")
 
+
+    target_link_libraries(common ${jemalloc_lib} ${glog} ${gflags} 
+    ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+    ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES}) 
     # target_link_libraries(common libgflags.a)
     # --[ Eigen3
     find_package(Eigen3 REQUIRED)

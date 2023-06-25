@@ -215,9 +215,9 @@ BaseTFModel::BaseTFModel(const std::string &modelgen_path,
                          const std::string &pymodel_path,
                          const std::string &graph_path)
     : // BaseModel(),
-      modelgen_path_(("/root/star/" + modelgen_path)), // peloton::FileUtil::GetRelativeToRootPath
-      pymodel_path_(("/root/star/" + pymodel_path)), // peloton::FileUtil::GetRelativeToRootPath(
-      graph_path_(("/root/star/" + graph_path)) { // peloton::FileUtil::GetRelativeToRootPath
+      modelgen_path_(("/home/star/" + modelgen_path)), // peloton::FileUtil::GetRelativeToRootPath
+      pymodel_path_(("/home/star/" + pymodel_path)), // peloton::FileUtil::GetRelativeToRootPath(
+      graph_path_(("/home/star/" + graph_path)) { // peloton::FileUtil::GetRelativeToRootPath
   tf_session_entity_ = std::unique_ptr<TfSessionEntity<float, float>>(
       new TfSessionEntity<float, float>());
   // PELOTON_ASSERT(FileUtil::Exists(pymodel_path_));

@@ -29,6 +29,7 @@ public:
   void abort(TransactionType &txn,
              std::vector<std::unique_ptr<Message>> &messages) {
     // nothing needs to be done
+    txn.abort_lock = true;
   }
 
   bool commit(TransactionType &txn,

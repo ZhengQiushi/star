@@ -7,6 +7,8 @@
 #include "common/LockfreeQueue.h"
 #include "common/Message.h"
 #include "common/Socket.h"
+#include "common/cpuStat.h"
+
 // #include "common/PinThreadToCore.h"
 
 #include "core/ControlMessage.h"
@@ -24,6 +26,8 @@
 #include <sstream>
 
 namespace star {
+
+using namespace get_system_usage_linux;
 
 class Coordinator {
 public:
@@ -136,12 +140,72 @@ public:
     sprintf(output, "/home/star/data/commits_%d.xls", (int)id);
     outfile_excel.open(output, std::ios::trunc); // ios::trunc
 
-    outfile_excel << "n_commit" << "\t" << "metis_commit" << "\t" << "n_remaster" << "\t" << "n_migrate" << "\t" 
-                  << "metis_remaster" << "\t" << "metis_migrate" << "\t" << "n_network_size" << "\t" << "metis_n_network_size" << "\t" << "abort" << "\n";
+    outfile_excel << "n_commit" << "\t" 
+                  << "metis_commit" << "\t" 
+                  << "n_remaster" << "\t" 
+                  << "n_migrate" << "\t" 
+                  << "metis_remaster | metis_migrate" << "\t" 
+                  << "cpu_usage" << "\t" 
+                  << "n_network_size" << "\t" 
+                  << "metis_n_network_size" << "\t" 
+                  << "abort" << "\n";
+
+    std::ofstream outfile_excel_breakdown;
+    char output2[256];
+    sprintf(output2, "/home/star/data/breakdown_%d.xls", (int)id);
+    outfile_excel_breakdown.open(output2, std::ios::trunc); // ios::trunc
+
+    outfile_excel_breakdown 
+                  << "time_router10%" << "\t" 
+                  << "time_scheuler10%" << "\t" 
+                  << "time_local_locks10%" << "\t" 
+                  << "time_remote_locks10%" << "\t" 
+                  << "time_execute10%" << "\t" 
+                  << "time_commit10%" << "\t" 
+                  << "time_wait4serivce10%" << "\t" 
+                  << "time_other_module10%" << "\t"
+                  // << "time_total10%" << "\t"
+                  << "time_latency10%" << "\t"
+                  << "total_latency10%" << "\t"
+                  
+                  << "time_router50%" << "\t" 
+                  << "time_scheuler50%" << "\t" 
+                  << "time_local_locks50%" << "\t" 
+                  << "time_remote_locks50%" << "\t" 
+                  << "time_execute50%" << "\t" 
+                  << "time_commit50%" << "\t" 
+                  << "time_wait4serivce50%" << "\t" 
+                  << "time_other_module50%" << "\t"
+                  // << "time_total50%" << "\t"
+                  << "time_latency50%" << "\t"
+                  << "total_latency50%" << "\t"
+
+                  << "time_router95%" << "\t" 
+                  << "time_scheuler95%" << "\t" 
+                  << "time_local_locks95%" << "\t" 
+                  << "time_remote_locks95%" << "\t" 
+                  << "time_execute95%" << "\t" 
+                  << "time_commit95%" << "\t" 
+                  << "time_wait4serivce95%" << "\t" 
+                  << "time_other_module95%" << "\t"
+                  // << "time_total95%" << "\t"
+                  << "time_latency95%" 
+                  << "total_latency50%" << "\t"
+                  << "\n";
 
     do {
       LOG(INFO) << "SLEEP : " << std::to_string(context.sample_time_interval);
+
+
+      CPU_stats t1 = read_cpu_data();
+
       std::this_thread::sleep_for(std::chrono::milliseconds(context.sample_time_interval * 1000));
+
+      CPU_stats t2 = read_cpu_data();
+      
+
+      auto cpu_usage = get_cpu_usage(t1, t2);
+
 
       uint64_t n_commit = 0, metis_commit = 0, 
                n_remaster = 0, n_migrate = 0, // 
@@ -157,7 +221,43 @@ public:
                  .count() / context.workload_time % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
-        if((context.lion_with_metis_init == 1 || context.protocol == "MyClay") && i == context.worker_num){
+        if(i == 1){
+          outfile_excel_breakdown  
+                        << workers[i]->txn_statics.nth(10).time_router << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_scheuler << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_local_locks << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_remote_locks << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_execute << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_commit << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_wait4serivce << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_other_module << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_latency << "\t" 
+                        << workers[i]->total_latency.nth(10) << "\t" 
+
+                        << workers[i]->txn_statics.nth(50).time_router << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_scheuler << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_local_locks << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_remote_locks << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_execute << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_commit << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_wait4serivce << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_other_module << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_latency << "\t" 
+                        << workers[i]->total_latency.nth(50) << "\t" 
+
+                        << workers[i]->txn_statics.nth(95).time_router << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_scheuler << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_local_locks << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_remote_locks << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_execute << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_commit << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_wait4serivce << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_other_module << "\t"
+                        << workers[i]->txn_statics.nth(95).time_latency << "\t"
+                        << workers[i]->total_latency.nth(95) << "\n" ;
+                        ;
+        }
+        if((context.protocol == "Lion" || context.protocol == "MyClay") && i == context.worker_num){
           metis_commit += workers[i]->n_commit.load();
           workers[i]->n_commit.store(0);
 
@@ -199,10 +299,34 @@ public:
         workers[i]->n_network_size.store(0);
 
         workers[i]->workload_type = cur_workload_type;
+
+
+        workers[i]->clear_status.store(true);
+        workers[i]->total_latency.clear();
+
+        // workers[i]->time_router.clear();
+        // workers[i]->time_scheuler.clear();
+        // workers[i]->time_local_locks.clear();
+        // workers[i]->time_remote_locks.clear();
+        // workers[i]->time_execute.clear();
+        // workers[i]->time_commit.clear();
+        // workers[i]->time_wait4serivce.clear();
+        // workers[i]->time_other_module.clear();
+
       }
 
-      outfile_excel << n_commit << "\t" << metis_commit << "\t" << n_remaster << "\t" << n_migrate << "\t" 
-                  << metis_remaster << "\t" << metis_migrate << "\t" << 1.0 * n_network_size / n_commit << "\t" <<  1.0 * metis_n_network_size / metis_commit << "\t" << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\n";
+      outfile_excel 
+                  << n_commit << "\t" 
+                  << metis_commit << "\t" 
+                  << n_remaster << "\t" 
+                  << n_migrate << "\t" 
+                  << metis_remaster << " | " << metis_migrate << "\t" 
+                  << cpu_usage << "\t" 
+                  << (1.0 * n_network_size + metis_n_network_size) / n_commit << "\t" 
+                  << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\n";
+
+
+
 
       LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit 
                 << " metis_commit: " << metis_commit

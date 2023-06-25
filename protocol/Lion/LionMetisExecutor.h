@@ -340,14 +340,14 @@ public:
 
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
-            protocol->abort(*transaction, messages);
+            // protocol->abort(*transaction, messages);
             n_abort_no_retry.fetch_add(1);
             continue;
           } 
 
           if (result == TransactionResult::READY_TO_COMMIT) {
             // LOG(INFO) << "LionMetisExecutor: "<< id << " " << "commit" << i;
-            bool commit = protocol->commit(*transaction, messages, metis_async_message_num, true);
+            bool commit = true; // protocol->commit(*transaction, messages, metis_async_message_num, true);
             
             n_network_size.fetch_add(transaction->network_size);
             if (commit) {
@@ -378,10 +378,10 @@ public:
                 VLOG(DEBUG_V14) << "TRANSACTION RETRY: " << transaction->get_query_printed();
                 retry_transaction = true;
               }
-              protocol->abort(*transaction, messages);
+              // protocol->abort(*transaction, messages);
             }
           } else {
-            protocol->abort(*transaction, messages);
+            // protocol->abort(*transaction, messages);
           }
           time3 += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - now).count();
           now = std::chrono::steady_clock::now();
@@ -554,20 +554,19 @@ private:
       if (coordinatorID == coordinator_id) {
         // master-replica is at local node 
         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-        if(success == false){
-          return 0;
-        }
-        // immediatly lock local record 赶快本地lock
-        if(readKey.get_write_lock_bit()){
-          TwoPLHelper::write_lock(tid, success);
-          // VLOG(DEBUG_V14) << "LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid;
-        } else {
-          TwoPLHelper::read_lock(tid, success);
-          // VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
-        }
-        // 
         txn.tids[key_offset] = &tid;
-
+        // if(success == false){
+        //   return 0;
+        // }
+        // // immediatly lock local record 赶快本地lock
+        // if(readKey.get_write_lock_bit()){
+        //   TwoPLHelper::write_lock(tid, success);
+        //   // VLOG(DEBUG_V14) << "LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid;
+        // } else {
+        //   TwoPLHelper::read_lock(tid, success);
+        //   // VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
+        // }
+        // // 
         if(success){
           // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
           readKey.set_read_respond_bit();

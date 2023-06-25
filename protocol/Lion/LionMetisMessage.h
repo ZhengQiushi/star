@@ -294,7 +294,7 @@ public:
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     // try to lock tuple. Ensure not locked by current node
-    latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
+    // latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){
       VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
@@ -305,69 +305,9 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
-    // lock the router_table 
-//     if(partitioner->is_dynamic()){
-//           // 数据所在节点的路由表
-//           auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
-//           auto router_val = (RouterValue*)router_table->search_value(key);
-          
-//           // 数据所在节点
-//           auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
-//           uint64_t static_coordinator_id = partition_id % context.coordinator_num;
-//           // create the new tuple in global router of source request node
-//           auto coordinator_id_new = responseMessage.get_dest_node_id(); 
-
-//           if(coordinator_id_new != coordinator_id_old){
-//             // 数据更新到 发req的对面
-//             VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
-            
-//             router_val->set_dynamic_coordinator_id(coordinator_id_new);
-//             router_val->set_secondary_coordinator_id(coordinator_id_new);
-
-//             encoder << latest_tid << key_offset << success << remaster;
-//             // reserve size for read
-//             responseMessage.data.append(value_size, 0);
-            
-// //            auto value = table.search_value(key);
-// //            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
-            
-//             if(success == true && remaster == false){
-//               // transfer: read from db and load data into message buffer
-//               void *dest =
-//                   &responseMessage.data[0] + responseMessage.data.size() - value_size;
-//               auto row = table.search(key);
-//               TwoPLHelper::read(row, dest, value_size);
-//             }
-//             responseMessage.flush();
-
-//           } else if(coordinator_id_new == coordinator_id_old) {
-//             success = false;
-//             VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
-//             encoder << latest_tid << key_offset << success << remaster;
-//             responseMessage.data.append(value_size, 0);
-//             responseMessage.flush();
-          
-//           } else {
-//             DCHECK(false);
-//           }
-
-//     } else {
-//       VLOG(DEBUG_V12) << "  already in Static Mode " << *(int*)key; //  << " " << tid_int;
-//       encoder << latest_tid << key_offset << success << remaster;
-//       responseMessage.data.append(value_size, 0);
-//       if(success == true && remaster == false){
-//         auto row = table.search(key);
-//         // transfer: read from db and load data into message buffer
-//         void *dest =
-//             &responseMessage.data[0] + responseMessage.data.size() - value_size;
-//         TwoPLHelper::read(row, dest, value_size);
-//       }
-//       responseMessage.flush();
-//       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
-//     }
 
     // wait for the commit / abort to unlock
-    TwoPLHelper::write_lock_release(tid);
+    // TwoPLHelper::write_lock_release(tid);
   }
 
   static void search_response_handler(MessagePiece inputPiece,
@@ -459,21 +399,21 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
         // lock the respond tid and key
         std::atomic<uint64_t> &tid_ = table.search_metadata(key);
-        bool success = false;
+        // bool success = false;
 
-        if(readKey.get_write_lock_bit()){
-          last_tid = TwoPLHelper::write_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        } else {
-          last_tid = TwoPLHelper::read_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        }
+        // if(readKey.get_write_lock_bit()){
+        //   last_tid = TwoPLHelper::write_lock(tid_, success);
+        //   VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        // } else {
+        //   last_tid = TwoPLHelper::read_lock(tid_, success);
+        //   VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        // }
 
-        if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
-          txn->abort_lock = true;
-          return;
-        } 
+        // if(!success){
+        //   VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+        //   txn->abort_lock = true;
+        //   return;
+        // } 
 
         // VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
@@ -1122,13 +1062,13 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
           return;
         } 
 
-        if(readKey.get_write_lock_bit()){
-          last_tid = TwoPLHelper::write_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        } else {
-          last_tid = TwoPLHelper::read_lock(tid_, success);
-          VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-        }
+        // if(readKey.get_write_lock_bit()){
+        //   last_tid = TwoPLHelper::write_lock(tid_, success);
+        //   VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        // } else {
+        //   last_tid = TwoPLHelper::read_lock(tid_, success);
+        //   VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+        // }
 
         if(!success){
           VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
@@ -1163,13 +1103,13 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         } else {
           VLOG(DEBUG_V12) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
           txn->abort_lock = true;
-          if(readKey.get_write_lock_bit()){
-            TwoPLHelper::write_lock_release(tid_, last_tid);
-            VLOG(DEBUG_V14) << "unLOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-          } else {
-            TwoPLHelper::read_lock_release(tid_);
-            VLOG(DEBUG_V14) << "unLOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
-          }
+          // if(readKey.get_write_lock_bit()){
+          //   TwoPLHelper::write_lock_release(tid_, last_tid);
+          //   VLOG(DEBUG_V14) << "unLOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+          // } else {
+          //   TwoPLHelper::read_lock_release(tid_);
+          //   VLOG(DEBUG_V14) << "unLOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+          // }
         }
 
 

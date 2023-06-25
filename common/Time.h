@@ -8,6 +8,8 @@
 
 namespace star {
 
+
+
 class Time {
 public:
   static uint64_t now() {

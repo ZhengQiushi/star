@@ -404,7 +404,7 @@ public:
 
       for(auto move_record: cur_moves[i]->records){
           new_txn->keys.push_back(move_record.record_key_);
-          new_txn->update.push_back(true);
+          new_txn->update.push_back(false);
           new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
           new_txn->metis_idx_ = metis_txns[i]->idx_;
 

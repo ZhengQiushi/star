@@ -408,6 +408,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
         ExecutorStatus::S_PHASE) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
       process_request();
 
@@ -430,6 +431,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::S_PHASE) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       if(id == 0){

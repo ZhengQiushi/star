@@ -74,7 +74,7 @@ public:
       outfile.close();
     }
     std::ofstream outfile;
-	  outfile.open("/root/star/data/test.txt", std::ios::trunc); // ios::trunc
+	  outfile.open("/home/star/data/test.txt", std::ios::trunc); // ios::trunc
     outfile << "lion is the best\n";
     outfile.close();
 

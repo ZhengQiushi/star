@@ -8,6 +8,7 @@
 #include <cmath>
 #include <fstream>
 #include <glog/logging.h>
+#include <mutex>
 
 // The nearest-rank method
 // https://en.wikipedia.org/wiki/Percentile
@@ -17,18 +18,24 @@ namespace star {
 template <class T> class Percentile {
 public:
   using element_type = T;
+  // std::mutex mm;
 
   void add(const element_type &value) {
+    // std::lock_guard<std::mutex> l(mm);
     isSorted_ = false;
+    if(busy.load() == true) return;
     data_.push_back(value);
   }
 
   void add(const std::vector<element_type> &v) {
+    // std::lock_guard<std::mutex> l(mm);
     isSorted_ = false;
+    if(busy.load() == true) return;
     std::copy(v.begin(), v.end(), std::back_inserter(data_));
   }
 
   void clear() {
+    // std::lock_guard<std::mutex> l(mm);
     isSorted_ = true;
     data_.clear();
   }
@@ -36,8 +43,10 @@ public:
   auto size() { return data_.size(); }
 
   element_type nth(double n) {
+    // std::lock_guard<std::mutex> l(mm);
     if (data_.size() == 0) {
-      return 0;
+      element_type n;
+      return n;
     }
     checkSort();
     DCHECK(n > 0 && n <= 100);
@@ -48,6 +57,7 @@ public:
   }
 
   void save_cdf(const std::string &path) {
+    // std::lock_guard<std::mutex> l(mm);
     if (data_.size() == 0) {
       return;
     }
@@ -81,13 +91,16 @@ public:
 
 private:
   void checkSort() {
+    busy.store(true);
     if (!isSorted_) {
       std::sort(data_.begin(), data_.end());
       isSorted_ = true;
     }
+    busy.store(false);
   }
 
 private:
+  std::atomic<int> busy;
   bool isSorted_ = true;
   std::vector<element_type> data_;
 };

@@ -11,6 +11,7 @@
 #include "core/Table.h"
 #include "protocol/Lion/LionRWKey.h"
 #include <limits.h>
+#include "common/Time.h"
 
 #include <chrono>
 #include <glog/logging.h>
@@ -27,6 +28,7 @@ public:
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
+    b.startTime = startTime;
   }
 
   virtual ~LionTransaction() = default;
@@ -425,6 +427,8 @@ public:
 
   ExecutorStatus status;
   uint32_t id;
+
+  Breakdown b;
 };
 
 } // namespace star

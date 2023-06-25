@@ -64,6 +64,25 @@ public:
           on_replica_id = simple_txn.on_replica_id;
         }
 
+
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::atomic<uint32_t> &worker_status,
+                  DatabaseType &db, const ContextType &context,
+                  RandomType &random, Partitioner &partitioner,
+                  Storage &storage, 
+                  Transaction& txn)
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random), storage(storage),
+        partition_id(partition_id),
+        query(makeYCSBQuery()(txn.get_query(), txn.get_query_update())) {
+          /**
+           * @brief convert from the generated txns
+           * 
+           */
+          this->on_replica_id = txn.on_replica_id;
+          // LOG(INFO) << "reset ! " << txn.on_replica_id;
+        }
+
   virtual ~ReadModifyWrite() override = default;
   bool is_transmit_requests() override {
     return is_transmit_request;
@@ -97,7 +116,6 @@ public:
     if (this->process_requests(worker_id)) {
       return TransactionResult::ABORT;
     } 
-    
     if(is_transmit_request == true){
       // std::string str = "";
       // for(size_t i = 0 ; i < keys_num_ ; i ++ ){

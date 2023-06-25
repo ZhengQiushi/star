@@ -81,6 +81,12 @@ test/query_clusterer_test: test/CMakeFiles/query_clusterer_test.dir/brain/query_
 test/query_clusterer_test: test/CMakeFiles/query_clusterer_test.dir/build.make
 test/query_clusterer_test: libcommon.a
 test/query_clusterer_test: test/libpeloton-test-common.a
+test/query_clusterer_test: /usr/local/lib/libglog.a
+test/query_clusterer_test: /usr/local/lib/libgflags.so
+test/query_clusterer_test: /usr/local/lib/libtensorflow.so
+test/query_clusterer_test: /usr/local/lib/libtensorflow_framework.so
+test/query_clusterer_test: /usr/local/lib/libgmock.a
+test/query_clusterer_test: /usr/local/lib/libgtest.a
 test/query_clusterer_test: test/CMakeFiles/query_clusterer_test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/star/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable query_clusterer_test"
 	cd /home/star/test && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/query_clusterer_test.dir/link.txt --verbose=$(VERBOSE)

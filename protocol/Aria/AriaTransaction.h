@@ -26,6 +26,7 @@ public:
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
+    b.startTime = this->startTime;
   }
 
   virtual ~AriaTransaction() = default;
@@ -63,7 +64,6 @@ public:
   virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
   virtual std::size_t get_partition_id() = 0;
-
 
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,
@@ -196,7 +196,18 @@ public:
 public:
   std::size_t coordinator_id, partition_id, id, tid_offset;
   uint32_t epoch;
+
   std::chrono::steady_clock::time_point startTime;
+  // int time_router = 0;
+  // int time_scheuler = 0;
+  // int time_local_locks = 0;
+  // int time_remote_locks = 0;
+  // int time_execute = 0;
+  // int time_commit = 0;
+  // int time_wait4serivce = 0;
+  // int time_other_module = 0;
+  Breakdown b;
+
   std::size_t pendingResponses;
   std::size_t network_size;
 

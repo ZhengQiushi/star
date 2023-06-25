@@ -299,10 +299,15 @@ public:
                      
       LOG(INFO) << "new batch processing ";
       times ++ ;
+      if(clear_status.load() == true){
+        clear_time_status();
+        clear_status.store(false);
+      }
 
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
         if (status == ExecutorStatus::EXIT) {
           // commit transaction in s_phase;
           commit_transactions();
@@ -358,7 +363,7 @@ public:
       unpack_route_transaction(); // 
 
       VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  <<txn_meta.s_transactions_queue.size() << " OMG : " << cur_real_distributed_cnt;
-
+      
       txn_meta.transactions_prepared.fetch_add(1);
       // // }
       LOG(INFO) << "[C-PHASE] do remaster "
@@ -413,6 +418,7 @@ public:
         VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
         while (static_cast<ExecutorStatus>(worker_status.load()) !=
               ExecutorStatus::S_PHASE) {
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
           process_request(); 
         }
 
@@ -469,6 +475,7 @@ public:
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
               ExecutorStatus::S_PHASE) {
           process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
 
         VLOG_IF(DEBUG_V, id==0) << "wait back "
@@ -495,24 +502,51 @@ public:
       //   int a = txn_meta.done.load();
       //   process_request();
       // }
+      auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin)
+                    .count();
 
-      if(id == 0){
-        txn_meta.clear();
-      }
-        auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count();
-
-        if(cur_time > 10)
-          execute_latency.add(execution_schedule_time);
+      if(cur_time > 10)
+        execute_latency.add(execution_schedule_time);
 
       LOG(INFO) << "whole batch "
               << execution_schedule_time
-              << " milliseconds.";
+              << " milliseconds, " 
+              << commit_num;
+      
+      // time_total.add(execution_schedule_time * 1000.0 / commit_num);
+      commit_num = 0;
+      if(id == 0){
+        txn_meta.clear();
+      }
+      
+
     }
     VLOG_IF(DEBUG_V, id==0) << "TIMES : " << times; 
 
 
+  }
+
+  void record_commit_transactions(TransactionType &txn){
+
+    // time_router.add(txn.b.time_router);
+    // time_scheuler.add(txn.b.time_scheuler);
+    // time_local_locks.add(txn.b.time_local_locks);
+    // time_remote_locks.add(txn.b.time_remote_locks);
+    // time_execute.add(txn.b.time_execute);
+    // time_commit.add(txn.b.time_commit);
+    // time_wait4serivce.add(txn.b.time_wait4serivce);
+    // time_other_module.add(txn.b.time_other_module);
+
+    txn.b.time_latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - txn.b.startTime)
+                         .count();
+
+    txn_statics.add(txn.b);
+
+    total_latency.add(std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - txn.startTime)
+                         .count());
   }
 
   void commit_transactions() {
@@ -614,10 +648,11 @@ public:
         continue;
       }
 
-      auto now = std::chrono::steady_clock::now();
+      
       count += 1;
       auto& transaction = cur_trans[i];
-      auto txnStartTime = transaction->startTime = std::chrono::steady_clock::now();
+      auto txnStartTime = transaction->b.startTime
+                        = std::chrono::steady_clock::now();
 
       if(false){ // naive_router && router_to_other_node(status == ExecutorStatus::C_PHASE)){
         // pass
@@ -625,44 +660,50 @@ public:
       } else {
         bool retry_transaction = false;
 
+        auto now = std::chrono::steady_clock::now();
+
         do {
           ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
-          time_before_prepare_request += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-
           process_request();
           ////
           last_seed = random.get_seed();
-
-          time_before_prepare_set += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
 
           if (retry_transaction) {
             transaction->reset();
           } else {
             setupHandlers(*transaction, *protocol);
           }
-
-          time_before_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
+          //#####
+          int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
               .count();
+          time_before_prepare_set += before_prepare;
+          now = std::chrono::steady_clock::now();
+          transaction->b.time_wait4serivce += before_prepare;
+          //#####
           
           transaction->prepare_read_execute(id);
 
-          time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
+          //#####
+          int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
               .count();
+
+          time_prepare_read += prepare_read;
           now = std::chrono::steady_clock::now();
+          transaction->b.time_local_locks += prepare_read;
+          //#####
           
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
-
-          time_read_remote1 += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
+          // ####
+          int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
               .count();
+          time_read_remote += remote_read;
           now = std::chrono::steady_clock::now();
-
+          transaction->b.time_remote_locks += remote_read;
+          // #### 
+          
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
             protocol->abort(*transaction, messages);
@@ -670,12 +711,17 @@ public:
             continue;
           } else {
             result = transaction->prepare_update_execute(id);
+
+            // ####
+            int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                  std::chrono::steady_clock::now() - transaction->b.startTime)
+                .count();
+            time_read_remote1 += write_time;
+            now = std::chrono::steady_clock::now();
+            transaction->b.time_execute += write_time;
+            // #### 
           }
 
-          time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-          now = std::chrono::steady_clock::now();
 
           if (result == TransactionResult::READY_TO_COMMIT) {
             bool commit = protocol->commit(*transaction, messages, async_message_num, false);
@@ -687,6 +733,19 @@ public:
               
               n_migrate.fetch_add(transaction->migrate_cnt);
               n_remaster.fetch_add(transaction->remaster_cnt);
+
+              // ####
+              int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.startTime)
+                  .count();
+              time3 += commit_time;
+              transaction->b.time_commit += commit_time;
+              
+              now = std::chrono::steady_clock::now();
+              // ####
+              record_commit_transactions(*transaction);
+              // txn_meta.commit_num.fetch_add(1);
+              commit_num += 1;
 
               q.push(std::move(transaction));
             } else {
@@ -710,15 +769,10 @@ public:
             n_abort_no_retry.fetch_add(1);
             protocol->abort(*transaction, messages);
           }
-          time3 += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-          now = std::chrono::steady_clock::now();
-
         } while (retry_transaction);
       }
 
-      now = std::chrono::steady_clock::now();
+      // now = std::chrono::steady_clock::now();
       flush_messages(messages); 
       flush_async_messages(); 
 
@@ -726,11 +780,6 @@ public:
         flush_sync_messages();
       }
       
-      time4 += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-      now = std::chrono::steady_clock::now();
-
       txn_percentile.add(
               std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - txnStartTime)
@@ -839,6 +888,8 @@ public:
       cur_trans[i]->startTime = std::chrono::steady_clock::now();
       bool retry_transaction = false;
 
+      auto rematser_begin = std::chrono::steady_clock::now();
+      
       do {
         ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
         process_request();
@@ -853,10 +904,10 @@ public:
         auto now = std::chrono::steady_clock::now();
 
         cur_trans[i]->prepare_read_execute(id);
-        time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                              std::chrono::steady_clock::now() - now)
-            .count();
-        now = std::chrono::steady_clock::now();
+        // time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
+        //                                                       std::chrono::steady_clock::now() - now)
+        //     .count();
+        // now = std::chrono::steady_clock::now();
         
         auto result = cur_trans[i]->read_execute(id, ReadMethods::REMASTER_ONLY);
         
@@ -866,12 +917,17 @@ public:
           n_abort_no_retry.fetch_add(1);
         }
 
-        time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                              std::chrono::steady_clock::now() - now)
-            .count();
-        now = std::chrono::steady_clock::now();
+        // time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
+        //                                                       std::chrono::steady_clock::now() - rematser_begin)
+        //     .count();
+        // now = std::chrono::steady_clock::now();
 
       } while (retry_transaction);
+
+      int remaster_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                              std::chrono::steady_clock::now() - cur_trans[i]->b.startTime)
+            .count();
+      cur_trans[i]->b.time_other_module += remaster_time;
 
       n_migrate.fetch_add(cur_trans[i]->migrate_cnt);
       n_remaster.fetch_add(cur_trans[i]->remaster_cnt);
@@ -1317,7 +1373,7 @@ private:
 
   ShareQueue<int> sub_c_txn_id_queue;
 
-  
+  int commit_num;
   // std::vector<StorageType> storages_self;
   // std::vector<std::unique_ptr<TransactionType>> &r_transactions_queue;
 
@@ -1381,7 +1437,7 @@ private:
 
   std::vector<std::size_t> message_stats, message_sizes;
 
-  Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
+  // Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
 
 };
 } // namespace star

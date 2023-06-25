@@ -530,6 +530,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::CLEANUP) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       if(id == 0){

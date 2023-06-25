@@ -86,6 +86,24 @@ void unpack_route_transaction(){
     }
   }
 
+  void record_commit_transactions(TransactionType &txn){
+
+    // time_router.add(txn.b.time_router);
+    // time_scheuler.add(txn.b.time_scheuler);
+    // time_local_locks.add(txn.b.time_local_locks);
+    // time_remote_locks.add(txn.b.time_remote_locks);
+    // time_execute.add(txn.b.time_execute);
+    // time_commit.add(txn.b.time_commit);
+    // time_wait4serivce.add(txn.b.time_wait4serivce);
+    // time_other_module.add(txn.b.time_other_module);
+
+    txn.b.time_latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - txn.b.startTime)
+                         .count();
+
+    txn_statics.add(txn.b);
+  }
+
     void run_transaction(std::vector<std::unique_ptr<TransactionType>>& cur_txns,
                           ShareQueue<int>& txn_id_queue) {
     /**
@@ -128,19 +146,14 @@ void unpack_route_transaction(){
       count += 1;
       transaction = std::move(cur_txns[i]);
       transaction->startTime = std::chrono::steady_clock::now();;
+      auto txnStartTime = transaction->startTime 
+                        = transaction->b.startTime
+                        = std::chrono::steady_clock::now();
 
 
       do {
-          time_before_prepare_request += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
-
         process_request();
         last_seed = random.get_seed();
-
-          time_before_prepare_set += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
-              .count();
 
         if (retry_transaction) {
           transaction->reset();
@@ -148,25 +161,39 @@ void unpack_route_transaction(){
           std::size_t partition_id = transaction->get_partition_id();
           setupHandlers(*transaction);
         }
-
-
-          time_before_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
+          //#####
+          int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
               .count();
-          
+          time_before_prepare_set += before_prepare;
+          now = std::chrono::steady_clock::now();
+          transaction->b.time_wait4serivce += before_prepare;
+          //#####
+
           transaction->prepare_read_execute(id);
 
-          time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
+          //#####
+          int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
               .count();
+
+          time_prepare_read += prepare_read;
           now = std::chrono::steady_clock::now();
+          transaction->b.time_local_locks += prepare_read;
+          //#####
           
+
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
 
-          time_read_remote1 += std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - now)
+          // ####
+          int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
               .count();
+          time_read_remote += remote_read;
           now = std::chrono::steady_clock::now();
+          transaction->b.time_remote_locks += remote_read;
+          // #### 
+          
 
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
@@ -175,6 +202,14 @@ void unpack_route_transaction(){
             continue;
           } else {
             result = transaction->prepare_update_execute(id);
+            // ####
+            int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                  std::chrono::steady_clock::now() - transaction->b.startTime)
+                .count();
+            time_read_remote1 += write_time;
+            now = std::chrono::steady_clock::now();
+            transaction->b.time_execute += write_time;
+            // #### 
           }
 
           time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
@@ -190,6 +225,18 @@ void unpack_route_transaction(){
           if (commit) {
             n_commit.fetch_add(1);
             retry_transaction = false;
+
+              // ####
+              int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.startTime)
+                  .count();
+              time3 += commit_time;
+              transaction->b.time_commit += commit_time;
+              
+              now = std::chrono::steady_clock::now();
+              // ####
+              record_commit_transactions(*transaction);
+
           } else {
             if (transaction->abort_lock) {
               n_abort_lock.fetch_add(1);
@@ -362,6 +409,7 @@ void unpack_route_transaction(){
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::CLEANUP) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       if(id == 0){

@@ -12,6 +12,9 @@ namespace star {
 
 template <class T, std::size_t N = 409600> class ShareQueue {
   public:
+    bool empty(){
+      return queue.empty();
+    }
     size_t size(){
       return queue.size();
     }

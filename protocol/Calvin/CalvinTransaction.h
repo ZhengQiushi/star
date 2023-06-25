@@ -24,6 +24,7 @@ public:
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
+    b.startTime = this->startTime;
   }
 
   virtual ~CalvinTransaction() = default;
@@ -328,6 +329,7 @@ public:
   Operation operation; // never used
   std::vector<CalvinRWKey> readSet, writeSet;
 
+  Breakdown b;
   //
   int on_replica_id;
 };

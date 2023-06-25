@@ -522,6 +522,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Analysis) {
         std::this_thread::yield();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       if(id == 0){

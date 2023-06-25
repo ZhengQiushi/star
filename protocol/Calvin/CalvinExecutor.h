@@ -98,6 +98,28 @@ public:
     return ret;
   }
 
+  void record_commit_transactions(TransactionType &txn){
+
+    // time_router.add(txn.b.time_router);
+    // time_scheuler.add(txn.b.time_scheuler);
+    // time_local_locks.add(txn.b.time_local_locks);
+    // time_remote_locks.add(txn.b.time_remote_locks);
+    // time_execute.add(txn.b.time_execute);
+    // time_commit.add(txn.b.time_commit);
+    // time_wait4serivce.add(txn.b.time_wait4serivce);
+    // time_other_module.add(txn.b.time_other_module);
+
+    txn.b.time_latency = std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - txn.b.execStartTime)
+                         .count();
+
+    txn_statics.add(txn.b);
+
+    total_latency.add(std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - txn.startTime)
+                         .count());
+  }
+
   void start() override {
     LOG(INFO) << "CalvinExecutor " << id << " started. ";
 
@@ -127,6 +149,11 @@ public:
       } while (status != ExecutorStatus::Analysis);
 
       need_remote_read_num = 0;
+      commit_num = 0;
+      if(clear_status.load() == true){
+        clear_time_status();
+        clear_status.store(false);
+      }
 
       n_started_workers.fetch_add(1);
       router_recv_txn_num = 0;
@@ -161,6 +188,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Analysis) {
         std::this_thread::yield();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
       
       auto analysis_time = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -211,7 +239,16 @@ public:
           break;
         }
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
+
+      auto batch_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - begin)
+                    .count();
+
+      // time_total.add(batch_time * 1000.0 / commit_num);
+      
+      LOG(INFO) << "done, send: " << batch_time  << "ms,  " << commit_num;
 
       if(id == 0){
         txn_meta.clear();
@@ -299,6 +336,7 @@ void unpack_route_transaction(){
      * @brief Set the up prepare handlers object
      * @ active_coordinator
      */
+    auto analyze_start = std::chrono::steady_clock::now();    
     setup_prepare_handlers(txn);
     // run execute to prepare read/write set
     auto result = txn.execute(id);
@@ -315,6 +353,12 @@ void unpack_route_transaction(){
     // setup handlers for execution
     setup_execute_handlers(txn);
     txn.execution_phase = true;
+
+
+    int analyze_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - analyze_start)
+                  .count();
+    txn.b.time_scheuler += analyze_time;
   }
 
   void analyze_active_coordinator(TransactionType &transaction) {
@@ -361,6 +405,11 @@ void unpack_route_transaction(){
 
     for (auto i = 0u; i < transactions.size(); i++) {
       // do not grant locks to abort no retry transaction
+      auto local_locks = std::chrono::steady_clock::now();
+
+      auto txnStartTime = transactions[i]->b.startTime
+                        = std::chrono::steady_clock::now();
+
       if (!transactions[i]->abort_no_retry) {
         bool grant_lock = false;
         auto &readSet = transactions[i]->readSet;
@@ -404,9 +453,15 @@ void unpack_route_transaction(){
                                                                 std::chrono::steady_clock::now() - now)
               .count();
         }
+
+        int lock_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transactions[i]->b.startTime)
+                  .count();
+        transactions[i]->b.time_scheuler += lock_time;
+
         if (grant_lock) {
           auto worker = get_available_worker(request_id++);
-          all_executors[worker]->transaction_queue.push(transactions[i].get());
+          all_executors[worker]->transaction_queue.push_no_wait(transactions[i].get());
           real_num += 1;
         } else {
           skip_num += 1;
@@ -415,6 +470,7 @@ void unpack_route_transaction(){
         if (i % n_lock_manager == id && 
             transactions[i]->on_replica_id == (int)context.coordinator_id) {
           n_commit.fetch_add(1);
+          commit_num += 1;
         }
       } else {
         // only count once
@@ -442,7 +498,7 @@ void unpack_route_transaction(){
   void run_transactions() {
     size_t generator_id = context.coordinator_num;
 
-    auto begin = std::chrono::steady_clock::now();
+    
 
     int idle_time = 0;
     int execution_time = 0;
@@ -450,34 +506,109 @@ void unpack_route_transaction(){
     int cnt = 0;
     while (!get_lock_manager_bit(lock_manager_id) ||
            !transaction_queue.empty()) {
+      
+      auto begin = std::chrono::steady_clock::now();
 
       if (transaction_queue.empty()) {
         process_request();
         continue;
       }
-
+      auto execution_ts = std::chrono::steady_clock::now();
+      
       auto idle = std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count();
+
       idle_time += idle;
-      begin = std::chrono::steady_clock::now();
 
-      TransactionType *transaction = transaction_queue.front();
-      bool ok = transaction_queue.pop();
+      auto now = std::chrono::steady_clock::now();
+
+      bool ok;
+      auto transaction = transaction_queue.pop_no_wait(ok);
+      
       DCHECK(ok);
+      transaction->b.execStartTime = std::chrono::steady_clock::now();
 
-      auto result = transaction->execute(id);
+          //#####
+          int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                  .count();
+          // time_before_prepare_set += before_prepare;
+          now = std::chrono::steady_clock::now();
+          transaction->b.time_wait4serivce += before_prepare;
+          // LOG(INFO) << before_prepare;
+          //#####
+          
+          transaction->prepare_read_execute(id);
 
-      auto execution = std::chrono::duration_cast<std::chrono::microseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count();
-      execution_time += execution;
-      begin = std::chrono::steady_clock::now();
+          //#####
+          int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                  .count();
+
+          // time_prepare_read += prepare_read;
+          now = std::chrono::steady_clock::now();
+          transaction->b.time_local_locks += prepare_read;
+          //#####
+          
+          auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
+          // ####
+          int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                  .count();
+          // time_read_remote += remote_read;
+          now = std::chrono::steady_clock::now();
+          transaction->b.time_remote_locks += remote_read;
+          // #### 
+          
+          if(result != TransactionResult::READY_TO_COMMIT){
+            // non-active transactions, release lock
+            protocol.abort(*transaction, lock_manager_id, n_lock_manager,
+                       partitioner.replica_group_size);
+            continue;
+          } else {
+            result = transaction->prepare_update_execute(id);
+
+            // ####
+            int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                  .count();
+            // time_read_remote1 += write_time;
+            now = std::chrono::steady_clock::now();
+            transaction->b.time_execute += write_time;
+            // #### 
+          }
+
+      // auto result = transaction->execute(id);
+
+      // auto execution = std::chrono::duration_cast<std::chrono::microseconds>(
+      //                std::chrono::steady_clock::now() - begin)
+      //                .count();
+      // execution_time += execution;
+      // begin = std::chrono::steady_clock::now();
+
+
+      // int execute_time = std::chrono::duration_cast<std::chrono::microseconds>(
+      //                                                       std::chrono::steady_clock::now() - execution_ts)
+      //                                                       .count();
+      // transaction->b.time_remote_locks += execute_time;
 
       n_network_size.fetch_add(transaction->network_size.load());
       if (result == TransactionResult::READY_TO_COMMIT) {
+
+        auto commit_ts = std::chrono::steady_clock::now();
+
         protocol.commit(*transaction, lock_manager_id, n_lock_manager,
                         partitioner.replica_group_size);
+
+        int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                  .count();
+        transaction->b.time_commit += commit_time;
+        // if(transaction->on_replica_id == (int)context.coordinator_id){
+        record_commit_transactions(*transaction);
+        // }
+        
       } else if (result == TransactionResult::ABORT) {
         // non-active transactions, release lock
         protocol.abort(*transaction, lock_manager_id, n_lock_manager,
@@ -648,6 +779,8 @@ private:
   std::size_t n_lock_manager, n_workers;
   std::size_t lock_manager_id;
   bool init_transaction;
+  int commit_num;
+
   RandomType random;
   ProtocolType protocol;
   std::unique_ptr<Delay> delay;
@@ -661,14 +794,15 @@ private:
       controlMessageHandlers;
   
   LockfreeQueue<Message *, 10086> in_queue, out_queue;
-  LockfreeQueue<TransactionType *, 10086> transaction_queue;
+  ShareQueue<TransactionType*> transaction_queue;
+  
   std::vector<CalvinExecutor *> all_executors;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;
 
   int router_recv_txn_num = 0; // generator router from 
-  Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
+  // Percentile<int64_t> router_percentile, analyze_percentile, execute_latency;
   int need_remote_read_num = 0;
 };
 } // namespace star

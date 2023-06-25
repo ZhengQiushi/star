@@ -22,11 +22,11 @@
 30 3 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/clay/aws_80.py 240" &
 40 3 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/clay/aws_100.py 240" &
 
-0 4 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_10.py 240" &
-10 4 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_20.py 240" &
-20 4 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_50.py 240" &
-30 4 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_80.py 240" &
-40 4 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_100.py 240" &
+2 16 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_10.py 240" &
+10 16 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_20.py 240" &
+20 16 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_50.py 240" &
+30 16 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_80.py 240" &
+40 16 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh skew_ratio/lion/aws_100.py 240" &
 
 
 

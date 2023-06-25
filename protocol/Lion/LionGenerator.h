@@ -432,10 +432,8 @@ public:
     
     auto staart = std::chrono::steady_clock::now();
 
-    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - start_time)
-                 .count() * 1.0 / 1000 / 1000;
-    int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
+
+    // which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
     LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
@@ -583,6 +581,11 @@ public:
       auto & node_replica_busy = schedule_meta.node_replica_busy;
       auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
 
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+      int workload_type = ((int)cur_timestamp / context.workload_time) + 1;
+      
       std::priority_queue<std::shared_ptr<simpleTransaction>, 
                         std::vector<std::shared_ptr<simpleTransaction>>, 
                         cmp> q_;
@@ -841,6 +844,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
         ExecutorStatus::S_PHASE) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
       process_request();
 
@@ -871,6 +875,7 @@ public:
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
               ExecutorStatus::S_PHASE) {
           process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
 
         // test = std::chrono::steady_clock::now();

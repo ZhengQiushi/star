@@ -342,7 +342,8 @@ public:
   Partitioner &partitioner;
   Operation operation;
   std::vector<SiloRWKey> readSet, writeSet; //, routerSet;
-
+  Breakdown b;
+  
   int prepare, fetch, commit;
 };
 

@@ -5,6 +5,7 @@
 #pragma once
 #include <vector>
 #include <set>
+#include <chrono>
 namespace star {
 
 
@@ -113,6 +114,30 @@ struct data_pack {
     template_name = n;
     t = times;
   }
+};
+
+struct Breakdown {
+  int time_latency = 0;
+
+  std::chrono::steady_clock::time_point startTime;
+  
+  std::chrono::steady_clock::time_point execStartTime;
+
+  std::chrono::steady_clock::time_point commitStartTime;
+
+  int time_router = 0;
+  int time_scheuler = 0;
+  int time_local_locks = 0;
+  int time_remote_locks = 0;
+  int time_execute = 0;
+  int time_commit = 0;
+  int time_wait4serivce = 0;
+  int time_other_module = 0;
+
+    bool operator<(const Breakdown& a) const
+    {
+        return time_latency < a.time_latency;
+    }
 };
 
 } // namespace star

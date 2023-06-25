@@ -196,6 +196,7 @@ public:
     while (static_cast<ExecutorStatus>(worker_status.load()) !=
            ExecutorStatus::CLEANUP) {
       process_request();
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 
     process_request();
@@ -344,7 +345,9 @@ protected:
   ProtocolType protocol;
   WorkloadType workload;
   std::unique_ptr<Delay> delay;
+  
   Percentile<int64_t> percentile, dist_latency, local_latency;
+
   std::unique_ptr<TransactionType> transaction;
   std::vector<std::unique_ptr<Message>> messages;
   std::vector<
@@ -361,5 +364,16 @@ protected:
 
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *> in_queue, out_queue;
+
+  // Percentile<int64_t> time_router;
+  // Percentile<int64_t> time_scheuler;
+  // Percentile<int64_t> time_local_locks;
+  // Percentile<int64_t> time_remote_locks;
+  // Percentile<int64_t> time_execute;
+  // Percentile<int64_t> time_commit;
+  // Percentile<int64_t> time_wait4serivce;
+  // Percentile<int64_t> time_other_module;
+
+  // Percentile<int64_t> time_total;
 };
 } // namespace star

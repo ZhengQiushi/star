@@ -77,6 +77,7 @@ struct TransactionMeta {
     s_storages.resize(batch_size * coordinator_num * 2);
     c_storages.resize(batch_size * coordinator_num * 2);
     transactions_prepared.store(0);
+    commit_num.store(0);
   }
   void clear(){
     s_txn_id.store(0);
@@ -87,8 +88,11 @@ struct TransactionMeta {
 
     transactions_prepared.store(0);
     done.store(0);
+    commit_num.store(0);
   }
   std::atomic<uint32_t> done;
+
+  std::atomic<uint32_t> commit_num;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   

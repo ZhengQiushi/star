@@ -28,7 +28,7 @@ public:
   template <class Transaction>
   using WorkloadType = star::tpcc::Workload<Transaction>;
 
-  // using KeyType = tpcc::tpcc::key;
+  // using KeyType = tpcc::tpcc::key; 
   // using ValueType = tpcc::tpcc::value;
   // using KeyType = ycsb::ycsb::key;
   // using ValueType = ycsb::ycsb::value;

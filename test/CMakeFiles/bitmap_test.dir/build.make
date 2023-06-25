@@ -81,6 +81,12 @@ test/bitmap_test: test/CMakeFiles/bitmap_test.dir/common/bitmap_test.cpp.o
 test/bitmap_test: test/CMakeFiles/bitmap_test.dir/build.make
 test/bitmap_test: libcommon.a
 test/bitmap_test: test/libpeloton-test-common.a
+test/bitmap_test: /usr/local/lib/libglog.a
+test/bitmap_test: /usr/local/lib/libgflags.so
+test/bitmap_test: /usr/local/lib/libtensorflow.so
+test/bitmap_test: /usr/local/lib/libtensorflow_framework.so
+test/bitmap_test: /usr/local/lib/libgmock.a
+test/bitmap_test: /usr/local/lib/libgtest.a
 test/bitmap_test: test/CMakeFiles/bitmap_test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/star/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable bitmap_test"
 	cd /home/star/test && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/bitmap_test.dir/link.txt --verbose=$(VERBOSE)

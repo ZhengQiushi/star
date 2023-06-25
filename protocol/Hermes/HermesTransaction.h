@@ -24,6 +24,7 @@ public:
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
+    b.startTime = this->startTime;
   }
 
   virtual ~HermesTransaction() = default;
@@ -363,6 +364,8 @@ public:
   std::vector<bool> active_coordinators;
   Operation operation; // never used
   std::vector<HermesRWKey> readSet, writeSet;
+
+  Breakdown b;
 
   int router_coordinator_id;
   int on_replica_id;

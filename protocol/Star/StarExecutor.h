@@ -296,6 +296,7 @@ public:
         while (static_cast<ExecutorStatus>(worker_status.load()) ==
                ExecutorStatus::C_PHASE) {
           process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
         // process replication request after all workers stop.
         process_request();
@@ -317,6 +318,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::S_PHASE) {
         process_request(); 
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       replication_fence(ExecutorStatus::C_PHASE);
@@ -373,6 +375,7 @@ public:
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::S_PHASE) {
         process_request();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
       if(id == 0){
@@ -798,6 +801,5 @@ private:
   std::deque<uint64_t> s_source_coordinator_ids, c_source_coordinator_ids;
 
   std::vector<std::pair<size_t, size_t> > res; // record tnx
-
 };
 } // namespace star

@@ -40,7 +40,7 @@ public:
         txn_meta(context.coordinator_num, context.batch_size) {
 
     storages.resize(context.batch_size * 5);
-    transactions.resize(context.batch_size);
+    // transactions.resize(context.batch_size);
   }
 
   void coordinator_start() override {
@@ -55,9 +55,6 @@ public:
       // transaction slots to null.
 
       // then, each worker threads generates a transaction using the same seed.
-      epoch.fetch_add(1);
-      cleanup_batch();
-
       // LOG(INFO) << "Seed: " << random.get_seed();
       n_started_workers.store(0);
       n_completed_workers.store(0);
@@ -80,6 +77,10 @@ public:
       wait_all_workers_finish();
       broadcast_stop();
       wait4_stop(n_coordinators - 1);
+      
+      epoch.fetch_add(1);
+      cleanup_batch();
+
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
@@ -109,9 +110,6 @@ public:
       // from the last batch earlier to the next batch and set remaining
       // transaction slots to null.
 
-      epoch.fetch_add(1);
-      cleanup_batch();
-
       n_started_workers.store(0);
       n_completed_workers.store(0);
       LOG(INFO) << "Aria_READ";
@@ -138,6 +136,10 @@ public:
       broadcast_stop();
       LOG(INFO) << "broadcast_stop";
       wait4_stop(n_coordinators - 1);
+
+      epoch.fetch_add(1);
+      cleanup_batch();
+
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::STOP);
       wait_all_workers_finish();
@@ -148,14 +150,26 @@ public:
 
   void cleanup_batch() {
     std::size_t it = 0;
+    auto& transactions = txn_meta.s_transactions_queue;
+    auto& storages     = txn_meta.storages;
     for (auto i = 0u; i < transactions.size(); i++) {
       if (transactions[i] == nullptr) {
-        break;
+        continue;;
       }
       if (transactions[i]->abort_lock) {
-        transactions[it++].swap(transactions[i]);
+        transactions[it].swap(transactions[i]);
+        // storages[it] = ;
+
+        // for(int j = 0 ; j < transactions[it]->readSet.size(); j ++ ){
+        //   LOG(INFO) << it << " <- " << i << " " << *(int*)transactions[it]->readSet[j].get_key();
+        // }
+        
+        transactions[it]->set_id(it);
+        it += 1;
       }
     }
+    LOG(INFO) << "cleanup_batch : " <<it;
+
     total_abort.store(it);
   }
 
@@ -164,7 +178,7 @@ public:
   DatabaseType &db;
   std::atomic<uint32_t> epoch;
   std::vector<StorageType> storages;
-  std::vector<std::unique_ptr<TransactionType>> transactions;
+  // std::vector<std::unique_ptr<TransactionType>> transactions;
   std::vector<std::shared_ptr<simpleTransaction>> txns;
   std::atomic<uint32_t> total_abort;
 public:

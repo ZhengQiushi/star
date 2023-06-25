@@ -81,6 +81,12 @@ test/model_util_test: test/CMakeFiles/model_util_test.dir/brain/model_util_test.
 test/model_util_test: test/CMakeFiles/model_util_test.dir/build.make
 test/model_util_test: libcommon.a
 test/model_util_test: test/libpeloton-test-common.a
+test/model_util_test: /usr/local/lib/libglog.a
+test/model_util_test: /usr/local/lib/libgflags.so
+test/model_util_test: /usr/local/lib/libtensorflow.so
+test/model_util_test: /usr/local/lib/libtensorflow_framework.so
+test/model_util_test: /usr/local/lib/libgmock.a
+test/model_util_test: /usr/local/lib/libgtest.a
 test/model_util_test: test/CMakeFiles/model_util_test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/star/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable model_util_test"
 	cd /home/star/test && $(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/model_util_test.dir/link.txt --verbose=$(VERBOSE)

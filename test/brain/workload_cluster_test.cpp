@@ -27,9 +27,9 @@ TEST(QueryClustererTests, ClusterTest) {
     peloton::brain::workload_data data;
     peloton::brain::get_workload_classified(cur_timestamp, last_timestamp, data);
     
-    double period_duration = 40;
+    double period_duration = 60;
     double sample_interval = 0.25;
-    const size_t top_cluster_num = 3;
+    const size_t top_cluster_num = 4;
 
     std::map<std::string, std::vector<double>> raw_features_;
     // 
@@ -43,6 +43,17 @@ TEST(QueryClustererTests, ClusterTest) {
     std::vector<peloton::brain::Cluster*> top_k = peloton::brain::getTopCoverage(top_cluster_num, query_clusterer);
 
     DCHECK(top_k.size() == top_cluster_num);
+
+    std::ofstream ofs("/home/star/data/getWorkLoad.xls", std::ios::trunc);
+    int len = top_k[0]->GetCentroid().size();
+    for(int i = 0 ; i < len; i ++ ){
+      ofs << sample_interval * i << "\t";
+      for(int j = 0 ; j < top_k.size(); j ++ ){
+        ofs << top_k[j]->GetCentroid()[i] * top_k[j]->GetFrequency() << "\t";
+      }
+      ofs << "\n";
+    }
+    ofs.close();
 }
 
 int main(int argc, char **argv)

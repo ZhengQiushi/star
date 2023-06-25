@@ -25,4 +25,8 @@ cmake/*
 !brain/
 !third_party/
 
-*.py
+# *.py
+
+*.make
+*.txt
+*.cmake

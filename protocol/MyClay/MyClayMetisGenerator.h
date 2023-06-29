@@ -37,7 +37,6 @@ public:
 
   using StorageType = typename WorkloadType::StorageType;
 
-  int pin_thread_id_ = 3;
 
   MyClayMetisGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
@@ -214,7 +213,7 @@ public:
     int cur_move_size = my_clay->move_plans.size();
     // pack up move-steps to transmit request
     double thresh_ratio = 1;
-    for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
+    for(int i = 0 ; i < thresh_ratio * cur_move_size ; i ++ ){ // 
       bool success = false;
       std::shared_ptr<myMove<WorkloadType>> cur_move;
       
@@ -389,7 +388,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
+        int start_offset = 5 * 1000; // 10 * 1000 * 2; // debug
         // 
         int cur_workload = 0;
 
@@ -448,7 +447,7 @@ public:
 
 
           cur_workload = (cur_workload + 1) % workload_num;
-          // break; // debug
+          break; // debug
         }
         LOG(INFO) << "transmiter " << " exits.";
     // });

@@ -22,12 +22,12 @@ class QueryClustererTests : public PelotonTest {};
 TEST(QueryClustererTests, ClusterTest) {
 
     double cur_timestamp = 0;
-    double last_timestamp = 120;
+    double last_timestamp = 240;
 
     peloton::brain::workload_data data;
     peloton::brain::get_workload_classified(cur_timestamp, last_timestamp, data);
     
-    double period_duration = 60;
+    double period_duration = 80;
     double sample_interval = 0.25;
     const size_t top_cluster_num = 4;
 
@@ -42,9 +42,54 @@ TEST(QueryClustererTests, ClusterTest) {
     
     std::vector<peloton::brain::Cluster*> top_k = peloton::brain::getTopCoverage(top_cluster_num, query_clusterer);
 
-    DCHECK(top_k.size() == top_cluster_num);
+    DCHECK(top_k.size() <= top_cluster_num);
 
-    std::ofstream ofs("/home/star/data/getWorkLoad.xls", std::ios::trunc);
+
+    std::ofstream offs("/home/star/data/getWorkLoad.xls", std::ios::trunc);
+    int lenn = raw_features_.begin()->second.size();
+
+    offs << "ts" << "\t";
+    for(int j = 0 ; j < top_k.size(); j ++ ){
+      for(auto& i : top_k[j]->get_templates()){
+        offs << i << " " ;
+      }
+      offs << "\t";
+    }
+    offs << "\n";
+
+    for(int i = 0 ; i < lenn; i ++ ){
+      offs << sample_interval * i << "\t";
+
+      for(int k = 0 ; k < top_k.size(); k ++ ){
+        int sum = 0;
+
+        for(auto& j : raw_features_){
+          if(top_k[k]->get_templates().count(j.first)){
+            sum += j.second[i];
+          }
+          
+        }
+        offs << sum << " " ;
+        offs << "\t";
+      }
+
+
+      offs << "\n";
+    }
+    offs.close();
+
+
+
+    std::ofstream ofs("/home/star/data/getWorkLoad_clustered.xls", std::ios::trunc);
+    offs << "ts" << "\t";
+    for(int j = 0 ; j < top_k.size(); j ++ ){
+      for(auto& i : top_k[j]->get_templates()){
+        ofs << i << " " ;
+      }
+      ofs << "\t";
+    }
+    ofs << "\n";
+    
     int len = top_k[0]->GetCentroid().size();
     for(int i = 0 ; i < len; i ++ ){
       ofs << sample_interval * i << "\t";

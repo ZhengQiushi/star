@@ -244,6 +244,8 @@ public:
             manager->n_started_workers));
       // }
 
+
+
       workers.push_back(manager);
       // workers.push_back(recorder);  
     }
@@ -443,7 +445,7 @@ public:
             0)
           << "In MyClay, each partition is managed by only one thread.";
 
-      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using TransactionType = star::MyClayTransaction ;// TwoPLTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
@@ -568,7 +570,7 @@ public:
             0)
           << "In MyClay, each partition is managed by only one thread.";
 
-      using TransactionType = star::SiloTransaction ;// TwoPLTransaction;
+      using TransactionType = star::MyClayTransaction ;// TwoPLTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
       using DatabaseType = 

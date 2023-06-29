@@ -63,7 +63,7 @@ struct ScheduleMeta {
 
 template <class Workload> 
 struct TransactionMeta {
-  using TransactionType = SiloTransaction;
+  using TransactionType = MyClayTransaction;
   using WorkloadType = Workload;
   using StorageType = typename WorkloadType::StorageType;
   TransactionMeta(int coordinator_num, int batch_size){

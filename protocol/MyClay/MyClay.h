@@ -10,8 +10,8 @@
 
 #include "core/Partitioner.h"
 #include "core/Table.h"
-#include "protocol/Silo/SiloHelper.h"
-#include "protocol/Silo/SiloTransaction.h"
+#include "protocol/TwoPL/TwoPLHelper.h"
+#include "protocol/MyClay/MyClayTransaction.h"
 #include "protocol/MyClay/MyClayMessage.h"
 #include <glog/logging.h>
 
@@ -23,7 +23,7 @@ public:
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = typename DatabaseType::ContextType;
   using MessageType = MyClayMessage;
-  using TransactionType = SiloTransaction;
+  using TransactionType = MyClayTransaction;
 
   using MessageFactoryType = MyClayMessageFactory;
   using MessageHandlerType = MyClayMessageHandler<DatabaseType>;
@@ -37,191 +37,7 @@ public:
     ITable *table = db.find_table(table_id, partition_id);
     auto value_bytes = table->value_size();
     auto row = table->search(key);
-    return SiloHelper::read(row, value, value_bytes);
-  }
-
-
-  void abort(TransactionType &txn,
-             std::vector<std::unique_ptr<Message>> &syncMessages,
-             std::vector<std::unique_ptr<Message>> &asyncMessages) {
-
-    // auto &writeSet = txn.writeSet;
-    auto &readSet = txn.readSet;
-    // unlock locked records
-
-    for (auto i = 0u; i < readSet.size(); i++) {
-      auto &readKey = readSet[i];
-      // only unlock locked records
-      if (!readKey.get_write_lock_bit())
-        continue;
-      auto tableId = readKey.get_table_id();
-      auto partitionId = readKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-
-      auto coordinatorID = readKey.get_dynamic_coordinator_id();
-
-      if (coordinatorID == context.coordinator_id) {
-        auto key = readKey.get_key();
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
-        if(SiloHelper::is_locked(tid)){
-          SiloHelper::unlock(tid);
-        }
-      } else {
-        
-        txn.network_size += MessageFactoryType::new_abort_message(
-            *syncMessages[coordinatorID], *table, readKey.get_key());
-      }
-    }
-
-    sync_messages(txn, false);
-  }
-
-  bool commit(TransactionType &txn,
-              std::vector<std::unique_ptr<Message>> &syncMessages,
-              std::vector<std::unique_ptr<Message>> &asyncMessages) {
-
-    // lock write set
-    if (lock_write_set(txn, syncMessages)) {
-      abort(txn, syncMessages, asyncMessages);
-      return false;
-    }
-
-    // commit phase 2, read validation
-    if (!validate_read_set(txn, syncMessages)) {
-      abort(txn, syncMessages, asyncMessages);
-      return false;
-    }
-
-    // generate tid
-    uint64_t commit_tid = generate_tid(txn);
-
-    // write and replicate
-    write_and_replicate(txn, commit_tid, syncMessages, asyncMessages);
-
-    return true;
-  }
-
-private:
-  bool lock_write_set(TransactionType &txn,
-                      std::vector<std::unique_ptr<Message>> &messages) {
-
-    auto &readSet = txn.readSet;
-    // auto &writeSet = txn.writeSet;
-
-    for (auto i = 0u; i < readSet.size(); i++) {
-      auto &readKey = readSet[i];
-      if(!readKey.get_write_request_bit()){
-        continue;
-      }
-      if(readKey.get_read_respond_bit()){ // already locked beforehand
-        continue;
-      }
-      auto tableId = readKey.get_table_id();
-      auto partitionId = readKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-
-      // lock local records
-      auto coordinatorID = readKey.get_dynamic_coordinator_id();
-      if (context.coordinator_id == coordinatorID) {
-        auto key = readKey.get_key();
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
-        bool success;
-        uint64_t latestTid = SiloHelper::lock(tid, success);
-
-        if (!success) {
-          txn.abort_lock = true;
-          break;
-        }
-
-        readKey.set_write_lock_bit();
-
-        // auto readKeyPtr = txn.get_read_key(key);
-        // assume no blind write
-        // DCHECK(readKeyPtr != nullptr);
-        uint64_t tidOnRead = readKey.get_tid();
-        if (latestTid != tidOnRead) {
-          txn.abort_lock = true;
-          break;
-        }
-
-        // writeKey.set_tid(latestTid);
-      } else {
-        txn.pendingResponses++;
-        // auto coordinatorID = partitioner.master_coordinator(partitionId);
-        VLOG(DEBUG_V14) << "      new_lock_message : " << *(int*)readKey.get_key() << " " << messages[coordinatorID]->get_source_node_id() << " -> " << messages[coordinatorID]->get_dest_node_id() << " " << txn.pendingResponses;
-
-        txn.network_size += MessageFactoryType::new_lock_message(
-            *messages[coordinatorID], *table, readKey.get_key(), i);
-      }
-    }
-
-    sync_messages(txn);
-
-    return txn.abort_lock;
-  }
-
-  bool validate_read_set(TransactionType &txn,
-                         std::vector<std::unique_ptr<Message>> &messages) {
-
-    auto &readSet = txn.readSet;
-    auto &writeSet = txn.writeSet;
-
-    // auto isKeyInWriteSet = [&writeSet](const void *key) {
-    //   for (auto &writeKey : writeSet) {
-    //     if (writeKey.get_key() == key) {
-    //       return true;
-    //     }
-    //   }
-    //   return false;
-    // };
-
-    for (auto i = 0u; i < readSet.size(); i++) {
-      auto &readKey = readSet[i];
-
-      if (readKey.get_local_index_read_bit()) {
-        continue; // read only index does not need to validate
-      }
-
-      // bool in_write_set = isKeyInWriteSet(readKey.get_key());
-      // if (in_write_set) {
-      //   continue;
-      // }
-      if(readKey.get_write_request_bit()){
-        continue;  // already validated in lock write set
-      }
-
-      auto tableId = readKey.get_table_id();
-      auto partitionId = readKey.get_partition_id();
-      auto table = db.find_table(tableId, partitionId);
-      auto coordinatorID = readKey.get_dynamic_coordinator_id();
-
-      if (coordinatorID == context.coordinator_id) {
-        auto key = readKey.get_key();
-        uint64_t tid = table->search_metadata(key).load();
-        if (SiloHelper::remove_lock_bit(tid) != readKey.get_tid()) {
-          txn.abort_read_validation = true;
-          break;
-        }
-        if (SiloHelper::is_locked(tid)) { // must be locked by others
-          txn.abort_read_validation = true;
-          break;
-        }
-      } else {
-        txn.pendingResponses++;
-//         auto coordinatorID = partitioner.master_coordinator(partitionId);
-        txn.network_size += MessageFactoryType::new_read_validation_message(
-            *messages[coordinatorID], *table, readKey.get_key(), i,
-            readKey.get_tid());
-      }
-    }
-
-    if (txn.pendingResponses == 0) {
-      txn.local_validated = true;
-    }
-
-    sync_messages(txn);
-
-    return !txn.abort_read_validation;
+    return TwoPLHelper::read(row, value, value_bytes);
   }
 
   uint64_t generate_tid(TransactionType &txn) {
@@ -263,43 +79,178 @@ private:
     return next_tid;
   }
 
-  void
-  write_and_replicate(TransactionType &txn, uint64_t commit_tid,
-                      std::vector<std::unique_ptr<Message>> &syncMessages,
-                      std::vector<std::unique_ptr<Message>> &asyncMessages) {
 
-    auto &readSet = txn.readSet;
+  void abort(TransactionType &txn,
+             std::vector<std::unique_ptr<Message>> &syncMessages) {
+
     // auto &writeSet = txn.writeSet;
+    auto &readSet = txn.readSet;
+    // unlock locked records
 
     for (auto i = 0u; i < readSet.size(); i++) {
       auto &readKey = readSet[i];
-      if(!readKey.get_write_request_bit()){
-        continue;
-      }
       auto tableId = readKey.get_table_id();
       auto partitionId = readKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
       auto coordinatorID = readKey.get_dynamic_coordinator_id();
-      const RouterValue* const router_val = readKey.get_router_value();
+      auto key = readKey.get_key();
+
+      if (readKey.get_read_lock_bit()) {
+        if (coordinatorID == context.coordinator_id) {
+          auto value = readKey.get_value();
+          std::atomic<uint64_t> &tid = table->search_metadata(key);
+          TwoPLHelper::read_lock_release(tid);
+        } else {
+          // auto coordinatorID = partitioner.master_coordinator(partitionId);
+          LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << false;
+
+          txn.network_size += MessageFactoryType::new_abort_message(
+              *syncMessages[coordinatorID], *table, readKey.get_key(), false);
+        }
+      }
+
+      if (readKey.get_write_lock_bit()) {
+        if (coordinatorID == context.coordinator_id) {
+          auto value = readKey.get_value();
+          std::atomic<uint64_t> &tid = table->search_metadata(key);
+          TwoPLHelper::write_lock_release(tid);
+        } else {
+          // auto coordinatorID = partitioner.master_coordinator(partitionId);
+          LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << true;
+          txn.network_size += MessageFactoryType::new_abort_message(
+              *syncMessages[coordinatorID], *table, readKey.get_key(), true);
+        }
+      }
+    }
+
+    sync_messages(txn, false);
+  }
+
+  bool commit(TransactionType &txn,
+              std::vector<std::unique_ptr<Message>> &syncMessages,
+              std::vector<std::unique_ptr<Message>> &asyncMessages) {
+
+    if (txn.abort_lock) {
+      abort(txn, syncMessages);
+      return false;
+    }
+
+    // generate tid
+    uint64_t commit_tid = generate_tid(txn);
+
+    // write and replicate
+    write(txn, commit_tid, syncMessages);
+
+    // release locks
+    release_lock(txn, commit_tid, syncMessages);
+
+    // replicate
+    replicate(txn, commit_tid, asyncMessages);
+
+    return true;
+  }
+
+  void release_lock(TransactionType &txn, uint64_t commit_tid,
+                    std::vector<std::unique_ptr<Message>> &messages) {
+
+    // release read locks
+    auto &readSet = txn.readSet;
+
+    for (auto i = 0u; i < readSet.size(); i++) {
+      auto &readKey = readSet[i];
+      auto tableId = readKey.get_table_id();
+      auto partitionId = readKey.get_partition_id();
+      auto table = db.find_table(tableId, partitionId);
+
+      auto coordinatorID = readKey.get_dynamic_coordinator_id();
+
+      if (readKey.get_read_lock_bit()) {
+        if (coordinatorID == context.coordinator_id) {
+          auto key = readKey.get_key();
+          auto value = readKey.get_value();
+          std::atomic<uint64_t> &tid = table->search_metadata(key);
+          TwoPLHelper::read_lock_release(tid);
+        } else {
+          // auto coordinatorID = partitioner.master_coordinator(partitionId);
+          txn.network_size += MessageFactoryType::new_release_read_lock_message(
+              *messages[coordinatorID], *table, readKey.get_key());
+        }
+      }
+
+      if (readKey.get_write_lock_bit()) {
+        if (coordinatorID == context.coordinator_id) {
+          auto key = readKey.get_key();
+          auto value = readKey.get_value();
+          std::atomic<uint64_t> &tid = table->search_metadata(key);
+          TwoPLHelper::write_lock_release(tid);
+        } else {
+          // auto coordinatorID = partitioner.master_coordinator(partitionId);
+          txn.network_size += MessageFactoryType::new_release_write_lock_message(
+              *messages[coordinatorID], *table, readKey.get_key(), commit_tid);
+        }
+      }
+    }
+  }
+
+
+private:
+
+  void write(TransactionType &txn, uint64_t commit_tid,
+             std::vector<std::unique_ptr<Message>> &messages) {
+
+    auto &readSet = txn.readSet;
+    auto &writeSet = txn.writeSet;
+
+    for (auto i = 0u; i < readSet.size(); i++) {
+      auto &readKey = readSet[i];
+      auto tableId = readKey.get_table_id();
+      auto partitionId = readKey.get_partition_id();
+      auto table = db.find_table(tableId, partitionId);
+      if(!readKey.get_write_lock_bit()){
+        continue;
+      }
+      // write
+      auto coordinatorID = readKey.get_dynamic_coordinator_id();
 
       // write
       if (coordinatorID == context.coordinator_id) {
         auto key = readKey.get_key();
         auto value = readKey.get_value();
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
         table->update(key, value);
-        SiloHelper::unlock(tid, commit_tid);
       } else {
-        // auto coordinatorID = partitioner.master_coordinator(partitionId);
+        txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_write_message(
-            *syncMessages[coordinatorID], *table, readKey.get_key(),
-            readKey.get_value(), commit_tid);
+            *messages[coordinatorID], *table, readKey.get_key(),
+            readKey.get_value());
       }
+    }
 
+    sync_messages(txn);
+  }
+
+
+  void replicate(TransactionType &txn, uint64_t commit_tid,
+                 std::vector<std::unique_ptr<Message>> &messages) {
+
+    auto &readSet = txn.readSet;
+    auto &writeSet = txn.writeSet;
+
+    for (auto i = 0u; i < readSet.size(); i++) {
+      auto &readKey = readSet[i];
+      auto tableId = readKey.get_table_id();
+      auto partitionId = readKey.get_partition_id();
+      auto table = db.find_table(tableId, partitionId);
+      if(!readKey.get_write_lock_bit()){
+        continue;
+      }
       // value replicate
 
       std::size_t replicate_count = 0;
+
+      auto coordinatorID = readKey.get_dynamic_coordinator_id();
+      const RouterValue* const router_val = readKey.get_router_value();
+
 
       for (auto k = 0u; k < partitioner.total_coordinators(); k++) {
 
@@ -312,28 +263,19 @@ private:
         if (k == coordinatorID) {
           continue;
         }
-
         replicate_count++;
 
         // local replicate
         if (k == txn.coordinator_id) {
           auto key = readKey.get_key();
           auto value = readKey.get_value();
-          std::atomic<uint64_t> &tid = table->search_metadata(key);
-
-          uint64_t last_tid = SiloHelper::lock(tid);
-
-          if (commit_tid > last_tid) {
-            table->update(key, value);
-            SiloHelper::unlock(tid, commit_tid);
-          } else {
-            SiloHelper::unlock(tid);
-          }
-
+          table->update(key, value);
         } else {
+
+          txn.pendingResponses++;
           auto coordinatorID = k;
           txn.network_size += MessageFactoryType::new_replication_message(
-              *asyncMessages[coordinatorID], *table, readKey.get_key(),
+              *messages[coordinatorID], *table, readKey.get_key(),
               readKey.get_value(), commit_tid);
         }
       }

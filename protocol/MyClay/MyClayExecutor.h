@@ -15,6 +15,7 @@
 #include "common/ShareQueue.h"
 #include "protocol/MyClay/MyClayManager.h"
 #include "protocol/MyClay/MyClayMessage.h"
+#include "protocol/MyClay/MyClayTransaction.h"
 
 #include <chrono>
 
@@ -24,7 +25,7 @@ public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
   using StorageType = typename WorkloadType::StorageType;
-  using TransactionType = SiloTransaction;
+  using TransactionType = MyClayTransaction;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
 
@@ -98,7 +99,7 @@ public:
         txn_meta.c_txn_id_queue.push_no_wait(txn_id);
       }
       auto p = workload.unpack_transaction(context, 0, storages[txn_id], simple_txn);
-      txn_meta.c_transactions_queue[txn_id] = std::move(p);
+      // txn_meta.c_transactions_queue[txn_id] = std::move(p);
     }
   }
 
@@ -142,6 +143,7 @@ public:
       count += 1;
       transaction = std::move(cur_txns[i]);
       transaction->startTime = std::chrono::steady_clock::now();;
+      // LOG(INFO) << transaction->get_query_printed();
 
       do {
         process_request();
@@ -177,7 +179,7 @@ public:
           
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
-            protocol.abort(*transaction, sync_messages, async_messages);
+            protocol.abort(*transaction, sync_messages);
             n_abort_no_retry.fetch_add(1);
             continue;
           } else {
@@ -225,7 +227,7 @@ public:
             }
             random.set_seed(last_seed);
             retry_transaction = false;
-            protocol.abort(*transaction, sync_messages, async_messages);
+            // protocol.abort(*transaction, sync_messages);
             n_abort_no_retry.fetch_add(1);
           }
         } else if(result == TransactionResult::TRANSMIT_REQUEST){
@@ -233,7 +235,7 @@ public:
           n_migrate.fetch_add(transaction->migrate_cnt);
           n_remaster.fetch_add(transaction->remaster_cnt);
         } else {
-          protocol.abort(*transaction, sync_messages, async_messages);
+          protocol.abort(*transaction, sync_messages);
           n_abort_no_retry.fetch_add(1);
         }
 
@@ -355,7 +357,7 @@ public:
           std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
 
-        VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
+        LOG(INFO) << "prepare_transactions_to_run "
                 << std::chrono::duration_cast<std::chrono::milliseconds>(
                       std::chrono::steady_clock::now() - begin)
                       .count()
@@ -363,22 +365,19 @@ public:
         // now = std::chrono::steady_clock::now();
         unpack_route_transaction(); // 
 
-
-        VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction "
-                << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - begin)
-                      .count()
-                << " milliseconds.";
-
-        VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size() << transactions_prepared.load();
-
       transactions_prepared.fetch_add(1);
       while(transactions_prepared.load() < context.worker_num){
         std::this_thread::yield();
         process_request();
       }
 
-      LOG(INFO) << "transactions_prepared: " << transactions_prepared.load();
+      VLOG_IF(DEBUG_V, id==0) << "unpack_route_transaction "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - begin)
+                      .count()
+                << " milliseconds.";
+
+      VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size() << transactions_prepared.load();
 
       n_started_workers.fetch_add(1);
 
@@ -551,68 +550,50 @@ public:
   }
 
   void setupHandlers(TransactionType &txn) {
-
-    txn.readRequestHandler =
+    txn.lock_request_handler =
         [this, &txn](std::size_t table_id, std::size_t partition_id,
                      uint32_t key_offset, const void *key, void *value,
-                     bool local_index_read) -> uint64_t {
+                     bool local_index_read, bool write_lock, bool &success,
+                     bool &remote) -> uint64_t {
+      if (local_index_read) {
+        success = true;
+        remote = false;
+        return this->protocol.search(table_id, partition_id, key, value);
+      }
+
       bool local_read = false;
       auto &readKey = txn.readSet[key_offset];
       ITable *table = this->db.find_table(table_id, partition_id);
       // master-replica
-      size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
-      if(readKey.get_write_request_bit()){
-        // write key, the find all its replica
-        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner.get());
-        coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
-      }
-      // sec keys replicas
-      readKey.set_dynamic_coordinator_id(coordinatorID);
-      readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
+      size_t coordinatorID = readKey.get_dynamic_coordinator_id();
 
-      // bool remaster = false;
       if (coordinatorID == context.coordinator_id) {
-        // local_read = true;
-          // master-replica is at local node 
-          bool success = false;
-          std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-          if(success == false){
-            return 0;
-          }
-          // immediatly lock local record 赶快本地lock
-          if(readKey.get_write_request_bit()){
-            SiloHelper::lock(tid, success);
-            // VLOG(DEBUG_V14) << "LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid;
-          } 
-          // 
-          // txn.tids[key_offset] = &tid;
 
-          if(success){
-            // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
-            readKey.set_read_respond_bit();
-          } else {
-            return 0;
-          }
-          local_read = true;
+        remote = false;
 
-      } 
+        std::atomic<uint64_t> &tid = table->search_metadata(key);
 
-      if (local_index_read || local_read) {
-        return this->protocol.search(table_id, partition_id, key, value);
+        if (write_lock) {
+          TwoPLHelper::write_lock(tid, success);
+        } else {
+          TwoPLHelper::read_lock(tid, success);
+        }
+
+        if (success) {
+          return this->protocol.search(table_id, partition_id, key, value);
+        } else {
+          return 0;
+        }
+
       } else {
-        
-        for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-          // also send to generator to update the router-table
-          if(i == coordinator_id){
-            continue; // local
-          }
-          if(i == coordinatorID){
-              VLOG(DEBUG_V14) << "Remote Read : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
-              txn.network_size += MessageFactoryType::new_search_message(
-                  *(this->sync_messages[coordinatorID]), *table, key, key_offset);
-              txn.pendingResponses++;
-          }       
+        remote = true;
+
+        if (write_lock) {
+          txn.network_size += MessageFactoryType::new_write_lock_message(
+              *(this->sync_messages[coordinatorID]), *table, key, key_offset);
+        } else {
+          txn.network_size += MessageFactoryType::new_read_lock_message(
+              *(this->sync_messages[coordinatorID]), *table, key, key_offset);
         }
         txn.distributed_transaction = true;
         return 0;

@@ -35,7 +35,6 @@ public:
   using MessageFactoryType = MyClayMessageFactory;
   using MessageHandlerType = MyClayMessageHandler<DatabaseType>;
 
-  int pin_thread_id_ = 5;
 
   MyClayMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context, uint32_t &batch_size,

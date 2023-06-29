@@ -107,7 +107,7 @@ public:
 //      LOG(INFO) <<  key_[i] << " " << update_[i];
     }
     message.flush();
-    VLOG(DEBUG_V14) << " SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
+    // VLOG(DEBUG_V14) << " SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
     return message_size;
   }
 
@@ -378,12 +378,12 @@ public:
     new_router_txn.idx_ = txn_id;
     new_router_txn.on_replica_id = on_replica_id;
     new_router_txn.destination_coordinator = destination_coordinator;
-    VLOG(DEBUG_V14) << " GET ROUTER " << is_transmit_request << " " << 
-                                         is_distributed      << " " << 
-                                         on_replica_id       << " " <<
-                                         destination_coordinator << " " <<
-                                         new_router_txn.keys[0]  << " " << 
-                                         new_router_txn.keys[1];
+    // VLOG(DEBUG_V14) << " GET ROUTER " << is_transmit_request << " " << 
+    //                                      is_distributed      << " " << 
+    //                                      on_replica_id       << " " <<
+    //                                      destination_coordinator << " " <<
+    //                                      new_router_txn.keys[0]  << " " << 
+    //                                      new_router_txn.keys[1];
     router_txn_queue->push_no_wait(new_router_txn);
     // DCHECK(ok == true);
 
@@ -413,7 +413,7 @@ public:
     star::Decoder dec(stringPiece);
     dec >> send_txn_cnt;
     stop_queue->push_back(send_txn_cnt);
-    LOG(INFO) << "GET ROUTER_STOP " << stop_queue->size();
+    // LOG(INFO) << "GET ROUTER_STOP " << stop_queue->size();
     return;
 
 }

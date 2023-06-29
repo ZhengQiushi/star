@@ -35,7 +35,6 @@ public:
   using MessageFactoryType = LionMetisMessageFactory;
   using MessageHandlerType = LionMetisMessageHandler<DatabaseType>;
 
-  int pin_thread_id_ = 5;
 
   LionMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context, uint32_t &batch_size,
@@ -364,22 +363,7 @@ public:
               n_remaster.fetch_add(transaction->remaster_cnt);
 
               retry_transaction = false;
-            } else {
-              if(transaction->abort_lock && transaction->abort_read_validation){
-                // 
-                retry_transaction = false;
-              } else {
-                if (transaction->abort_lock) { 
-                  // pass
-                } else {
-                  DCHECK(transaction->abort_read_validation);
-                }
-                metis_random.set_seed(last_seed);
-                VLOG(DEBUG_V14) << "TRANSACTION RETRY: " << transaction->get_query_printed();
-                retry_transaction = true;
-              }
-              // protocol->abort(*transaction, messages);
-            }
+            } 
           } else {
             // protocol->abort(*transaction, messages);
           }
@@ -555,20 +539,8 @@ private:
         // master-replica is at local node 
         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
         txn.tids[key_offset] = &tid;
-        // if(success == false){
-        //   return 0;
-        // }
-        // // immediatly lock local record 赶快本地lock
-        // if(readKey.get_write_lock_bit()){
-        //   TwoPLHelper::write_lock(tid, success);
-        //   // VLOG(DEBUG_V14) << "LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid;
-        // } else {
-        //   TwoPLHelper::read_lock(tid, success);
-        //   // VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
-        // }
-        // // 
+
         if(success){
-          // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
           readKey.set_read_respond_bit();
         } else {
           return 0;
@@ -581,8 +553,6 @@ private:
         if(remaster && context.read_on_replica && !readKey.get_write_lock_bit()){
           
           std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-          TwoPLHelper::read_lock(tid, success);
-          
           txn.tids[key_offset] = &tid;
 
           // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
@@ -631,106 +601,6 @@ private:
     txn.remote_request_handler = [this]() { return this->process_request(); };
     txn.message_flusher = [this]() { this->flush_messages(messages); };
   }
-
-  // void setupMetisHandlers(TransactionType &txn, ProtocolType &protocol) {
-  //   txn.readRequestHandler =
-  //       [this, &txn, &protocol](std::size_t table_id, std::size_t partition_id,
-  //                    uint32_t key_offset, const void *key, void *value,
-  //                    bool local_index_read, bool &success) -> uint64_t {
-  //     bool local_read = false;
-
-  //     auto &readKey = txn.readSet[key_offset];
-  //     // master-replica
-  //     size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-  //     uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
-  //     if(readKey.get_write_lock_bit()){
-  //       // write key, the find all its replica
-  //       LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner);
-  //       coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
-  //     }
-
-  //     if(coordinatorID == context.coordinator_num){
-  //       success = false;
-  //       return 0;
-  //     }
-  //     // sec keys replicas
-  //     readKey.set_dynamic_coordinator_id(coordinatorID);
-  //     readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
-
-  //     bool remaster = false;
-
-  //     ITable *table = this->db.find_table(table_id, partition_id);
-  //     if (coordinatorID == coordinator_id) {
-  //       // master-replica is at local node 
-  //       std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-  //       if(success == false){
-  //         return 0;
-  //       }
-  //       // immediatly lock local record 赶快本地lock
-  //       if(readKey.get_write_lock_bit()){
-  //         TwoPLHelper::write_lock(tid, success);
-  //       } else {
-  //         CHECK(false);
-  //       }
-  //       // 
-  //       txn.tids[key_offset] = &tid;
-
-  //       if(success){
-  //         VLOG(DEBUG_V16) << "METIS-LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed();
-  //         readKey.set_read_respond_bit();
-  //       } else {
-  //         return 0;
-  //       }
-  //       local_read = true;
-  //     } else {
-  //       // master not at local, but has a secondary one. need to be remastered
-  //       // FUCK 此处获得的table partition并不是我们需要从对面读取的partition
-  //       remaster = table->contains(key); // current coordniator
-  //       if(remaster && context.read_on_replica && !readKey.get_write_lock_bit()){
-          
-          
-  //         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-  //         TwoPLHelper::read_lock(tid, success);
-          
-  //         txn.tids[key_offset] = &tid;
-  //         VLOG(DEBUG_V16) <<"METIS-LOCK LOCAL." << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
-  //         readKey.set_read_respond_bit();
-          
-  //         local_read = true;
-  //       }
-  //     }
-
-  //     if (local_index_read || local_read) {
-  //       auto ret = protocol.search(table_id, partition_id, key, value, success);
-  //       return ret;
-  //     } else {
-  //       for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-  //         // also send to generator to update the router-table
-  //         if(i == coordinator_id){
-  //           continue; // local
-  //         }
-  //         if(i == coordinatorID){
-  //           // target
-  //           txn.network_size += MessageFactoryType::new_search_message(
-  //               *(this->metis_messages[i]), *table, key, key_offset, remaster, true);
-  //         } else {
-  //           // others, only change the router
-  //           txn.network_size += MessageFactoryType::new_search_router_only_message(
-  //               *(this->metis_messages[i]), *table, key, key_offset, true);
-  //         }            
-  //         txn.pendingResponses++;
-  //       }
-  //       txn.distributed_transaction = true;
-  //       return 0;
-  //     }
-  //   };
-
-  //   // txn.remote_request_handler = [this]() { return this->process_metis_request(); };
-  //   txn.remote_request_handler = [this]() { return this->process_request(); };
-  //   txn.message_flusher = [this]() { this->flush_messages(metis_messages); };
-  // }
-
-
 
   void flush_messages(std::vector<std::unique_ptr<Message>> &messages_) {
     for (auto i = 0u; i < messages_.size(); i++) {

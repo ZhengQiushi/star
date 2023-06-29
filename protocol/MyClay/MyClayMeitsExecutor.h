@@ -22,7 +22,7 @@ public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
   using StorageType = typename WorkloadType::StorageType;
-  using TransactionType = SiloTransaction;
+  using TransactionType = MyClayTransaction;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
 
@@ -152,31 +152,19 @@ public:
         // } else {
           // LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
         // }
-        
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
-
-          bool commit = protocol.commit(*transaction, sync_messages, async_messages);
-          if (commit) {
-            n_commit.fetch_add(1);
-            retry_transaction = false;
-          } else {
-            if (transaction->abort_lock) {
-              n_abort_lock.fetch_add(1);
-            } else {
-              DCHECK(transaction->abort_read_validation);
-              n_abort_read_validation.fetch_add(1);
-            }
-            random.set_seed(last_seed);
-            retry_transaction = true;
-          }
+          DCHECK(false);
         } else if(result == TransactionResult::TRANSMIT_REQUEST){
           // pass
+          uint64_t commit_tid = protocol.generate_tid(*transaction);
+          protocol.release_lock(*transaction, commit_tid, sync_messages);
+
           n_commit.fetch_add(1);
           n_migrate.fetch_add(transaction->migrate_cnt);
           n_remaster.fetch_add(transaction->remaster_cnt);
         } else {
-          protocol.abort(*transaction, sync_messages, async_messages);
+          protocol.abort(*transaction, sync_messages);
           n_abort_no_retry.fetch_add(1);
         }
         n_network_size.fetch_add(transaction->network_size);
@@ -367,52 +355,56 @@ public:
   }
 
   void setupHandlers(TransactionType &txn) {
-
-    txn.readRequestHandler =
+    txn.lock_request_handler =
         [this, &txn](std::size_t table_id, std::size_t partition_id,
                      uint32_t key_offset, const void *key, void *value,
-                     bool local_index_read) -> uint64_t {
+                     bool local_index_read, bool write_lock, bool &success,
+                     bool &remote) -> uint64_t {
+      if (local_index_read) {
+        success = true;
+        remote = false;
+        return this->protocol.search(table_id, partition_id, key, value);
+      }
+
       bool local_read = false;
       auto &readKey = txn.readSet[key_offset];
       ITable *table = this->db.find_table(table_id, partition_id);
-      size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
-
-      if(readKey.get_write_request_bit()){
-        // write key, the find all its replica
-        LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner.get());
-        coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
-      }
-      // sec keys replicas
-      readKey.set_dynamic_coordinator_id(coordinatorID);
-      readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
+      size_t coordinatorID = readKey.get_dynamic_coordinator_id();
+      // master-replica
+      // size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      // uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
+      // if(readKey.get_write_lock_request_bit()){
+      //   // write key, the find all its replica
+      //   LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner.get());
+      //   coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
+      // }
+      // // sec keys replicas
+      // readKey.set_dynamic_coordinator_id(coordinatorID);
+      // readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
 
       bool remaster = false;
-      if (coordinatorID == context.coordinator_id 
-      // ||
-      //     (this->context.read_on_replica && 
-      //      this->partitioner->is_partition_replicated_on(partition_id, this->coordinator_id)
-      //      )
-           ) {
-        local_read = true;
-      } else {
-        // remaster = table->contains(key); // current coordniator
-        // VLOG(DEBUG_V14) << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
 
-        // if(txn.is_transmit_requests()){
-        //   if(remaster){
-        //     txn.remaster_cnt ++ ;
-        //   } else {
-            txn.migrate_cnt ++ ;
-          // }
-        // }
-
-      }
-
-      if (local_index_read || local_read) {
-        return this->protocol.search(table_id, partition_id, key, value);
-      } else {
+      if (coordinatorID == context.coordinator_id) {
         
+        remote = false;
+
+        std::atomic<uint64_t> &tid = table->search_metadata(key);
+
+        if (write_lock) {
+          TwoPLHelper::write_lock(tid, success);
+        } else {
+          TwoPLHelper::read_lock(tid, success);
+        }
+
+        if (success) {
+          return this->protocol.search(table_id, partition_id, key, value);
+        } else {
+          return 0;
+        }
+
+      } else {
+        remote = true;
+
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
           // also send to generator to update the router-table
           if(i == coordinator_id){
@@ -420,34 +412,28 @@ public:
           }
           if(i == coordinatorID){
             // target
-            if(txn.is_transmit_requests()){
               VLOG(DEBUG_V14) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
               txn.network_size += MessageFactoryType::new_transmit_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset, remaster);
-              txn.pendingResponses++;
-            } else {
-              VLOG(DEBUG_V14) << "Remote Read : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
-              txn.network_size += MessageFactoryType::new_search_message(
-                  *(this->sync_messages[coordinatorID]), *table, key, key_offset);
-              txn.pendingResponses++;
-            }
+              //  txn.pendingResponses++; already added at myclayTransactions
           } else {
-            if(txn.is_transmit_requests()){
               // others, only change the router
               txn.network_size += MessageFactoryType::new_transmit_router_only_message(
                   *(this->sync_messages[i]), *table, key, key_offset);
               txn.pendingResponses++;
-            }
           }            
-          
         }
+
         txn.distributed_transaction = true;
-        return 0;
       }
+      return 0;
     };
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
-    txn.message_flusher = [this]() { this->flush_sync_messages(); };
+    txn.message_flusher = [this]() { 
+      this->flush_sync_messages();
+      this->flush_async_messages();
+     };
   };
 
 protected:

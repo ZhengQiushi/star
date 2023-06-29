@@ -184,6 +184,12 @@ public:
       message_flusher();
       while (pendingResponses > 0) {
         remote_request_handler();
+        status = get_worker_status();
+        if(status == ExecutorStatus::EXIT){
+          LOG(INFO) << "TRANSMITER SHOULD BE STOPPED";
+          success = false;
+          break;
+        }
       }
     }
     if(is_abort()){
@@ -343,7 +349,7 @@ public:
   Operation operation;
   std::vector<SiloRWKey> readSet, writeSet; //, routerSet;
   Breakdown b;
-  
+  ExecutorStatus status;
   int prepare, fetch, commit;
 };
 

@@ -9,35 +9,179 @@
 #include "common/MessagePiece.h"
 #include "core/ControlMessage.h"
 #include "core/Table.h"
-#include "protocol/Silo/SiloHelper.h"
-#include "protocol/Silo/SiloRWKey.h"
-#include "protocol/Silo/SiloTransaction.h"
+#include "protocol/TwoPL/TwoPLHelper.h"
+#include "protocol/MyClay/MyClayRWKey.h"
+#include "protocol/MyClay/MyClayTransaction.h"
 
 namespace star {
 
 enum class MyClayMessage {
-  SEARCH_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
-  SEARCH_RESPONSE,
-  // 
-  TRANSMIT_REQUEST,
+  TRANSMIT_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
   TRANSMIT_RESPONSE,
   TRANSMIT_ROUTER_ONLY_REQUEST,
   TRANSMIT_ROUTER_ONLY_RESPONSE,
   // 
-  LOCK_REQUEST,
-  LOCK_RESPONSE,
-  READ_VALIDATION_REQUEST,
-  READ_VALIDATION_RESPONSE,
+  READ_LOCK_REQUEST,
+  READ_LOCK_RESPONSE,
+  WRITE_LOCK_REQUEST,
+  WRITE_LOCK_RESPONSE,
   ABORT_REQUEST,
   WRITE_REQUEST,
+  WRITE_RESPONSE,
+  // 
   REPLICATION_REQUEST,
   REPLICATION_RESPONSE,
+  // 
+  RELEASE_READ_LOCK_REQUEST,
+  // RELEASE_READ_LOCK_RESPONSE,
+  RELEASE_WRITE_LOCK_REQUEST,
+  // RELEASE_WRITE_LOCK_RESPONSE,
+
   NFIELDS
 };
 
 class MyClayMessageFactory {
 
 public:
+  static std::size_t new_read_lock_message(Message &message, ITable &table,
+                                           const void *key,
+                                           uint32_t key_offset) {
+
+    /*
+     * The structure of a read lock request: (primary key, key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::READ_LOCK_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_write_lock_message(Message &message, ITable &table,
+                                            const void *key,
+                                            uint32_t key_offset) {
+
+    /*
+     * The structure of a write lock request: (primary key, key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::WRITE_LOCK_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_abort_message(Message &message, ITable &table,
+                                       const void *key, bool write_lock) {
+    /*
+     * The structure of an abort request: (primary key, wrtie lock)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(bool);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::ABORT_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << write_lock;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_write_message(Message &message, ITable &table,
+                                       const void *key, const void *value) {
+
+    /*
+     * The structure of a write request: (primary key, field value)
+     */
+
+    auto key_size = table.key_size();
+    auto field_size = table.field_size();
+
+    auto message_size = MessagePiece::get_header_size() + key_size + field_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::WRITE_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    table.serialize_value(encoder, value);
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_release_read_lock_message(Message &message,
+                                                   ITable &table,
+                                                   const void *key) {
+    /*
+     * The structure of a release read lock request: (primary key)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size = MessagePiece::get_header_size() + key_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::RELEASE_READ_LOCK_REQUEST),
+        message_size, table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_release_write_lock_message(Message &message,
+                                                    ITable &table,
+                                                    const void *key,
+                                                    uint64_t commit_tid) {
+
+    /*
+     * The structure of a release write lock request: (primary key, commit tid)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(commit_tid);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::RELEASE_WRITE_LOCK_REQUEST),
+        message_size, table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << commit_tid;
+    message.flush();
+    return message_size;
+  }
+
   static std::size_t new_transmit_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset, bool remaster) {
 
@@ -85,124 +229,6 @@ public:
     return message_size;
   }
 
-  static std::size_t new_search_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset) {
-
-    /*
-     * The structure of a search request: (primary key, read key offset)
-     */
-
-    auto key_size = table.key_size();
-
-    auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::SEARCH_REQUEST), message_size,
-        table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
-    message.flush();
-    return message_size;
-  }
-
-  static std::size_t new_lock_message(Message &message, ITable &table,
-                                      const void *key, uint32_t key_offset) {
-
-    /*
-     * The structure of a lock request: (primary key, write key offset)
-     */
-
-    auto key_size = table.key_size();
-
-    auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::LOCK_REQUEST), message_size,
-        table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
-    message.flush();
-    return message_size;
-  }
-
-  static std::size_t new_read_validation_message(Message &message,
-                                                 ITable &table, const void *key,
-                                                 uint32_t key_offset,
-                                                 uint64_t tid) {
-
-    /*
-     * The structure of a read validation request: (primary key, read key
-     * offset, tid)
-     */
-
-    auto key_size = table.key_size();
-
-    auto message_size = MessagePiece::get_header_size() + key_size +
-                        sizeof(key_offset) + sizeof(tid);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::READ_VALIDATION_REQUEST),
-        message_size, table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << tid;
-    message.flush();
-    return message_size;
-  }
-
-  static std::size_t new_abort_message(Message &message, ITable &table,
-                                       const void *key) {
-
-    /*
-     * The structure of an abort request: (primary key)
-     */
-
-    auto key_size = table.key_size();
-
-    auto message_size = MessagePiece::get_header_size() + key_size;
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::ABORT_REQUEST), message_size,
-        table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    message.flush();
-    return message_size;
-  }
-
-  static std::size_t new_write_message(Message &message, ITable &table,
-                                       const void *key, const void *value,
-                                       uint64_t commit_tid) {
-
-    /*
-     * The structure of a write request: (primary key, field value, commit_tid)
-     */
-
-    auto key_size = table.key_size();
-    auto field_size = table.field_size();
-
-    auto message_size = MessagePiece::get_header_size() + key_size +
-                        field_size + sizeof(commit_tid);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::WRITE_REQUEST), message_size,
-        table.tableID(), table.partitionID());
-
-    Encoder encoder(message.data);
-    encoder << message_piece_header;
-    encoder.write_n_bytes(key, key_size);
-    table.serialize_value(encoder, value);
-    encoder << commit_tid;
-    message.flush();
-    return message_size;
-  }
 
   static std::size_t new_replication_message(Message &message, ITable &table,
                                              const void *key, const void *value,
@@ -233,121 +259,10 @@ public:
 };
 
 template <class Database> class MyClayMessageHandler {
-  using Transaction = SiloTransaction;
+  using Transaction = MyClayTransaction;
   using Context = typename Database::ContextType;
 
 public:
-  static void search_request_handler(MessagePiece inputPiece,
-                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                     Transaction *txn) {
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(MyClayMessage::SEARCH_REQUEST));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-    auto value_size = table.value_size();
-
-    /*
-     * The structure of a read request: (primary key, read key offset)
-     * The structure of a read response: (value, tid, read key offset)
-     */
-
-    auto stringPiece = inputPiece.toStringPiece();
-    uint32_t key_offset;
-
-    DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
-
-    // get row and offset
-    const void *key = stringPiece.data();
-    stringPiece.remove_prefix(key_size);
-    star::Decoder dec(stringPiece);
-    dec >> key_offset;
-
-    DCHECK(dec.size() == 0);
-
-    bool success = true;
-    uint64_t tid = 0;
-
-    if(!table.contains(key)){
-      success = false;
-    }
-    VLOG(DEBUG_V14) << "request handler : " << *(int*)key << "success = " << success << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
-    // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + value_size +
-                        sizeof(success) +
-                        sizeof(uint64_t) + sizeof(key_offset);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::SEARCH_RESPONSE), message_size,
-        table_id, partition_id);
-
-    star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header;
-
-    // reserve size for read
-    responseMessage.data.append(value_size, 0);
-    if(success){
-      auto row = table.search(key);
-      void *dest =
-          &responseMessage.data[0] + responseMessage.data.size() - value_size;
-      // read to message buffer
-      tid = SiloHelper::read(row, dest, value_size);
-    }
-
-    encoder << success << tid << key_offset;
-    responseMessage.flush();
-
-  }
-
-  static void search_response_handler(MessagePiece inputPiece,
-                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(MyClayMessage::SEARCH_RESPONSE));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-    auto value_size = table.value_size();
-
-    /*
-     * The structure of a read response: (value, tid, read key offset)
-     */
-
-    uint64_t tid;
-    uint32_t key_offset;
-    bool success;
-
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  value_size + sizeof(success) + sizeof(tid) +
-                                                  sizeof(key_offset));
-
-    StringPiece stringPiece = inputPiece.toStringPiece();
-    stringPiece.remove_prefix(value_size);
-    Decoder dec(stringPiece);
-    dec >> success >> tid >> key_offset;
-
-    SiloRWKey &readKey = txn->readSet[key_offset];
-    if(success){
-      dec = Decoder(inputPiece.toStringPiece());
-      dec.read_n_bytes(readKey.get_value(), value_size);
-      readKey.set_tid(tid);
-    }
-    VLOG(DEBUG_V14) << "response handler : " << *(int*)readKey.get_key() << " success = " << success << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
-
-    txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
-    
-    if(!success){
-      txn->abort_lock = true;
-    }
-  }
-
   // 
   static void transmit_request_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
@@ -379,7 +294,7 @@ public:
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
     dec >> key_offset >> remaster; // index offset in the readSet from source request node
-
+    // LOG(INFO) << "TRANSMIT_REQUEST " << *(int*)key;
     DCHECK(dec.size() == 0);
 
     if(remaster == true){
@@ -412,7 +327,7 @@ public:
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     // try to lock tuple. Ensure not locked by current node
-    latest_tid = SiloHelper::lock(tid, success); // be locked 
+    latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){
       VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
@@ -461,7 +376,7 @@ public:
         void *dest =
             &responseMessage.data[0] + responseMessage.data.size() - value_size;
         auto row = table.search(key);
-        SiloHelper::read(row, dest, value_size);
+        TwoPLHelper::read(row, dest, value_size);
       }
       responseMessage.flush();
 
@@ -477,7 +392,7 @@ public:
     }
 
     // wait for the commit / abort to unlock
-    SiloHelper::unlock(tid);
+    TwoPLHelper::write_lock_release(tid);
   }
   static void transmit_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
@@ -516,8 +431,10 @@ public:
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
     
-    SiloRWKey &readKey = txn->readSet[key_offset];
+    MyClayRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
+
+    // LOG(INFO) << "TRANSMIT_RESPONSE " << *(int*)key;
 
     uint64_t last_tid = 0;
 
@@ -551,8 +468,8 @@ public:
       std::atomic<uint64_t> &tid_ = table.search_metadata(key);
       bool success = false;
 
-      last_tid = SiloHelper::lock(tid_, success);
-      VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+      last_tid = TwoPLHelper::write_lock(tid_, success);
+        VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
 
       if(!success){
         VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
@@ -569,20 +486,18 @@ public:
       auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
       uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
       auto coordinator_id_new = responseMessage.get_source_node_id(); 
-      DCHECK(coordinator_id_new != coordinator_id_old);
 
       // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " transmit reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
-
       // update router
       router_val->set_dynamic_coordinator_id(coordinator_id_new);
       router_val->set_secondary_coordinator_id(coordinator_id_new);
 
       readKey.set_dynamic_coordinator_id(coordinator_id_new);
-      readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
-      readKey.set_read_respond_bit();
+      readKey.set_router_value(router_val->get_dynamic_coordinator_id(),router_val->get_secondary_coordinator_id());
+      // readKey.set_Read();
       readKey.set_tid(tid); // original tid for lock release
-
-      SiloHelper::unlock(tid_);
+      readKey.set_write_lock_bit();
+      
       // txn->tids[key_offset] = &tid_;
     } else {
       VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
@@ -622,7 +537,7 @@ public:
     // get row and offset
     const void *key = stringPiece.data();
     // auto row = table.search(key);
-
+     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
     dec >> key_offset; // index offset in the readSet from source request node
@@ -651,14 +566,14 @@ public:
     if(coordinator_id_new != coordinator_id_old){
       auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
       auto router_val = (RouterValue*)router_table->search_value(key);
-      // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+      // // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
 
       router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
       router_val->set_secondary_coordinator_id(coordinator_id_new);
     }
 
     // if(context.coordinator_id == context.coordinator_num){
-    //   LOG(INFO) << "transmit_router_only_request_handler : " << *(int*)key << " " << coordinator_id_old << " -> " << coordinator_id_new;
+    //   // LOG(INFO) << "transmit_router_only_request_handler : " << *(int*)key << " " << coordinator_id_old << " -> " << coordinator_id_new;
     // }
     responseMessage.flush();
   }
@@ -668,40 +583,162 @@ public:
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(MyClayMessage::TRANSMIT_ROUTER_ONLY_RESPONSE));
-
+    // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_RESPONSE";
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
   }
 
-  static void lock_request_handler(MessagePiece inputPiece,
-                                   Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                   Transaction *txn) {
+  static void read_lock_request_handler(MessagePiece inputPiece,
+                                        Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                        Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(MyClayMessage::LOCK_REQUEST));
+           static_cast<uint32_t>(MyClayMessage::READ_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
+
     ITable &table = *db.find_table(table_id, partition_id);    
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-
+    auto value_size = table.value_size();
     /*
-     * The structure of a lock request: (primary key, write key offset)
-     * The structure of a lock response: (success?, tid, write key offset)
+     * The structure of a read lock request: (primary key, key offset)
+     * The structure of a read lock response: (success?, key offset, value?,
+     * tid?)
      */
 
     auto stringPiece = inputPiece.toStringPiece();
-
     uint32_t key_offset;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + sizeof(key_offset));
 
     const void *key = stringPiece.data();
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    auto row = table.search(key);
+    std::atomic<uint64_t> &tid = *std::get<0>(row);
+    VLOG(DEBUG_V16) << "READ_LOCK_REQUEST " << *(int*)key;
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset;
+
+    DCHECK(dec.size() == 0);
 
     bool success;
-    uint64_t latest_tid = SiloHelper::lock(tid, success);
+    uint64_t latest_tid = TwoPLHelper::read_lock(tid, success);
+
+    // prepare response message header
+    auto message_size =
+        MessagePiece::get_header_size() + sizeof(bool) + sizeof(key_offset);
+
+    if (success) {
+      message_size += value_size + sizeof(uint64_t);
+    }
+
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::READ_LOCK_RESPONSE), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    encoder << success << key_offset;
+
+    if (success) {
+      // reserve size for read
+      responseMessage.data.append(value_size, 0);
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      // read to message buffer
+      TwoPLHelper::read(row, dest, value_size);
+      encoder << latest_tid;
+    }
+
+    responseMessage.flush();
+  }
+
+  static void read_lock_response_handler(MessagePiece inputPiece,
+                                         Message &responseMessage,
+                                         Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(MyClayMessage::READ_LOCK_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+
+    ITable &table = *db.find_table(table_id, partition_id);   
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read lock response: (success?, key offset, value?,
+     * tid?)
+     */
+
+    bool success;
+    uint32_t key_offset;
+
+    StringPiece stringPiece = inputPiece.toStringPiece();
+    Decoder dec(stringPiece);
+    dec >> success >> key_offset;
+    MyClayRWKey &readKey = txn->readSet[key_offset];
+
+    VLOG(DEBUG_V16) << " READ_LOCK_RESPONSE  " << *(int*)readKey.get_key() << " " << success;
+
+    if (success) {
+      DCHECK(inputPiece.get_message_length() ==
+             MessagePiece::get_header_size() + sizeof(success) +
+                 sizeof(key_offset) + value_size + sizeof(uint64_t));
+
+      
+      dec.read_n_bytes(readKey.get_value(), value_size);
+      uint64_t tid;
+      dec >> tid;
+      readKey.set_read_lock_bit();
+      readKey.set_tid(tid);
+    } else {
+      DCHECK(inputPiece.get_message_length() ==
+             MessagePiece::get_header_size() + sizeof(success) +
+                 sizeof(key_offset));
+
+      txn->abort_lock = true;
+    }
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+  }
+
+  static void write_lock_request_handler(MessagePiece inputPiece,
+                                         Message &responseMessage,
+                                         Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(MyClayMessage::WRITE_LOCK_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+
+    ITable &table = *db.find_table(table_id, partition_id);   
+
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a write lock request: (primary key, key offset)
+     * The structure of a write lock response: (success?, key offset, value?,
+     * tid?)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+
+    const void *key = stringPiece.data();
+    auto row = table.search(key);
+    std::atomic<uint64_t> &tid = *std::get<0>(row);
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
@@ -709,196 +746,132 @@ public:
 
     DCHECK(dec.size() == 0);
 
-    // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + sizeof(bool) +
-                        sizeof(uint64_t) + sizeof(uint32_t);
-    auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::LOCK_RESPONSE), message_size,
-        table_id, partition_id);
-
-    VLOG(DEBUG_V14) << "      lock_request_handler : " << *(int*)key << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id();
-
-    star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header;
-    encoder << success << latest_tid << key_offset;
-    responseMessage.flush();
-  }
-
-  static void lock_response_handler(MessagePiece inputPiece,
-                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                    Transaction *txn) {
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(MyClayMessage::LOCK_RESPONSE));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-
-    /*
-     * The structure of a lock response: (success?, tid, write key offset)
-     */
-
     bool success;
-    uint64_t latest_tid;
-    uint32_t key_offset;
-
-    DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + sizeof(success) +
-               sizeof(latest_tid) + sizeof(key_offset));
-
-    StringPiece stringPiece = inputPiece.toStringPiece();
-    Decoder dec(stringPiece);
-    dec >> success >> latest_tid >> key_offset;
-
-    DCHECK(dec.size() == 0);
-
-    SiloRWKey &readKey = txn->readSet[key_offset];
-
-    bool tid_changed = false;
-    VLOG(DEBUG_V14) << "      lock_response_handler : " << *(int*)readKey.get_key() << " " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << " " << txn->pendingResponses;
-
-    if (success) {
-
-      // SiloRWKey *readKey = txn->get_read_key(readKey.get_key());
-
-      // DCHECK(readKey != nullptr);
-
-      uint64_t tid_on_read = readKey.get_tid();
-
-      if (latest_tid != tid_on_read) {
-        tid_changed = true;
-      }
-
-      readKey.set_tid(latest_tid);
-      readKey.set_write_lock_bit();
-    }
-
-    txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
-
-    if (!success || tid_changed) {
-      txn->abort_lock = true;
-    }
-  }
-
-  static void read_validation_request_handler(MessagePiece inputPiece,
-                                              Message &responseMessage,
-                                              Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
-    DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(MyClayMessage::READ_VALIDATION_REQUEST));
-    auto table_id = inputPiece.get_table_id();
-    auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
-    auto key_size = table.key_size();
-
-    /*
-     * The structure of a read validation request: (primary key, read key
-     * offset, tid) The structure of a read validation response: (success?, read
-     * key offset)
-     */
-
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  key_size + sizeof(uint32_t) +
-                                                  sizeof(uint64_t));
-
-    auto stringPiece = inputPiece.toStringPiece();
-    const void *key = stringPiece.data();
-    auto latest_tid = table.search_metadata(key).load();
-    stringPiece.remove_prefix(key_size);
-
-    uint32_t key_offset;
-    uint64_t tid;
-    Decoder dec(stringPiece);
-    dec >> key_offset >> tid;
-
-    bool success = true;
-
-    if (SiloHelper::remove_lock_bit(latest_tid) != tid) {
-      success = false;
-    }
-
-    if (SiloHelper::is_locked(latest_tid)) { // must be locked by others
-      success = false;
-    }
+    uint64_t latest_tid = TwoPLHelper::write_lock(tid, success);
 
     // prepare response message header
     auto message_size =
-        MessagePiece::get_header_size() + sizeof(bool) + sizeof(uint32_t);
+        MessagePiece::get_header_size() + sizeof(bool) + sizeof(key_offset);
+
+    if (success) {
+      message_size += value_size + sizeof(uint64_t);
+    }
+
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(MyClayMessage::READ_VALIDATION_RESPONSE),
-        message_size, table_id, partition_id);
+        static_cast<uint32_t>(MyClayMessage::WRITE_LOCK_RESPONSE), message_size,
+        table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;
     encoder << success << key_offset;
 
+    VLOG(DEBUG_V16) << "WRITE_LOCK_REQUEST " << *(int*)key << " " << success ;
+
+    if (success) {
+      // reserve size for read
+      responseMessage.data.append(value_size, 0);
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      // read to message buffer
+      TwoPLHelper::read(row, dest, value_size);
+      encoder << latest_tid;
+    }
+
     responseMessage.flush();
   }
 
-  static void read_validation_response_handler(MessagePiece inputPiece,
-                                               Message &responseMessage,
-                                               Database &db, const Context &context,  Partitioner *partitioner,
-                                               Transaction *txn) {
+  static void write_lock_response_handler(MessagePiece inputPiece,
+                                          Message &responseMessage,
+                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(MyClayMessage::READ_VALIDATION_RESPONSE));
+           static_cast<uint32_t>(MyClayMessage::WRITE_LOCK_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
+    
+    ITable &table = *db.find_table(table_id, partition_id);   
+
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
+    auto value_size = table.value_size();
 
     /*
-     * The structure of a read validation response: (success?, read key offset)
+     * The structure of a read lock response: (success?, key offset, value?,
+     * tid?)
      */
 
     bool success;
     uint32_t key_offset;
 
-    Decoder dec(inputPiece.toStringPiece());
-
+    StringPiece stringPiece = inputPiece.toStringPiece();
+    Decoder dec(stringPiece);
     dec >> success >> key_offset;
 
-    SiloRWKey &readKey = txn->readSet[key_offset];
+    MyClayRWKey &readKey = txn->readSet[key_offset];
+
+    VLOG(DEBUG_V16) << " WRITE_LOCK_RESPONSE  " << *(int*)readKey.get_key() << " " << success;
+
+
+    if (success) {
+      DCHECK(inputPiece.get_message_length() ==
+             MessagePiece::get_header_size() + sizeof(success) +
+                 sizeof(key_offset) + value_size + sizeof(uint64_t));
+
+      dec.read_n_bytes(readKey.get_value(), value_size);
+      uint64_t tid;
+      dec >> tid;
+      readKey.set_write_lock_bit();
+      readKey.set_tid(tid);
+    } else {
+      DCHECK(inputPiece.get_message_length() ==
+             MessagePiece::get_header_size() + sizeof(success) +
+                 sizeof(key_offset));
+
+      txn->abort_lock = true;
+    }
 
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
-
-    if (!success) {
-      txn->abort_read_validation = true;
-    }
   }
 
   static void abort_request_handler(MessagePiece inputPiece,
                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                     Transaction *txn) {
+
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(MyClayMessage::ABORT_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
+
+    ITable &table = *db.find_table(table_id, partition_id);   
+
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
 
     /*
-     * The structure of an abort request: (primary key)
+     * The structure of an abort request: (primary key, write_lock)
      * The structure of an abort response: null
      */
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size);
+           MessagePiece::get_header_size() + key_size + sizeof(bool));
 
     auto stringPiece = inputPiece.toStringPiece();
+
     const void *key = stringPiece.data();
+    stringPiece.remove_prefix(key_size);
+
+    bool write_lock;
+    Decoder dec(stringPiece);
+    dec >> write_lock;
+
     std::atomic<uint64_t> &tid = table.search_metadata(key);
-    if(SiloHelper::is_locked(tid)){
-      // unlock the key
-      SiloHelper::unlock(tid);
+    LOG(INFO) << "ABORT_REQUEST " << *(int*)key << " " << write_lock;
+    if (write_lock) {
+      TwoPLHelper::write_lock_release(tid);
+    } else {
+      TwoPLHelper::read_lock_release(tid);
     }
   }
 
@@ -910,39 +883,64 @@ public:
            static_cast<uint32_t>(MyClayMessage::WRITE_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
-    ITable &table = *db.find_table(table_id, partition_id);    
-    DCHECK(table_id == table.tableID());
-    DCHECK(partition_id == table.partitionID());
+    ITable &table = *db.find_table(table_id, partition_id);       
+
+
     auto key_size = table.key_size();
     auto field_size = table.field_size();
 
     /*
-     * The structure of a write request: (primary key, field value, commit_tid)
-     * The structure of a write response: null
+     * The structure of a write request: (primary key, field value)
+     * The structure of a write response: ()
      */
 
-    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
-                                                  key_size + field_size +
-                                                  sizeof(uint64_t));
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + field_size);
 
     auto stringPiece = inputPiece.toStringPiece();
 
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
-    auto valueStringPiece = stringPiece;
-    stringPiece.remove_prefix(field_size);
 
-    uint64_t commit_tid;
-    Decoder dec(stringPiece);
-    dec >> commit_tid;
+    table.deserialize_value(key, stringPiece);
 
-    DCHECK(dec.size() == 0);
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(MyClayMessage::WRITE_RESPONSE), message_size,
+        table_id, partition_id);
 
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
-    table.deserialize_value(key, valueStringPiece);
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+    responseMessage.flush();
 
-    SiloHelper::unlock_if_locked(tid); // , commit_tid);
+    VLOG(DEBUG_V16) << " WRITE_REQUEST  " << *(int*)key; // << " " << success;
   }
+
+  static void write_response_handler(MessagePiece inputPiece,
+                                     Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                     Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(MyClayMessage::WRITE_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);   
+
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a write response: ()
+     */
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+    VLOG(DEBUG_V16) << " WRITE_RESPONSE  "; //  << *(int*)key; // << " " << success;
+  }
+
+
+
+
 
   static void replication_request_handler(MessagePiece inputPiece,
                                           Message &responseMessage,
@@ -977,26 +975,30 @@ public:
     uint64_t commit_tid;
     Decoder dec(stringPiece);
     dec >> commit_tid;
-
+    
     DCHECK(dec.size() == 0);
     bool success = false;
     std::atomic<uint64_t> &tid = table.search_metadata(key, success);
-    if(!success){
-      return;
-    }
-    uint64_t last_tid = SiloHelper::lock(tid, success);
-
-    if(success){
-      if (commit_tid > last_tid) {
-        table.deserialize_value(key, valueStringPiece);
-        SiloHelper::unlock(tid, commit_tid);
-      } else {
-        SiloHelper::unlock(tid);
-      }
-    }
-
     uint32_t txn_id = 0;
     int debug_key = 0;
+
+    if(success){
+      TwoPLHelper::write_lock(tid, success);
+      if(success){
+        // auto test = table.search_value(key);
+
+        // VLOG(DEBUG_V11) << " respond send to : " << responseMessage.get_source_node_id() << " -> " << responseMessage.get_dest_node_id() << "  with " << debug_key << " " << (char*)test;
+
+        //! TODO logic needs to be checked
+        // DCHECK(last_tid < commit_tid);
+        table.deserialize_value(key, valueStringPiece);
+        TwoPLHelper::write_lock_release(tid, commit_tid);
+      }
+    } else {
+      LOG(INFO) << " replication failed: " << debug_key;
+    }
+
+
 
     auto message_size = MessagePiece::get_header_size() + 
                         sizeof(txn_id) + 
@@ -1011,7 +1013,6 @@ public:
             << debug_key;
             
     responseMessage.flush();
-
   }
 
   static void replication_response_handler(MessagePiece inputPiece,
@@ -1047,6 +1048,141 @@ public:
     // VLOG(DEBUG_V16) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " " << key;
   }
 
+  static void release_read_lock_request_handler(MessagePiece inputPiece,
+                                                Message &responseMessage,
+                                                Database &db, const Context &context,  Partitioner *partitioner,
+                                                Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(MyClayMessage::RELEASE_READ_LOCK_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);   
+
+    auto key_size = table.key_size();
+
+    /*
+     * The structure of a release read lock request: (primary key)
+     * The structure of a release read lock response: ()
+     */
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size);
+
+    auto stringPiece = inputPiece.toStringPiece();
+
+    const void *key = stringPiece.data();
+    stringPiece.remove_prefix(key_size);
+
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+
+    TwoPLHelper::read_lock_release(tid);
+
+    // prepare response message header
+    // auto message_size = MessagePiece::get_header_size();
+    // auto message_piece_header = MessagePiece::construct_message_piece_header(
+    //     static_cast<uint32_t>(MyClayMessage::RELEASE_READ_LOCK_RESPONSE),
+    //     message_size, table_id, partition_id);
+
+    // star::Encoder encoder(responseMessage.data);
+    // encoder << message_piece_header;
+    // responseMessage.flush();
+
+    VLOG(DEBUG_V16) << " RELEASE_READ_LOCK_REQUEST  " << *(int*)key; // << " " << success;
+
+  }
+
+  // static void release_read_lock_response_handler(MessagePiece inputPiece,
+  //                                                Message &responseMessage,
+  //                                                Database &db, const Context &context,  Partitioner *partitioner,
+  //                                                Transaction *txn) {
+
+  //   DCHECK(inputPiece.get_message_type() ==
+  //          static_cast<uint32_t>(MyClayMessage::RELEASE_READ_LOCK_RESPONSE));
+  //   auto table_id = inputPiece.get_table_id();
+  //   auto partition_id = inputPiece.get_partition_id();
+
+  //   ITable &table = *db.find_table(table_id, partition_id);   
+
+  //   auto key_size = table.key_size();
+
+  //   /*
+  //    * The structure of a release read lock response: ()
+  //    */
+
+  //   txn->pendingResponses--;
+  //   txn->network_size += inputPiece.get_message_length();
+  //   VLOG(DEBUG_V16) << " RELEASE_READ_LOCK_RESPONSE  "; // << *(int*)key; // << " " << success;
+
+  // }
+
+  static void release_write_lock_request_handler(MessagePiece inputPiece,
+                                                 Message &responseMessage,
+                                                 Database &db, const Context &context,  Partitioner *partitioner,
+                                                 Transaction *txn) {
+
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(MyClayMessage::RELEASE_WRITE_LOCK_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);   
+
+    auto key_size = table.key_size();
+    /*
+     * The structure of a release write lock request: (primary key, commit tid)
+     * The structure of a release write lock response: ()
+     */
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + sizeof(uint64_t));
+
+    auto stringPiece = inputPiece.toStringPiece();
+
+    const void *key = stringPiece.data();
+    stringPiece.remove_prefix(key_size);
+
+    uint64_t commit_tid;
+    Decoder dec(stringPiece);
+    dec >> commit_tid;
+
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    TwoPLHelper::write_lock_release(tid, commit_tid);
+
+    // prepare response message header
+    // auto message_size = MessagePiece::get_header_size();
+    // auto message_piece_header = MessagePiece::construct_message_piece_header(
+    //     static_cast<uint32_t>(MyClayMessage::RELEASE_WRITE_LOCK_RESPONSE),
+    //     message_size, table_id, partition_id);
+
+    // star::Encoder encoder(responseMessage.data);
+    // encoder << message_piece_header;
+    // responseMessage.flush();
+
+    VLOG(DEBUG_V16) << " RELEASE_WRITE_LOCK_REQUEST  " << *(int*)key; // << " " << success;
+  }
+
+  // static void release_write_lock_response_handler(MessagePiece inputPiece,
+  //                                                 Message &responseMessage,
+  //                                                 Database &db, const Context &context,  Partitioner *partitioner,
+  //                                                 Transaction *txn) {
+  //   DCHECK(inputPiece.get_message_type() ==
+  //          static_cast<uint32_t>(MyClayMessage::RELEASE_WRITE_LOCK_RESPONSE));
+  //   auto table_id = inputPiece.get_table_id();
+  //   auto partition_id = inputPiece.get_partition_id();
+  //   ITable &table = *db.find_table(table_id, partition_id);   
+
+  //   auto key_size = table.key_size();
+
+  //   /*
+  //    * The structure of a release write lock response: ()
+  //    */
+
+  //   txn->pendingResponses--;
+  //   txn->network_size += inputPiece.get_message_length();
+
+  //   VLOG(DEBUG_V16) << " RELEASE_WRITE_LOCK_RESPONSE  ";//  << *(int*)key; // << " " << success;
+
+  // }
 
 
 
@@ -1057,22 +1193,27 @@ public:
         std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, Transaction *)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
-    v.push_back(MyClayMessageHandler::search_request_handler);
-    v.push_back(MyClayMessageHandler::search_response_handler);
-    // 
     v.push_back(MyClayMessageHandler::transmit_request_handler);
     v.push_back(MyClayMessageHandler::transmit_response_handler);
     v.push_back(MyClayMessageHandler::transmit_router_only_request_handler);
     v.push_back(MyClayMessageHandler::transmit_router_only_response_handler);
     // 
-    v.push_back(MyClayMessageHandler::lock_request_handler);
-    v.push_back(MyClayMessageHandler::lock_response_handler);
-    v.push_back(MyClayMessageHandler::read_validation_request_handler);
-    v.push_back(MyClayMessageHandler::read_validation_response_handler);
+    v.push_back(MyClayMessageHandler::read_lock_request_handler);
+    v.push_back(MyClayMessageHandler::read_lock_response_handler);
+    v.push_back(MyClayMessageHandler::write_lock_request_handler);
+    v.push_back(MyClayMessageHandler::write_lock_response_handler);
     v.push_back(MyClayMessageHandler::abort_request_handler);
     v.push_back(MyClayMessageHandler::write_request_handler);
+    v.push_back(MyClayMessageHandler::write_response_handler);
+    // 
     v.push_back(MyClayMessageHandler::replication_request_handler);
     v.push_back(MyClayMessageHandler::replication_response_handler);
+    //
+    v.push_back(MyClayMessageHandler::release_read_lock_request_handler);
+    // v.push_back(MyClayMessageHandler::release_read_lock_response_handler);
+    v.push_back(MyClayMessageHandler::release_write_lock_request_handler);
+    // v.push_back(MyClayMessageHandler::release_write_lock_response_handler);
+
     return v;
   }
 };

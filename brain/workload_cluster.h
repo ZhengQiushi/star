@@ -78,11 +78,11 @@ namespace brain {
      * @param data 
      */
     void get_workload_classified(double current_timestamp, double last_timestamp, workload_data& data){
-        bool verbose = false;
+        bool verbose = true;
 
         //读文件
         std::ifstream ifs("/home/star/data/skew_0_30/resultss.xls", std::ios::in);
-        std::ofstream ofs("/home/star/data/result_.xls", std::ios::trunc);
+        std::ofstream ofs("/home/star/data/result_class.xls", std::ios::trunc);
 
         std::string _line;
         int line = 0;
@@ -118,28 +118,33 @@ namespace brain {
                         if(timestamp > last_timestamp){
                             return;
                         }
-                        if(verbose)
+                        if(verbose){
                             ofs << subArray[i] << "\t";
+                            // std::cout << subArray[i] << "\t";
+                        }
+                            
                     } else {
                         // 对应的分区
                         non_repeated.insert(atoi(subArray[i].data()) / 200000);
                     }
                 }
-                if(verbose)
-                    std::cout << subArray[i] << "\t";
+                // if(verbose)
+                //     std::cout << subArray[i] << "\t";
             }
             // workload_type
             std::string workload_type = "";
             if(verbose)
                 ofs << "@";
             for(auto iter = non_repeated.begin(); iter != non_repeated.end(); iter ++ ){
-                if(verbose)
+                if(verbose){
                     ofs << *iter;
+                    // std::cout << *iter;  
+                }
                 workload_type += std::to_string(*iter);
             }
             if(verbose){
                 ofs << "\n";
-                std::cout << std::endl;  
+                // std::cout << std::endl;  
             }
 
             if(workload_type != ""){
@@ -150,6 +155,8 @@ namespace brain {
                 }
             }
         }
+    
+        ofs.close();
     }
 
     /**

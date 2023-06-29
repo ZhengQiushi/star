@@ -35,3 +35,21 @@ docker exec -it zqs_0 bash
 232-253
 scp -r docker.service  zqs@10.77.110.144:/home/zqs/
 scp -r zqs_image.tar zqs@10.77.110.144:/home/zqs/
+
+
+643
+622
+592
+589
+642
+633
+655
+621
+665
+681
+662
+661
+550
+564
+591
+629

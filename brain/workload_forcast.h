@@ -52,8 +52,9 @@ namespace brain {
     
     class my_predictor {
     public:
-        my_predictor(int preiod, int bptt, int horizon, float val_split){
+        my_predictor(int preiod, int feats, int bptt, int horizon, float val_split){
             PREIOD = preiod;              // 160; // 40 / 0.25
+            NFEATS = feats;
             EPOCHS = 100;
             CLIP_NORM = 0.25;
             BPTT = bptt;                  // PREIOD * 2;
@@ -69,7 +70,7 @@ namespace brain {
             VAL_THESH = 0.05;
 
             model = std::unique_ptr<peloton::brain::TimeSeriesLSTM>(new peloton::brain::TimeSeriesLSTM(
-                peloton::brain::LSTMWorkloadDefaults::NFEATS,
+                NFEATS,
                 peloton::brain::LSTMWorkloadDefaults::NENCODED, peloton::brain::LSTMWorkloadDefaults::NHID,
                 peloton::brain::LSTMWorkloadDefaults::NLAYERS, peloton::brain::LSTMWorkloadDefaults::LR,
                 peloton::brain::LSTMWorkloadDefaults::DROPOUT_RATE,
@@ -165,6 +166,7 @@ namespace brain {
     peloton::brain::Normalizer n;
 
     int PREIOD = 160; // 40 / 0.25
+    int NFEATS = 3; // 40 / 0.25
     int EPOCHS = 100;
     int CLIP_NORM = 0.25;
     int BPTT = PREIOD * 2;

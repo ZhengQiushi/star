@@ -26,7 +26,7 @@ public:
   using WorkloadType = Workload;
   using ProtocolType = Protocol;
   using DatabaseType = typename WorkloadType::DatabaseType;
-  using TransactionType = SiloTransaction;
+  using TransactionType = MyClayTransaction;
   
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
@@ -84,7 +84,7 @@ public:
     generator_core_id.resize(context.coordinator_num);
     dispatcher_core_id.resize(context.coordinator_num);
 
-    pin_thread_id_ = 3 + 2 + context.worker_num;
+    pin_thread_id_ = 3 + 2 * 2 + context.worker_num;
 
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
@@ -172,10 +172,8 @@ public:
                   LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
 
                   is_full_signal_self[dispatcher_id].store(false);
-                  
-                  schedule_meta.all_done_schedule.fetch_add(1);
 
-                  // schedule_meta.start_schedule.store(0);
+                  schedule_meta.all_done_schedule.fetch_add(1);
                 }
             }, n, this->id);
 

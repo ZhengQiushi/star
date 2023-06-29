@@ -37,7 +37,6 @@ public:
 
   using StorageType = typename WorkloadType::StorageType;
 
-  // int pin_thread_id_ = 8;
 
   LionMetisGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
@@ -528,6 +527,7 @@ public:
 
         while(status != ExecutorStatus::EXIT){
           process_request();
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
           status = static_cast<ExecutorStatus>(worker_status.load());
           auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                                   std::chrono::steady_clock::now() - last_timestamp_)
@@ -553,6 +553,7 @@ public:
             continue;
           }
           if(!context.lion_with_metis_init){
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
             continue;
           }
           // directly jump into first phase
@@ -604,6 +605,7 @@ public:
       while(status != ExecutorStatus::EXIT){
         process_request();
         status = static_cast<ExecutorStatus>(worker_status.load());
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
     // // not end here!
   }

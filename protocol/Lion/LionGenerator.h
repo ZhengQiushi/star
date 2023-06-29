@@ -90,7 +90,7 @@ public:
     generator_core_id.resize(context.coordinator_num);
     dispatcher_core_id.resize(context.coordinator_num);
 
-    pin_thread_id_ = 3 + 2 + context.worker_num;
+    pin_thread_id_ = 3 + 2 * 2 + context.worker_num;
 
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
@@ -125,7 +125,9 @@ public:
             
             while(status != ExecutorStatus::EXIT){
                   // wait for start
-                  while(schedule_meta.start_schedule.load() == 0 && status != ExecutorStatus::EXIT){
+                  while((schedule_meta.start_schedule.load() == 0 
+                      || schedule_meta.done_schedule.load() == context.worker_num * context.coordinator_num)
+                  && status != ExecutorStatus::EXIT){
                     status = static_cast<ExecutorStatus>(worker_status.load());
                     if(is_full_signal_self[dispatcher_id].load() == true){
                       std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -166,16 +168,18 @@ public:
 
                   schedule_meta.done_schedule.fetch_add(1);
                   status = static_cast<ExecutorStatus>(worker_status.load());
-
+                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
                   // wait for end
                   while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
+                    auto i = schedule_meta.done_schedule.load();
                     std::this_thread::sleep_for(std::chrono::microseconds(5));
                     status = static_cast<ExecutorStatus>(worker_status.load());
                   }
+                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
 
                   is_full_signal_self[dispatcher_id].store(false);
 
-                  schedule_meta.start_schedule.store(0);
+                  schedule_meta.all_done_schedule.fetch_add(1);
                 }
             }, n, this->id);
 
@@ -473,25 +477,26 @@ public:
                          busy_local, 
                          replicate_busy_local);
 
-      if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
-        pure_single_txn_cnt += 1;
-      } else {
-        txn->is_distributed = true;
-      }
+      // if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
+      //   pure_single_txn_cnt += 1;
+      // } 
+      // else {
+      //   txn->is_distributed = true;
+      // }
 
-      // if(txn->is_distributed){ 
-      //   // static-distribute
-      //   // std::unordered_map<int, int> result;
+      if(!txn->is_distributed){ 
+        // static-distribute
+        // std::unordered_map<int, int> result;
         
-      //   txn_nodes_involved(txn.get(), true, txns_coord_cost, 
-      //                     busy_local, 
-      //                     replicate_busy_local);
+        // txn_nodes_involved(txn.get(), true, txns_coord_cost, 
+        //                   busy_local, 
+        //                   replicate_busy_local);
 
       // } else {
-      //   DCHECK(txn->is_distributed == 0);
-      //   pure_single_txn_cnt += 1;
-      //   txn->destination_coordinator = txn->partition_id % context.coordinator_num;
-      // } 
+        DCHECK(txn->is_distributed == 0);
+        pure_single_txn_cnt += 1;
+        txn->destination_coordinator = txn->partition_id % context.coordinator_num;
+      } 
 
 
       if(txn->is_real_distributed){
@@ -809,11 +814,12 @@ public:
 
       schedule_meta.start_schedule.store(1);
       // wait for end
-      while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
+      while(schedule_meta.all_done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         status = static_cast<ExecutorStatus>(worker_status.load());
-        // 
+        process_request();
       }
+
       if(pure_single_txn_cnt != 0){
         skip_s_phase.store(false);
       }

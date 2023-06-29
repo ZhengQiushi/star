@@ -170,7 +170,7 @@ public:
       auto coordinatorID = readKey.get_dynamic_coordinator_id(); // partitioner.master_coordinator(tableId, partitionId, key);
       // write
       auto key = readKey.get_key();
-      if(txn.tids[i] == nullptr || !readKey.get_read_respond_bit())
+      if(txn.tids[i] == nullptr) // || !readKey.get_read_respond_bit()
         continue;
       // DCHECK(txn.tids[i] != nullptr && readKey.get_read_respond_bit()) << txn.tids[i] << " " << readKey.get_read_respond_bit();
       if (coordinatorID == context.coordinator_id) {

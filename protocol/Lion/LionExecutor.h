@@ -35,7 +35,6 @@ public:
   using MessageFactoryType = LionMessageFactory;
   using MessageHandlerType = LionMessageHandler<DatabaseType>;
 
-  int pin_thread_id_ = 8;
 
   LionExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
                const ContextType &context, uint32_t &batch_size,
@@ -63,20 +62,16 @@ public:
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
     for (auto i = 0u; i <= context.coordinator_num; i++) {
+
       messages.emplace_back(std::make_unique<Message>());
       init_message(messages[i].get(), i);
+
 
       sync_messages.emplace_back(std::make_unique<Message>());
       init_message(sync_messages[i].get(), i);
 
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
-
-      metis_messages.emplace_back(std::make_unique<Message>());
-      init_message(metis_messages[i].get(), i);
-
-      metis_sync_messages.emplace_back(std::make_unique<Message>());
-      init_message(metis_sync_messages[i].get(), i);
 
     }
 
@@ -184,22 +179,22 @@ public:
       
       uint32_t txn_id;
       
-      if(!simple_txn.is_distributed && !simple_txn.is_transmit_request){
-        {
-          std::unique_ptr<TransactionType> null_txn(nullptr);
-          std::lock_guard<std::mutex> l(txn_meta.s_l);
-          txn_id = txn_meta.s_transactions_queue.size();
-          if(txn_id >= txn_meta.s_storages.size()){
-            DCHECK(false);
-          }
-          txn_meta.s_transactions_queue.push_back(std::move(null_txn));
-          txn_meta.s_txn_id_queue.push_no_wait(txn_id);
-        }
-        auto p = s_workload->unpack_transaction(context, 0, txn_meta.s_storages[txn_id], simple_txn);
-        p->fully_single_transaction = true;
-        // if(p.get() == nullptr) continue;
-        txn_meta.s_transactions_queue[txn_id] = std::move(p);
-      } else {
+      // if(!simple_txn.is_distributed){
+      //   {
+      //     std::unique_ptr<TransactionType> null_txn(nullptr);
+      //     std::lock_guard<std::mutex> l(txn_meta.s_l);
+      //     txn_id = txn_meta.s_transactions_queue.size();
+      //     if(txn_id >= txn_meta.s_storages.size()){
+      //       DCHECK(false);
+      //     }
+      //     txn_meta.s_transactions_queue.push_back(std::move(null_txn));
+      //     txn_meta.s_txn_id_queue.push_no_wait(txn_id);
+      //   }
+      //   auto p = s_workload->unpack_transaction(context, 0, txn_meta.s_storages[txn_id], simple_txn);
+      //   p->fully_single_transaction = true;
+      //   // if(p.get() == nullptr) continue;
+      //   txn_meta.s_transactions_queue[txn_id] = std::move(p);
+      // } else {
         {
           std::unique_ptr<TransactionType> null_txn(nullptr);
           std::lock_guard<std::mutex> l(txn_meta.c_l);
@@ -212,21 +207,17 @@ public:
         }
         auto p = c_workload->unpack_transaction(context, 0, txn_meta.c_storages[txn_id], simple_txn);
         
-        if(simple_txn.is_transmit_request){
-          DCHECK(false);
-        } else {
-          if(simple_txn.is_real_distributed){
-            cur_real_distributed_cnt += 1;
-            p->distributed_transaction = true;
-            if(cur_real_distributed_cnt < 10){
-              LOG(INFO) << " test if abort?? " << simple_txn.keys[0] << " " << simple_txn.keys[1];
-            }
-          } 
-          p->id = txn_id;
-        }
-        // if(p.get() == nullptr) continue;
-        txn_meta.c_transactions_queue[txn_id] = std::move(p);
-      }
+      //   if(simple_txn.is_real_distributed){
+      //     cur_real_distributed_cnt += 1;
+      //     p->distributed_transaction = true;
+      //     if(cur_real_distributed_cnt < 10){
+      //       LOG(INFO) << " test if abort?? " << simple_txn.keys[0] << " " << simple_txn.keys[1];
+      //     }
+      //   } 
+      //   p->id = txn_id;
+      //   // if(p.get() == nullptr) continue;
+      //   txn_meta.c_transactions_queue[txn_id] = std::move(p);
+      // }
     }
   }
   
@@ -251,37 +242,6 @@ public:
     return ret;
   }
 
-  std::unordered_map<int, int> txn_nodes_involved(simpleTransaction* t, int& max_node, bool is_dynamic) {
-      std::unordered_map<int, int> from_nodes_id;
-      size_t ycsbTableID = ycsb::ycsb::tableID;
-      auto query_keys = t->keys;
-      int max_cnt = 0;
-
-      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
-        // judge if is cross txn
-        size_t cur_c_id = -1;
-        if(is_dynamic){
-          // look-up the dynamic router to find-out where
-          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
-        } else {
-          // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
-        }
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
-        if(from_nodes_id[cur_c_id] > max_cnt){
-          max_cnt = from_nodes_id[cur_c_id];
-          max_node = cur_c_id;
-        }
-      }
-     return from_nodes_id;
-   }
-
-  
   void start() override {
 
     LOG(INFO) << "Executor " << id << " starts.";
@@ -332,6 +292,8 @@ public:
       // commit transaction in s_phase;
       commit_transactions();
 
+      process_request();
+
       // c_phase
       VLOG_IF(DEBUG_V, id==0) << "wait c_phase "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -366,11 +328,6 @@ public:
       
       txn_meta.transactions_prepared.fetch_add(1);
       // // }
-      LOG(INFO) << "[C-PHASE] do remaster "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
 
       while(txn_meta.transactions_prepared.load() < context.worker_num){
         std::this_thread::yield();
@@ -380,6 +337,12 @@ public:
       n_started_workers.fetch_add(1);
 
       if(cur_real_distributed_cnt > 0){
+      LOG(INFO) << "[C-PHASE] do remaster "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
+
         do_remaster_transaction(ExecutorStatus::C_PHASE, txn_meta.c_transactions_queue,async_message_num);
         async_fence();
       }
@@ -409,11 +372,7 @@ public:
 
       // commit transaction in c_phase;
       // commit_transactions();
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] C_phase router done "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
+
       // now = std::chrono::steady_clock::now();
         VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
         while (static_cast<ExecutorStatus>(worker_status.load()) !=
@@ -494,14 +453,10 @@ public:
         VLOG_IF(DEBUG_V, id==0) << "skip s phase";
         process_request();
         n_complete_workers.fetch_add(1);
-
         txn_meta.done.fetch_add(1);
       }
 
-      // while(txn_meta.done.load() < context.worker_num){
-      //   int a = txn_meta.done.load();
-      //   process_request();
-      // }
+
       auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - begin)
                     .count();
@@ -706,7 +661,7 @@ public:
           
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
-            protocol->abort(*transaction, messages);
+            protocol->abort(*transaction, sync_messages);
             n_abort_no_retry.fetch_add(1);
             continue;
           } else {
@@ -724,7 +679,7 @@ public:
 
 
           if (result == TransactionResult::READY_TO_COMMIT) {
-            bool commit = protocol->commit(*transaction, messages, async_message_num, false);
+            bool commit = protocol->commit(*transaction, sync_messages, async_message_num, false);
             
             n_network_size.fetch_add(transaction->network_size);
             if (commit) {
@@ -763,21 +718,19 @@ public:
                 random.set_seed(last_seed);
                 retry_transaction = true;
               }
-              protocol->abort(*transaction, messages);
+              protocol->abort(*transaction, sync_messages);
             }
           } else {
             n_abort_no_retry.fetch_add(1);
-            protocol->abort(*transaction, messages);
+            protocol->abort(*transaction, sync_messages);
           }
         } while (retry_transaction);
       }
 
-      // now = std::chrono::steady_clock::now();
-      flush_messages(messages); 
-      flush_async_messages(); 
 
       if (i % context.batch_flush == 0) {
         flush_sync_messages();
+        flush_async_messages(); 
       }
       
       txn_percentile.add(
@@ -787,7 +740,6 @@ public:
         
       );
     }
-    flush_messages(messages); 
     flush_async_messages();
     // flush_record_messages();
     flush_sync_messages();
@@ -904,23 +856,14 @@ public:
         auto now = std::chrono::steady_clock::now();
 
         cur_trans[i]->prepare_read_execute(id);
-        // time_prepare_read += std::chrono::duration_cast<std::chrono::microseconds>(
-        //                                                       std::chrono::steady_clock::now() - now)
-        //     .count();
-        // now = std::chrono::steady_clock::now();
-        
+
         auto result = cur_trans[i]->read_execute(id, ReadMethods::REMASTER_ONLY);
         
         if(result != TransactionResult::READY_TO_COMMIT){
           retry_transaction = false;
-          protocol->abort(*cur_trans[i], messages);
+          protocol->abort(*cur_trans[i], async_messages);
           n_abort_no_retry.fetch_add(1);
         }
-
-        // time_read_remote += std::chrono::duration_cast<std::chrono::microseconds>(
-        //                                                       std::chrono::steady_clock::now() - rematser_begin)
-        //     .count();
-        // now = std::chrono::steady_clock::now();
 
       } while (retry_transaction);
 
@@ -933,14 +876,12 @@ public:
       n_remaster.fetch_add(cur_trans[i]->remaster_cnt);
 
       cur_trans[i]->reset();
-      flush_messages(messages); 
 
       if (i % context.batch_flush == 0) {
         flush_async_messages(); 
         flush_sync_messages();
       }
     }
-    flush_messages(messages); 
     flush_async_messages();
     flush_sync_messages();
 
@@ -1049,34 +990,33 @@ private:
           // transaction router from Generator
           controlMessageHandlers[type](
             messagePiece,
-            *async_messages[message->get_source_node_id()], db,
+            *messages[message->get_source_node_id()], db,
             &txn_meta.router_transactions_queue, 
             &router_stop_queue
           );
         } else {
           messageHandlers[type](messagePiece,
-                                *sync_messages[message->get_source_node_id()], 
-                                sync_messages,
+                                *messages[message->get_source_node_id()], 
+                                messages,
                                 db, context, partitioner,
                                 txn_meta.c_transactions_queue);
 
-          if(type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE) || 
-             type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY)){
-              async_respond_num.fetch_add(1);
-          }
+          // if(type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE) || 
+          //    type == static_cast<int>(LionMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY)){
+          //     async_respond_num.fetch_add(1);
+          // }
+        }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
-        }
 
-        if (logger) {
-          logger->write(messagePiece.toStringPiece().data(),
-                        messagePiece.get_message_length());
-        }
+        // if (logger) {
+        //   logger->write(messagePiece.toStringPiece().data(),
+        //                 messagePiece.get_message_length());
+        // }
       }
 
       size += message->get_message_count();
-      flush_sync_messages();
-      flush_async_messages();
+      flush_messages(messages);
     }
     return size;
   }
@@ -1156,12 +1096,12 @@ private:
           if(i == coordinatorID){
             // target
             txn.network_size += MessageFactoryType::new_search_message(
-                *(this->messages[i]), *table, key, 
+                *(this->sync_messages[i]), *table, key, 
                 key_offset, txn.id, remaster, false);
           } else {
             // others, only change the router
             txn.network_size += MessageFactoryType::new_search_router_only_message(
-                *(this->messages[i]), *table, 
+                *(this->sync_messages[i]), *table, 
                 key, key_offset, txn.id, false);
           }            
           txn.pendingResponses++;
@@ -1202,16 +1142,6 @@ private:
         if(success == false){
           return 0;
         }
-        // immediatly lock local record 赶快本地lock
-        // if(readKey.get_write_lock_bit()){
-        //   TwoPLHelper::write_lock(tid, success);
-        //   // VLOG(DEBUG_V14) << "LOCK-LOCAL-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid;
-        // } else {
-        //   TwoPLHelper::read_lock(tid, success);
-        //   // VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
-        // }
-        // // 
-        // txn.tids[key_offset] = &tid;
 
         if(success){
           // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
@@ -1227,9 +1157,7 @@ private:
         if(remaster && context.read_on_replica){
           
           std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-          // TwoPLHelper::read_lock(tid, success);
-          // txn.tids[key_offset] = &tid;
-          // VLOG(DEBUG_V8) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << remaster;
+
           readKey.set_read_respond_bit();
           local_read = true;
           
@@ -1241,19 +1169,18 @@ private:
             if(i == coordinatorID){
               // target
               txn.network_size += MessageFactoryType::new_async_search_message(
-                  *(this->messages[i]), *table, key, 
+                  *(this->sync_messages[i]), *table, key, 
                   key_offset, txn.id, remaster, false);
             } else {
               // others, only change the router
               txn.network_size += MessageFactoryType::new_async_search_router_only_message(
-                  *(this->messages[i]), *table, key, 
+                  *(this->sync_messages[i]), *table, key, 
                   key_offset, txn.id, false);
             }   
             VLOG(DEBUG_V8) << "ASYNC REMASTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size();
             // txn.asyncPendingResponses++;
             this->async_pend_num.fetch_add(1);
           }
-          // this->flush_messages(messages);
           
         }
         if(!context.read_on_replica){
@@ -1271,24 +1198,6 @@ private:
         auto ret = protocol.search(table_id, partition_id, key, value, success);
         return ret;
       } else {
-        // for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-        //   // also send to generator to update the router-table
-        //   if(i == coordinator_id){
-        //     continue; // local
-        //   }
-        //   if(i == coordinatorID){
-        //     // target
-        //     txn.network_size += MessageFactoryType::new_search_message(
-        //         *(this->messages[i]), *table, key, key_offset, remaster, false);
-        //   } else {
-        //     // others, only change the router
-        //     txn.network_size += MessageFactoryType::new_search_router_only_message(
-        //         *(this->messages[i]), *table, key, key_offset, false);
-        //   }            
-        //   txn.pendingResponses++;
-        //   // LOG(INFO) << "txn.pendingResponses: " << txn.pendingResponses << " " << readKey.get_write_lock_bit();
-        // }
-        // txn.distributed_transaction = true;
         return 0;
       }
     };
@@ -1296,7 +1205,7 @@ private:
 
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
-    txn.message_flusher = [this]() { this->flush_messages(messages); };
+    txn.message_flusher = [this]() { this->flush_messages(sync_messages); };
   }
 
   void flush_messages(std::vector<std::unique_ptr<Message>> &messages_) {
@@ -1324,7 +1233,7 @@ private:
 
   void flush_sync_messages() { flush_messages(sync_messages); }
 
-  void flush_metis_sync_messages() { flush_messages(metis_sync_messages); }
+  // void flush_metis_sync_messages() { flush_messages(metis_sync_messages); }
 
   void flush_async_messages() { flush_messages(async_messages); }
 
@@ -1387,13 +1296,9 @@ private:
   std::atomic<uint32_t> async_pend_num;
   std::atomic<uint32_t> async_respond_num;
 
-  std::vector<std::unique_ptr<Message>> messages;
-  std::vector<std::unique_ptr<Message>> metis_messages;
-
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
-  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, // record_messages, 
-                                        metis_sync_messages;
+  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, messages;
   // std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
   //                                TransactionType *, std::deque<simpleTransaction>*)>>
   //     messageHandlers;

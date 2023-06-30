@@ -230,116 +230,37 @@ public:
     }
   }
 
-
   void coordinator_start() override {
 
     std::size_t n_workers = context.worker_num;
     std::size_t n_coordinators = context.coordinator_num + 1;
 
-    Percentile<int64_t> all_percentile, c_percentile, s_percentile,
-        batch_size_percentile;
-
     while (!stopFlag.load()) {
 
-      int64_t ack_wait_time_c = 0, ack_wait_time_s = 0;
-      auto c_start = std::chrono::steady_clock::now();
-      // start c-phase
-      VLOG(DEBUG_V) << "start C-Phase";
-
-      n_completed_workers.store(0);
       n_started_workers.store(0);
-      batch_size_percentile.add(batch_size);
-      signal_worker(merge_value_to_signal(batch_size, ExecutorStatus::C_PHASE));
-      
-      VLOG(DEBUG_V) << "wait_all_workers_start";
-
+      n_completed_workers.store(0);
+      signal_worker(ExecutorStatus::START);
+      LOG(INFO) << "signal start, wait start";
       wait_all_workers_start();
-
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
-      
+      // std::this_thread::sleep_for(
+      //     std::chrono::milliseconds(context.group_time));
+      // set_worker_status(ExecutorStatus::STOP);
+      LOG(INFO) << "wait finish";
       wait_all_workers_finish();
-      set_worker_status(ExecutorStatus::STOP);
-      broadcast_stop();
-
-      VLOG(DEBUG_V) << "wait_ack c-phase";
-
-      wait4_ack();
-
-      {
-        auto now = std::chrono::steady_clock::now();
-        c_percentile.add(
-            std::chrono::duration_cast<std::chrono::microseconds>(now - c_start)
-                .count());
-      }
-
-      // cur_data_transform_num ++;
-
-      auto s_start = std::chrono::steady_clock::now();
-      // start s-phase
-
-      VLOG(DEBUG_V) << "start S-Phase";
-
-      n_completed_workers.store(0);
-      n_started_workers.store(0);
       
-      signal_worker(merge_value_to_signal(skip_s_phase.load(), ExecutorStatus::S_PHASE));
-
-      if(skip_s_phase.load() == false){
-        wait_all_workers_start();
-        
-        VLOG(DEBUG_V) << "wait_all_workers_finish";
-
-        wait_all_workers_finish();
-        
-        VLOG(DEBUG_V) << "wait_all_workers_finish";
-
-        broadcast_stop();
-        wait4_stop(n_coordinators - 1);
-
-        VLOG(DEBUG_V) << "wait_all_workers_finish";
-
-        n_completed_workers.store(0);
-        set_worker_status(ExecutorStatus::STOP);
-        wait_all_workers_finish();
-        
-        VLOG(DEBUG_V) << "wait4_ack s-phase";
-
-        wait4_ack();
-      } else {
-        LOG(INFO) << "skip s phase";
-        wait_all_workers_finish();
-        
-        VLOG(DEBUG_V) << "wait4_ack s-phase";
-
-        wait4_ack();
-      }
-
-      VLOG(DEBUG_V) << "finished";
-      {
-        auto now = std::chrono::steady_clock::now();
-
-        s_percentile.add(
-            std::chrono::duration_cast<std::chrono::microseconds>(now - s_start)
-                .count());
-
-        auto all_time =
-            std::chrono::duration_cast<std::chrono::microseconds>(now - c_start)
-                .count();
-
-        all_percentile.add(all_time);
-        // if (context.star_dynamic_batch_size) {
-        //   update_batch_size(all_time);
-        // }
-      }
+      broadcast_stop();
+      LOG(INFO) << "broadcast stop, wait stop";
+      wait4_stop(n_coordinators - 1);
+      // process replication
+      n_completed_workers.store(0);
+      set_worker_status(ExecutorStatus::CLEANUP);
+      LOG(INFO) << "set_worker_status, wait_all_workers_finish";
+      wait_all_workers_finish();
+      LOG(INFO) << "all_workers_finish, wait 4 ack";
+      wait4_ack();
     }
 
     signal_worker(ExecutorStatus::EXIT);
-
-    LOG(INFO) << "Average phase switch length " << all_percentile.nth(50)
-              << " us, average c phase length " << c_percentile.nth(50)
-              << " us, average s phase length " << s_percentile.nth(50)
-              << " us, average batch size " << batch_size_percentile.nth(50)
-              << " .";
   }
 
   void non_coordinator_start() override {
@@ -349,82 +270,36 @@ public:
 
     for (;;) {
 
-      ExecutorStatus signal;
-      std::tie(batch_size, signal) = split_signal(wait4_signal());
-
-      if (signal == ExecutorStatus::EXIT) {
+      LOG(INFO) << "wait 4 signal";
+      ExecutorStatus status = wait4_signal();
+      if (status == ExecutorStatus::EXIT) {
         set_worker_status(ExecutorStatus::EXIT);
         break;
       }
 
-      VLOG(DEBUG_V) << "start C-Phase";
-
-      // start c-phase
-
-      DCHECK(signal == ExecutorStatus::C_PHASE);
+      DCHECK(status == ExecutorStatus::START);
       n_completed_workers.store(0);
       n_started_workers.store(0);
-      set_worker_status(ExecutorStatus::C_PHASE);
-      
-      VLOG(DEBUG_V) << "wait_all_workers_start";
-
+      set_worker_status(ExecutorStatus::START);
+      LOG(INFO) << "wait_all_workers_start";
       wait_all_workers_start();
-      
-      VLOG(DEBUG_V) << "wait4_stop";
-
+      LOG(INFO) << "start, wait 4 stop";
       wait4_stop(1);
-      
-      
       set_worker_status(ExecutorStatus::STOP);
-      
-      VLOG(DEBUG_V) << "wait_all_workers_finish";
-
+      LOG(INFO) << "wait_all_workers_finish";
       wait_all_workers_finish();
-
-      VLOG(DEBUG_V) << "send_ack c-phase";
-
-      send_ack();
-
-
-      VLOG(DEBUG_V) << "start S-Phase";
       
-      // start s-phase
-      bool is_s_phase_skip = false;
-      std::tie(is_s_phase_skip, signal) = split_signal(wait4_signal());
-
-      skip_s_phase.store(is_s_phase_skip);
+      broadcast_stop();
+      LOG(INFO) << "broadcast_stop, wait4_stop";
+      wait4_stop(n_coordinators - 2);
       
-      DCHECK(signal == ExecutorStatus::S_PHASE);
+      // process replication
       n_completed_workers.store(0);
-      n_started_workers.store(0);
-
-      set_worker_status(ExecutorStatus::S_PHASE);
-
-      if(skip_s_phase.load() == false){
-        VLOG(DEBUG_V) << "wait_all_workers_start";
-        wait_all_workers_start();
-        VLOG(DEBUG_V) << "wait_all_workers_finish";
-        wait_all_workers_finish();
-        broadcast_stop();
-        VLOG(DEBUG_V) << "wait4_stop";
-        wait4_stop(n_coordinators - 1);
-        // n_completed_workers.store(0);
-        set_worker_status(ExecutorStatus::STOP);
-        VLOG(DEBUG_V) << "wait_all_workers_finish";
-        wait_all_workers_finish();
-        VLOG(DEBUG_V) << "send_ack s-phase";
-
-        send_ack();
-      } else {
-        LOG(INFO) << "skip s phase";
-        LOG(INFO) << "wait_all_workers_finish";
-        wait_all_workers_finish();
-        LOG(INFO) << "send_ack";
-        send_ack();
-      }
-
-      VLOG(DEBUG_V) << "finished";
-
+      set_worker_status(ExecutorStatus::CLEANUP);
+      LOG(INFO) << "wait_all_workers_finish";
+      wait_all_workers_finish();
+      LOG(INFO) << "send_ack";
+      send_ack();
     }
   }
 

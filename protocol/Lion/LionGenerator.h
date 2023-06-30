@@ -110,7 +110,7 @@ public:
               do {
                 status = static_cast<ExecutorStatus>(worker_status.load());
                 std::this_thread::sleep_for(std::chrono::microseconds(5));
-              } while (status != ExecutorStatus::C_PHASE);  
+              } while (status != ExecutorStatus::START);  
             
 
             int dispatcher_id  = worker_id * context.coordinator_num + n;
@@ -784,7 +784,7 @@ public:
 
           return;
         }
-      } while (status != ExecutorStatus::C_PHASE);
+      } while (status != ExecutorStatus::START);
 
       if(id == 0){
         skip_s_phase.store(true);
@@ -845,65 +845,74 @@ public:
       }
 
       n_complete_workers.fetch_add(1);
-      VLOG(DEBUG_V) << "Generator " << id << " finish C_PHASE";
-
+      // VLOG(DEBUG_V) << "Generator " << id << " finish START";
+      LOG(INFO) << "?? done_schedule ?? = " << schedule_meta.all_done_schedule.load();
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
-        ExecutorStatus::S_PHASE) {
+             ExecutorStatus::CLEANUP) {
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-      process_request();
-
+      
       if(id == 0){
         schedule_meta.clear();
       }
+      process_request();
+      n_complete_workers.fetch_add(1);
+      // while (static_cast<ExecutorStatus>(worker_status.load()) !=
+      //   ExecutorStatus::S_PHASE) {
+      //   process_request();
+      //   std::this_thread::sleep_for(std::chrono::microseconds(5));
+      // }
+      // process_request();
+
+
       
-      if(skip_s_phase.load() == false){
-        LOG(INFO) << "after s_phase " << std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - test)
-                            .count() * 1.0 / 1000 / 1000;
-        // s-phase
-        n_started_workers.fetch_add(1);
-        n_complete_workers.fetch_add(1);
+      // if(skip_s_phase.load() == false){
+      //   LOG(INFO) << "after s_phase " << std::chrono::duration_cast<std::chrono::microseconds>(
+      //                       std::chrono::steady_clock::now() - test)
+      //                       .count() * 1.0 / 1000 / 1000;
+      //   // s-phase
+      //   n_started_workers.fetch_add(1);
+      //   n_complete_workers.fetch_add(1);
 
-        VLOG(DEBUG_V) << "Generator " << id << " finish S_PHASE";
+      //   VLOG(DEBUG_V) << "Generator " << id << " finish S_PHASE";
 
-        // router_fence(); // wait for coordinator to response
+      //   // router_fence(); // wait for coordinator to response
 
-        LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                            std::chrono::steady_clock::now() - test)
-                            .count() * 1.0 / 1000 / 1000;
+      //   LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
+      //                       std::chrono::steady_clock::now() - test)
+      //                       .count() * 1.0 / 1000 / 1000;
 
-        flush_async_messages();
+      //   flush_async_messages();
 
 
         
-        while (static_cast<ExecutorStatus>(worker_status.load()) ==
-              ExecutorStatus::S_PHASE) {
-          process_request();
-          std::this_thread::sleep_for(std::chrono::microseconds(5));
-        }
+      //   while (static_cast<ExecutorStatus>(worker_status.load()) ==
+      //         ExecutorStatus::S_PHASE) {
+      //     process_request();
+      //     std::this_thread::sleep_for(std::chrono::microseconds(5));
+      //   }
 
-        // test = std::chrono::steady_clock::now();
+      //   // test = std::chrono::steady_clock::now();
 
 
-        // n_complete_workers has been cleared
-        process_request();
-        n_complete_workers.fetch_add(1);
-      }
-      else {
-        VLOG_IF(DEBUG_V, id==0) << "skip s phase wait back ";
-        process_request();
-        n_complete_workers.fetch_add(1);
+      //   // n_complete_workers has been cleared
+      //   process_request();
+      //   n_complete_workers.fetch_add(1);
+      // }
+      // else {
+      //   VLOG_IF(DEBUG_V, id==0) << "skip s phase wait back ";
+      //   process_request();
+      //   n_complete_workers.fetch_add(1);
 
         
-      }
+      // }
 
-        VLOG_IF(DEBUG_V, id==0) << "wait back "
-                << std::chrono::duration_cast<std::chrono::microseconds>(
-                      std::chrono::steady_clock::now() - test)
-                      .count() * 1.0 / 1000 / 1000
-                << " microseconds.";
+        // VLOG_IF(DEBUG_V, id==0) << "wait back "
+        //         << std::chrono::duration_cast<std::chrono::microseconds>(
+        //               std::chrono::steady_clock::now() - test)
+        //               .count() * 1.0 / 1000 / 1000
+        //         << " microseconds.";
 
     }
     // not end here!

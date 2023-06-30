@@ -99,7 +99,7 @@ public:
         txn_meta.c_txn_id_queue.push_no_wait(txn_id);
       }
       auto p = workload.unpack_transaction(context, 0, storages[txn_id], simple_txn);
-      // txn_meta.c_transactions_queue[txn_id] = std::move(p);
+      txn_meta.c_transactions_queue[txn_id] = std::move(p);
     }
   }
 

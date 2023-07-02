@@ -614,17 +614,25 @@ public:
            MessagePiece::get_header_size() + key_size + sizeof(key_offset));
 
     const void *key = stringPiece.data();
-    auto row = table.search(key);
-    std::atomic<uint64_t> &tid = *std::get<0>(row);
-    VLOG(DEBUG_V16) << "READ_LOCK_REQUEST " << *(int*)key;
+
+    bool success;
+    uint64_t latest_tid;
+    
+    auto& test = table.search_metadata(key, success);
+
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
     dec >> key_offset;
 
     DCHECK(dec.size() == 0);
 
-    bool success;
-    uint64_t latest_tid = TwoPLHelper::read_lock(tid, success);
+    if(success){
+      auto row = table.search(key);
+      std::atomic<uint64_t> &tid = *std::get<0>(row);
+      VLOG(DEBUG_V16) << "READ_LOCK_REQUEST " << *(int*)key;
+      latest_tid = TwoPLHelper::read_lock(tid, success);
+    }
+    
 
     // prepare response message header
     auto message_size =
@@ -648,6 +656,7 @@ public:
       void *dest =
           &responseMessage.data[0] + responseMessage.data.size() - value_size;
       // read to message buffer
+      auto row = table.search(key);
       TwoPLHelper::read(row, dest, value_size);
       encoder << latest_tid;
     }
@@ -737,8 +746,12 @@ public:
            MessagePiece::get_header_size() + key_size + sizeof(key_offset));
 
     const void *key = stringPiece.data();
-    auto row = table.search(key);
-    std::atomic<uint64_t> &tid = *std::get<0>(row);
+
+    bool success;
+    uint64_t latest_tid;
+    
+    auto& test = table.search_metadata(key, success);
+
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
@@ -746,9 +759,12 @@ public:
 
     DCHECK(dec.size() == 0);
 
-    bool success;
-    uint64_t latest_tid = TwoPLHelper::write_lock(tid, success);
+    if(success){
+      auto row = table.search(key);
+      std::atomic<uint64_t> &tid = *std::get<0>(row);
+      latest_tid = TwoPLHelper::write_lock(tid, success);
 
+    }
     // prepare response message header
     auto message_size =
         MessagePiece::get_header_size() + sizeof(bool) + sizeof(key_offset);
@@ -773,6 +789,7 @@ public:
       void *dest =
           &responseMessage.data[0] + responseMessage.data.size() - value_size;
       // read to message buffer
+      auto row = table.search(key);
       TwoPLHelper::read(row, dest, value_size);
       encoder << latest_tid;
     }

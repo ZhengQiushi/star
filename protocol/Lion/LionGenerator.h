@@ -90,7 +90,7 @@ public:
     generator_core_id.resize(context.coordinator_num);
     dispatcher_core_id.resize(context.coordinator_num);
 
-    pin_thread_id_ = 3 + 2 * 2 + context.worker_num;
+    pin_thread_id_ = 3 + 2 + context.worker_num;
 
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
@@ -484,19 +484,19 @@ public:
       //   txn->is_distributed = true;
       // }
 
-      if(!txn->is_distributed){ 
-        // static-distribute
-        // std::unordered_map<int, int> result;
+      // if(!txn->is_distributed){ 
+      //   // static-distribute
+      //   // std::unordered_map<int, int> result;
         
-        // txn_nodes_involved(txn.get(), true, txns_coord_cost, 
-        //                   busy_local, 
-        //                   replicate_busy_local);
+      //   // txn_nodes_involved(txn.get(), true, txns_coord_cost, 
+      //   //                   busy_local, 
+      //   //                   replicate_busy_local);
 
-      // } else {
-        DCHECK(txn->is_distributed == 0);
-        pure_single_txn_cnt += 1;
-        txn->destination_coordinator = txn->partition_id % context.coordinator_num;
-      } 
+      // // } else {
+      //   DCHECK(txn->is_distributed == 0);
+      //   pure_single_txn_cnt += 1;
+      //   txn->destination_coordinator = txn->partition_id % context.coordinator_num;
+      // } 
 
 
       if(txn->is_real_distributed){
@@ -728,13 +728,13 @@ public:
                             long long threshold
                             ){
     for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
-      if((long long) (busy[j] - aver_val) * (busy[j] - aver_val) > threshold){
+      // if((long long) (busy[j] - aver_val) * (busy[j] - aver_val) > threshold){
         if((busy[j] - aver_val) > 0){
           overload_node[j] = busy[j] - aver_val;
         } else {
           idle_node[j] = aver_val - busy[j];
         } 
-      }
+      // }
     }    
   }
   

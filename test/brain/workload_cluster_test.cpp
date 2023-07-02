@@ -22,14 +22,14 @@ class QueryClustererTests : public PelotonTest {};
 TEST(QueryClustererTests, ClusterTest) {
 
     double cur_timestamp = 0;
-    double last_timestamp = 240;
+    double last_timestamp = 90; // 30 30 30 30
 
     peloton::brain::workload_data data;
     peloton::brain::get_workload_classified(cur_timestamp, last_timestamp, data);
     
-    double period_duration = 80;
-    double sample_interval = 0.25;
-    const size_t top_cluster_num = 4;
+    double period_duration = 90;
+    double sample_interval = 0.5;
+    const size_t top_cluster_num = 3;
 
     std::map<std::string, std::vector<double>> raw_features_;
     // 

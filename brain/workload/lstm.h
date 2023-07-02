@@ -121,6 +121,7 @@ TimeSeriesLSTM::TimeSeriesLSTM(int nfeats, int nencoded, int nhid, int nlayers,
   tf_session_entity_->ImportGraph(graph_path_);
   // Initialize the model
   TFInit();
+  std::cout << ToString();
 }
 
 std::string TimeSeriesLSTM::ConstructModelArgsString() const {
@@ -158,7 +159,7 @@ void TimeSeriesLSTM::Fit(const matrix_eig &X, const matrix_eig &y, int bsz) {
   auto data_batch = EigenUtil::Flatten(X);
   auto target_batch = EigenUtil::Flatten(y);
   int seq_len = data_batch.size() / (bsz * nfeats_);
-  std::vector<int64_t> dims{bsz, seq_len, nfeats_};
+  std::vector<int64_t> dims{bsz, seq_len, nfeats_}; // 2 160 3
   std::vector<TfFloatIn *> inputs_optimize{
       new TfFloatIn(data_batch.data(), dims, "data_"),
       new TfFloatIn(target_batch.data(), dims, "target_"),
@@ -181,7 +182,9 @@ float TimeSeriesLSTM::TrainEpoch(const matrix_eig &data) {
   std::vector<matrix_eig> y_batch, y_hat_batch;
   for (size_t i = 0; i < data_batches.size(); i++) {
     std::vector<matrix_eig> &data_batch_eig = data_batches[i];
-    std::vector<matrix_eig> &target_batch_eig = target_batches[i];
+    std::vector<matrix_eig> &target_batch_eig = target_batches[i]; 
+    // rows = period * bptt
+    // cols = feats
     matrix_eig X_batch = EigenUtil::VStack(data_batch_eig);
     int bsz = static_cast<int>(data_batch_eig.size());
     // Fit

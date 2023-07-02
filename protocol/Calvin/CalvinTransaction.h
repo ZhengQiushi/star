@@ -250,6 +250,7 @@ public:
           int a = local_read.load();
           int b = remote_read.load();
           remote_request_handler(worker_id);
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
         }
 
         return false;

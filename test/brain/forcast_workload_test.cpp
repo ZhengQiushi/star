@@ -169,16 +169,16 @@ class ModelTests : public PelotonTest {};
 
         float mean_, std_, min_;
         n.GetParameters(mean_, std_, min_);
-        matrix_eig C_ = C.unaryExpr([&](double x){
-            return std::exp(x* std_ + mean_) - min_;
-        }).cast<float>();
+        // matrix_eig C_ = C.unaryExpr([&](double x){
+        //     return std::exp(x* std_ + mean_) - min_;
+        // }).cast<float>();
         
         LOG(INFO) << "Predict done.";
         /** output y and y_hat**/
         std::ofstream ofs("/home/star/data/y_hat.xls", std::ios::trunc);
-        for(int i = 0; i < C_.rows(); i ++ ){
-            for(int j = 0; j < C_.cols(); j ++ ){
-                ofs << C_(i, j) << "\t";
+        for(int i = 0; i < C.rows(); i ++ ){
+            for(int j = 0; j < C.cols(); j ++ ){
+                ofs << C(i, j) << "\t";
             }
             ofs << "\n";
         }
@@ -224,12 +224,12 @@ TEST_F(ModelTests, DISABLED_TimeSeriesLSTMTest) { //
 
 
 TEST_F(ModelTests, TimeSeriesLSTMTestClass) {
-    int preiod = 80 / 0.25;
+    int preiod = 90 / 0.5;
     int bptt = 1 * preiod; 
     int horizon = 3 * preiod;
 
-    size_t num_samples = 3200;
-    size_t num_feats = 4;
+    size_t num_samples = 10 * preiod;
+    size_t num_feats = 3;
 
     float val_split = 0.5;
     peloton::brain::my_predictor p_(preiod, num_feats, bptt, horizon, val_split);

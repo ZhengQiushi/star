@@ -39,7 +39,7 @@ public:
                  std::chrono::steady_clock::now() - start_time)
                  .count() * 1.0 / 1000 / 1000;
 
-    int workload_type_num = 4;
+    int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
     // 同一个节点的不同部分（前后部分）
     if(workload_type <= 2) {

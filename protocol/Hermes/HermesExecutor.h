@@ -456,6 +456,7 @@ public:
     while (txn.pendingResponses > 0) {
       // process remote reads for other workers
       txn.remote_request_handler(id);
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
   }
 

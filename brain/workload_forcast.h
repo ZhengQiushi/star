@@ -55,7 +55,7 @@ namespace brain {
         my_predictor(int preiod, int feats, int bptt, int horizon, float val_split){
             PREIOD = preiod;              // 160; // 40 / 0.25
             NFEATS = feats;
-            EPOCHS = 100;
+            EPOCHS = 300;
             CLIP_NORM = 0.25;
             BPTT = bptt;                  // PREIOD * 2;
             HORIZON = horizon;            // PREIOD * 3;
@@ -107,9 +107,11 @@ namespace brain {
             // float prev_train_loss = std::numeric_limits<float>::max();
             float val_loss = VAL_THESH * 2;
             std::vector<float> val_losses;
-            for (int epoch = 1; epoch <= model->GetEpochs() &&
-                                !brain::ModelUtil::EarlyStop(
-                                    val_losses, early_stop_patience, early_stop_delta);
+            for (int epoch = 1; epoch <= model->GetEpochs() 
+            // &&
+            //                     !brain::ModelUtil::EarlyStop(
+            //                         val_losses, early_stop_patience, early_stop_delta)
+                                    ;
                 epoch++) {
                 // std::cout << train_data << std::endl;
                 auto train_loss = model->TrainEpoch(train_data);

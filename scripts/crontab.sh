@@ -89,3 +89,42 @@
 30 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_80.py 240" &
 40 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_100.py 240" &
 
+
+
+# dist ratio for nondm 
+# skew
+0 14 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/aria/aws_0.py 180" &
+10 14 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/aria/aws_20.py 180" &
+20 14 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/aria/aws_50.py 180" &
+30 14 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/aria/aws_80.py 180" &
+40 14 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/aria/aws_100.py 180" &
+
+0 15 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/calvin/aws_0.py 180" &
+10 15 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/calvin/aws_20.py 180" &
+20 15 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/calvin/aws_50.py 180" &
+30 15 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/calvin/aws_80.py 180" &
+40 15 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dist_ratio/skew/calvin/aws_100.py 180" &
+
+
+
+# uniform 
+0 17 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/aria/aws_0.py 180" &
+10 17 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/aria/aws_20.py 180" &
+20 17 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/aria/aws_50.py 180" &
+30 17 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/aria/aws_80.py 180" &
+40 17 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/aria/aws_100.py 180" &
+
+
+0 18 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/calvin/aws_0.py 180" &
+10 18 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/calvin/aws_20.py 180" &
+20 18 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/calvin/aws_50.py 180" &
+30 18 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/calvin/aws_80.py 180" &
+40 18 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/calvin/aws_100.py 180" &
+
+
+0 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_0.py 180" &
+10 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_20.py 180" &
+20 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_50.py 180" &
+30 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_80.py 180" &
+40 19 * * * docker exec zqs_0 bash -c "bash /home/star/scripts/test.sh dm/dist_ratio/uniform/hermes/aws_100.py 180" &
+

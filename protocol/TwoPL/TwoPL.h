@@ -250,6 +250,7 @@ public:
     if (wait_response) {
       while (txn.pendingResponses > 0) {
         txn.remote_request_handler();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
     }
   }

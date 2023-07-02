@@ -184,6 +184,7 @@ public:
       message_flusher();
       while (pendingResponses > 0) {
         remote_request_handler();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
         status = get_worker_status();
         if(status == ExecutorStatus::EXIT){
           LOG(INFO) << "TRANSMITER SHOULD BE STOPPED";
@@ -232,6 +233,8 @@ public:
       message_flusher();
       while (pendingResponses > 0) {
         remote_request_handler();
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+
       }
     }
     return false;

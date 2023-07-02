@@ -388,7 +388,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 5 * 1000; // 10 * 1000 * 2; // debug
+        int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
         // 
         int cur_workload = 0;
 
@@ -447,7 +447,7 @@ public:
 
 
           cur_workload = (cur_workload + 1) % workload_num;
-          break; // debug
+          // break; // debug
         }
         LOG(INFO) << "transmiter " << " exits.";
     // });

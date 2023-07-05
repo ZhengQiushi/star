@@ -413,8 +413,8 @@ public:
                            std::chrono::steady_clock::now() - test)
                            .count();
     test = std::chrono::steady_clock::now();
-
-    LOG(INFO) << " snapshot read [" << id << "] : " << count << " " << execute_time / count << " " << execute_time * 1.0 / 1000;
+    if(count > 0)
+      LOG(INFO) << " snapshot read [" << id << "] : " << count << " " << execute_time / count << " " << execute_time * 1.0 / 1000;
 
     // reserve
     count = 0;
@@ -520,7 +520,8 @@ public:
     auto reserve_time = std::chrono::duration_cast<std::chrono::microseconds>(
                            std::chrono::steady_clock::now() - test)
                            .count();
-    LOG(INFO) << " snapshot reserve [" << id << "] : " << count << " " << reserve_time / count << " " << reserve_time * 1.0 / 1000;
+    if(count > 0)
+      LOG(INFO) << " snapshot reserve [" << id << "] : " << count << " " << reserve_time / count << " " << reserve_time * 1.0 / 1000;
   }
 
   void reserve_transaction(TransactionType &txn) {

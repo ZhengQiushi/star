@@ -347,7 +347,7 @@ public:
         async_fence();
       }
 
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] do remaster "
+      LOG(INFO) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
@@ -360,7 +360,7 @@ public:
     
       n_complete_workers.fetch_add(1);
 
-      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] C_phase - local "
+      LOG(INFO) << "[C-PHASE] C_phase - local "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
@@ -478,11 +478,6 @@ public:
       if(id == 0){
         txn_meta.clear();
       }
-      VLOG_IF(DEBUG_V, id==0) << "sync "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - begin)
-                     .count()
-              << " milliseconds.";
 
       process_request();
       n_complete_workers.fetch_add(1);

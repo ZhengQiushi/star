@@ -105,7 +105,12 @@ public:
     for (auto n = 0u; n < context.coordinator_num; n++) {
           
             dispatcher.emplace_back([&](int n, int worker_id) {
-              
+              std::vector<std::unique_ptr<Message>> messages;
+              for (auto i = 0u; i <= context.coordinator_num; i++) {
+                messages.emplace_back(std::make_unique<Message>());
+                init_message(messages[i].get(), i);
+              }
+
               ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
               do {
                 status = static_cast<ExecutorStatus>(worker_status.load());
@@ -143,43 +148,57 @@ public:
                   }
                   std::vector<std::shared_ptr<simpleTransaction>> &txns = schedule_meta.node_txns;
 
+                  auto staart = std::chrono::steady_clock::now();
                   scheduler_transactions(dispatcher_num, dispatcher_id);
+                  // LOG(INFO) << "scheduler_transactions : " <<  std::chrono::duration_cast<std::chrono::microseconds>(
+                  //                   std::chrono::steady_clock::now() - staart)
+                  //                   .count() * 1.0 / 1000 ;
+
 
                   int idx_offset = dispatcher_id * cur_txn_num;
 
                   for(int j = 0; j < cur_txn_num; j ++ ){
                     int idx = idx_offset + j;
                     coordinator_send[txns[idx]->destination_coordinator] ++ ;
-                    router_request(router_send_txn_cnt, txns[idx]);   
+                    router_request(router_send_txn_cnt, txns[idx], messages);   
 
                     if(j % context.batch_flush == 0){
                       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-                        messages_mutex[i]->lock();
-                        flush_message(async_messages, i);
-                        messages_mutex[i]->unlock();
+                        flush_message(messages, i);
                       }
                     }
                   }
                   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-                    messages_mutex[i]->lock();
-                    flush_message(async_messages, i);
-                    messages_mutex[i]->unlock();
+                    flush_message(messages, i);
                   }
+
+                  // LOG(INFO) << "router_request : " <<  std::chrono::duration_cast<std::chrono::microseconds>(
+                  //                   std::chrono::steady_clock::now() - staart)
+                  //                   .count() * 1.0 / 1000 ;
 
                   schedule_meta.done_schedule.fetch_add(1);
                   status = static_cast<ExecutorStatus>(worker_status.load());
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load() 
+                  //           << " " << std::chrono::duration_cast<std::chrono::microseconds>(
+                  //                   std::chrono::steady_clock::now() - staart)
+                  //                   .count() * 1.0 / 1000 ;
+
                   // wait for end
                   while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
                     auto i = schedule_meta.done_schedule.load();
                     std::this_thread::sleep_for(std::chrono::microseconds(5));
                     status = static_cast<ExecutorStatus>(worker_status.load());
                   }
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+
 
                   is_full_signal_self[dispatcher_id].store(false);
 
                   schedule_meta.all_done_schedule.fetch_add(1);
+                  // LOG(INFO) << "schedule_meta all done: " << schedule_meta.all_done_schedule.load() 
+                  //           << " " << std::chrono::duration_cast<std::chrono::microseconds>(
+                  //                   std::chrono::steady_clock::now() - staart)
+                  //                   .count() * 1.0 / 1000 ;
+
                 }
             }, n, this->id);
 
@@ -362,16 +381,15 @@ public:
    }
 
 
-  void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn) {
+  void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn,
+  std::vector<std::unique_ptr<Message>> &messages) {
     // router transaction to coordinators
     size_t coordinator_id_dst = txn->destination_coordinator;
 
-    messages_mutex[coordinator_id_dst]->lock();
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
-        *async_messages[coordinator_id_dst].get(), 0, *txn, 
+        *messages[coordinator_id_dst].get(), 0, *txn, 
         context.coordinator_id);
     // flush_message(async_messages, coordinator_id_dst);
-    messages_mutex[coordinator_id_dst]->unlock();
 
     router_send_txn_cnt[coordinator_id_dst]++;
     n_network_size.fetch_add(router_size);
@@ -785,11 +803,10 @@ public:
           return;
         }
       } while (status != ExecutorStatus::START);
-
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "ExecutorStatus::START : " << cur_timestamp__;
+      LOG(INFO) << "status != ExecutorStatus::START : " << cur_timestamp__;
 
       if(id == 0){
         skip_s_phase.store(true);
@@ -809,6 +826,7 @@ public:
       
       VLOG(DEBUG_V) << "Generator " << id << " ready to process_request";
 
+
       // thread to router the transaction generated by LionGenerator
       for(int i = 0 ; i < MAX_COORDINATOR_NUM; i ++ ){
         coordinator_send[i] = 0;
@@ -816,6 +834,11 @@ public:
       
       pure_single_txn_cnt = 0;
       router_send_txn_cnt.resize(context.coordinator_num, 0);
+
+      cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - test)
+                  .count() * 1.0 / 1000;
+      LOG(INFO) << "schedule_meta.start_schedule : " << cur_timestamp__;
 
       schedule_meta.start_schedule.store(1);
       // wait for end
@@ -1154,7 +1177,7 @@ protected:
   std::unique_ptr<TransactionType> transaction;
   std::vector<std::unique_ptr<Message>> sync_messages, metis_async_messages;
   std::vector<std::unique_ptr<Message>> async_messages;// [20];
-
+  
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
   ShareQueue<simpleTransaction> router_transactions_queue;

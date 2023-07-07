@@ -22,6 +22,24 @@ struct NewOrderQuery {
     return false;
   }
 
+  void unpack_transaction(const simpleTransaction& t){
+    for(int i = 0 ; i < t.keys.size(); i ++ ){
+      auto record_key = t.keys[i];
+      int32_t table_id = (record_key >> RECORD_COUNT_TABLE_ID_OFFSET);
+
+      W_ID = (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+      D_ID = (record_key & RECORD_COUNT_D_ID_VALID) >>  RECORD_COUNT_D_ID_OFFSET;
+      C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
+
+      if(i >= 3){
+        INFO[i - 3].OL_I_ID = (record_key & RECORD_COUNT_OL_ID_VALID);
+        INFO[i - 3].OL_SUPPLY_W_ID = 
+          (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+      }
+
+    }
+  }
+
   int32_t W_ID;
   int32_t D_ID;
   int32_t C_ID;
@@ -38,8 +56,19 @@ struct NewOrderQuery {
 
 class makeNewOrderQuery {
 public:
-  NewOrderQuery operator()(const Context &context, int32_t W_ID,
+  NewOrderQuery operator()(const Context &context, 
+                           int32_t W_ID,
+                           double cur_timestamp,
                            Random &random) const {
+
+    int workload_type_num = 3;
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
+    if(workload_type == 3){
+      workload_type = -2;
+    } else if(workload_type == 4){
+      workload_type = -3;
+    }
+
     NewOrderQuery query;
     // W_ID is constant over the whole measurement interval
     query.W_ID = W_ID;
@@ -102,19 +131,17 @@ public:
       // the home warehouse 90% of the time and as a remote warehouse 10% of the
       // time.
 
-      if (i == 0) {
+      if (i != 1) {
         // figure out buy from which warehouse
         
         if (x <= context.newOrderCrossPartitionProbability &&
             context.partition_num > 1) {
           // is cross partition 
-          int32_t OL_SUPPLY_W_ID = W_ID;
-          // while (OL_SUPPLY_W_ID == W_ID) {
-          //   OL_SUPPLY_W_ID = random.uniform_dist(1, context.partition_num);
-          // }
-          
-          query.INFO[i].OL_SUPPLY_W_ID = (OL_SUPPLY_W_ID + context.partition_num) % context.partition_num + 1;
-          //
+          query.INFO[i].OL_SUPPLY_W_ID = (W_ID + workload_type) % context.partition_num;
+          //  
+          if(query.INFO[i].OL_SUPPLY_W_ID == 0){
+            query.INFO[i].OL_SUPPLY_W_ID = W_ID;
+          }
 
         } else {
           query.INFO[i].OL_SUPPLY_W_ID = W_ID;

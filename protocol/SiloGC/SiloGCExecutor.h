@@ -230,10 +230,7 @@ void unpack_route_transaction(){
               int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
                                                                     std::chrono::steady_clock::now() - transaction->b.startTime)
                   .count();
-              time3 += commit_time;
               transaction->b.time_commit += commit_time;
-              
-              now = std::chrono::steady_clock::now();
               // ####
               record_commit_transactions(*transaction);
 

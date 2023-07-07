@@ -27,21 +27,25 @@ public:
   using StorageType = Storage;
 
   NewOrder(std::size_t coordinator_id, std::size_t partition_id,
+           std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context, RandomType &random,
-           Partitioner &partitioner, Storage &storage)
-      : Transaction(coordinator_id, partition_id, partitioner), db(db),
+           Partitioner &partitioner, Storage &storage, 
+           double cur_timestamp)
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeNewOrderQuery()(context, partition_id + 1, random)) {}
+        query(makeNewOrderQuery()(context, partition_id + 1, cur_timestamp, random)) {}
 
 
-  NewOrder(std::size_t coordinator_id, std::size_t partition_id,
-                  DatabaseType &db, const ContextType &context,
-                  RandomType &random, Partitioner &partitioner,
-                  Storage &storage, simpleTransaction& simple_txn)
-      : Transaction(coordinator_id, partition_id, partitioner), db(db),
-        context(context), random(random), storage(storage),
-        partition_id(partition_id) {
+  NewOrder(std::size_t coordinator_id, std::size_t partition_id,  
+           std::atomic<uint32_t> &worker_status, 
+           DatabaseType &db, const ContextType &context,
+           RandomType &random, Partitioner &partitioner,
+           Storage &storage, simpleTransaction& simple_txn)
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random), storage(storage) {
           size_t size_ = simple_txn.keys.size();
 
           DCHECK(simple_txn.keys.size() == 13);
@@ -49,6 +53,9 @@ public:
           auto c_record_key = simple_txn.keys[2];
 
           int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+
+          this->partition_id = w_id - 1;
+          
           int32_t d_id = (c_record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
           int32_t c_id = (c_record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
 
@@ -77,7 +84,7 @@ public:
   }
   TransactionResult execute(std::size_t worker_id) override {
 
-    int32_t W_ID = this->partition_id + 1;
+    int32_t W_ID = query.W_ID;
 
     // The input data (see Clause 2.4.3.2) are communicated to the SUT.
 
@@ -300,13 +307,12 @@ public:
   }
 
   ExecutorStatus get_worker_status() override {
-    DCHECK(false);
-    return static_cast<ExecutorStatus>(0);
+    return static_cast<ExecutorStatus>(worker_status_.load());
   }
   
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     
-    int32_t W_ID = this->partition_id + 1;
+    int32_t W_ID = query.W_ID;
 
     // The input data (see Clause 2.4.3.2) are communicated to the SUT.
 
@@ -418,6 +424,11 @@ public:
         ret = TransactionResult::ABORT;
       }
       break;
+    case ReadMethods::REMASTER_ONLY:
+      if (this->process_remaster_requests(worker_id)) {
+        ret = TransactionResult::ABORT;
+      }
+      break;
     default:
       DCHECK(false);
       break;
@@ -427,7 +438,7 @@ public:
 
   TransactionResult prepare_update_execute(std::size_t worker_id) override {
 
-    int32_t W_ID = this->partition_id + 1;
+    int32_t W_ID = query.W_ID;
     int32_t D_ID = query.D_ID;
     int32_t C_ID = query.C_ID;
 
@@ -592,7 +603,7 @@ public:
   
 
   void reset_query() override {
-    query = makeNewOrderQuery()(context, partition_id, random);
+    query = makeNewOrderQuery()(context, partition_id, 0, random);
   }
   const std::vector<bool> get_query_update() override {
     std::vector<bool> ret;
@@ -648,9 +659,10 @@ public:
       T OL_I_ID = query.INFO[i].OL_I_ID;
       T OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
       // stock_keys.push_back(stock::key(OL_SUPPLY_W_ID, OL_I_ID));
-      T ol_supply_w_record_key = (static_cast<T>(stock::tableID) << RECORD_COUNT_TABLE_ID_OFFSET) + 
-                                                       (OL_SUPPLY_W_ID << RECORD_COUNT_W_ID_OFFSET) +
-                                                       (OL_I_ID);
+      T ol_supply_w_record_key = 
+      (static_cast<T>(stock::tableID) << RECORD_COUNT_TABLE_ID_OFFSET) + 
+                     (OL_SUPPLY_W_ID << RECORD_COUNT_W_ID_OFFSET) +
+                            (OL_I_ID);
 
       ol_supply_w_record_keys.insert(ol_supply_w_record_key);
     }
@@ -671,7 +683,7 @@ public:
   std::set<int> txn_nodes_involved(bool is_dynamic) override {
     std::set<int> from_nodes_id;
 
-    int32_t W_ID = this->partition_id + 1;
+    int32_t W_ID = query.W_ID;
     int32_t D_ID = query.D_ID;
     int32_t C_ID = query.C_ID;
     auto itemTableID = item::tableID;
@@ -743,6 +755,7 @@ private:
   }
 
 private:
+  std::atomic<uint32_t> &worker_status_;
   DatabaseType &db;
   const ContextType &context;
   RandomType &random;
@@ -775,7 +788,7 @@ public:
   }
   TransactionResult execute(std::size_t worker_id) override {
 
-    int32_t W_ID = this->partition_id + 1;
+    int32_t W_ID = query.W_ID;
 
     // The input data (see Clause 2.5.3.2) are communicated to the SUT.
 

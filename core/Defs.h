@@ -84,7 +84,7 @@ struct simpleTransaction {
   size_t metis_idx_;
 
   std::vector<uint64_t> keys;
-  std::vector<bool> update;
+  std::vector<bool> update; // only for YCSB
   RouterTxnOps op;
   uint64_t size;
   uint64_t partition_id;    // for clay, it means the destination coordinator_id

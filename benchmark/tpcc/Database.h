@@ -220,20 +220,20 @@ public:
   }
 
     // item init 
-    for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
+    // for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
 
-      int router_coordinator = int(c_id);
-      ITable *table_router = tbl_item_vec_router.get();
+    //   int router_coordinator = int(c_id);
+    //   ITable *table_router = tbl_item_vec_router.get();
 
-      // 100,000 rows in the ITEM table
-      for (int i = 1; i <= 100000; i++) {
-        item::key key;
-        key.I_ID = i;
+    //   // 100,000 rows in the ITEM table
+    //   for (int i = 1; i <= 100000; i++) {
+    //     item::key key;
+    //     key.I_ID = i;
 
-        table_router->insert(&key, &router_coordinator);
-      }
+    //     table_router->insert(&key, &router_coordinator);
+    //   }
 
-    }
+    // }
 
   }
   void init_star_router_table(const Context& context){
@@ -295,20 +295,20 @@ public:
   }
 
     // item init 
-    for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
+    // for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
 
-      int router_coordinator = int(c_id);
-      ITable *table = tbl_item_vec_router.get();
+    //   int router_coordinator = int(c_id);
+    //   ITable *table = tbl_item_vec_router.get();
 
-      // 100,000 rows in the ITEM table
-      for (int i = 1; i <= 100000; i++) {
-        item::key key;
-        key.I_ID = i;
+    //   // 100,000 rows in the ITEM table
+    //   for (int i = 1; i <= 100000; i++) {
+    //     item::key key;
+    //     key.I_ID = i;
 
-        table->insert(&key, &router_coordinator);
-      }
+    //     table->insert(&key, &router_coordinator);
+    //   }
 
-    }
+    // }
 
   }
   void allocate_router_table(const Context& context){

@@ -246,7 +246,7 @@ public:
   }
 
 
-  void txn_nodes_involved(simpleTransaction* t, bool is_dynamic, 
+  void txn_nodes_involved(simpleTransaction* t, 
                           std::vector<std::vector<int>>& txns_coord_cost_,
                           std::vector<int>& busy_local,
                           std::vector<int>& replicate_busy_local) {
@@ -266,17 +266,14 @@ public:
         // judge if is cross txn
         size_t cur_c_id = -1;
         size_t secondary_c_ids;
-        if(is_dynamic){
-          // look-up the dynamic router to find-out where
-          auto router_table = db.find_router_table(ycsbTableID);// , master_coordinator_id);
-          auto tab = static_cast<RouterValue*>(router_table->search_value((void*) &query_keys[j]));
 
-          cur_c_id = tab->get_dynamic_coordinator_id();
-          secondary_c_ids = tab->get_secondary_coordinator_id();
-        } else {
-          // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
-        }
+        // look-up the dynamic router to find-out where
+        auto router_table = db.find_router_table(ycsbTableID);// ,master_coordinator_id);
+        auto tab = static_cast<RouterValue*>(router_table->search_value((void*) query_keys[j]));
+
+        cur_c_id = tab->get_dynamic_coordinator_id();
+        secondary_c_ids = tab->get_secondary_coordinator_id();
+
         if(!from_nodes_id.count(cur_c_id)){
           from_nodes_id[cur_c_id] = 1;
           // 
@@ -360,6 +357,102 @@ public:
 
      return;
    }
+
+
+  void txn_nodes_involved_tpcc(simpleTransaction* t, 
+                          std::vector<std::vector<int>>& txns_coord_cost_,
+                          std::vector<int>& busy_local,
+                          std::vector<int>& replicate_busy_local) {
+    
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};              // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0};; // secondary replica nums
+      // std::unordered_map<int, int> nodes_cost;              // cost on each node
+      std::vector<int> query_keys;
+      star::tpcc::NewOrderQuery keys;
+      keys.unpack_transaction(*t);
+      for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
+        auto router_table = db.find_router_table(tpcc::stock::tableID);
+
+        auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
+        auto tab = static_cast<RouterValue*>(router_table->search_value((void*)&stock_key));
+        size_t stock_coordinator_id = tab->get_dynamic_coordinator_id();
+
+        
+        from_nodes_id[stock_coordinator_id] += 1;
+        query_keys.push_back(stock_coordinator_id);
+      }
+
+      int max_cnt = INT_MIN;
+      int max_node = -1;
+
+      int replica_most_cnt = INT_MIN;
+      int replica_max_node = -1;
+
+
+
+
+      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
+        int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
+
+        size_t cnt_master = from_nodes_id[cur_c_id];
+        size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
+        if(context.migration_only){
+          cur_score += 100 * cnt_master;
+        } else {
+          if(cnt_master == query_keys.size()){
+            cur_score += 100 * (int)query_keys.size();
+          } else if(cnt_secondary + cnt_master == query_keys.size()){
+            cur_score += 50 * cnt_master + 25 * cnt_secondary;
+          } else {
+            cur_score += 25 * cnt_master + 15 * cnt_secondary;
+          }
+        }
+
+        if(cur_score > max_cnt){
+          max_node = cur_c_id;
+          max_cnt = cur_score;
+        }
+
+        if(cnt_secondary > replica_most_cnt){
+          replica_max_node = cur_c_id;
+          replica_most_cnt = cnt_secondary;
+        }
+
+        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+        replicate_busy_local[cur_c_id] += cnt_secondary;
+      }
+
+
+      if(context.random_router > 0){
+        // 
+        // size_t random_value = random.uniform_dist(0, 9);
+        max_node = query_keys[0];
+      } 
+
+
+      t->destination_coordinator = max_node;
+      t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
+      t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
+
+      t->replica_heavy_node = replica_max_node;
+      // if(t->is_real_distributed){
+      //   std::string debug = "";
+      //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      //     debug += std::to_string(txns_coord_cost_[t->idx_][i]) + " ";
+      //   }
+      //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
+      // }
+      size_t cnt_master = from_nodes_id[max_node];
+      size_t cnt_secondary = from_nodes_id_secondary[max_node];
+
+      // if(cnt_secondary + cnt_master != query_keys.size()){
+      //   distributed_outfile_excel << t->keys[0] << "\t" << t->keys[1] << "\t" << max_node << "\n";
+      // }
+
+     return;
+   }
+
+
 
 
   void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn) {
@@ -473,31 +566,15 @@ public:
 
       }
 
-      txn_nodes_involved(txn.get(), true, txns_coord_cost, 
-                         busy_local, 
-                         replicate_busy_local);
 
-      // if(!txn->is_distributed && txn->destination_coordinator == txn->partition_id % context.coordinator_num){ 
-      //   pure_single_txn_cnt += 1;
-      // } 
-      // else {
-      //   txn->is_distributed = true;
-      // }
 
-      // if(!txn->is_distributed){ 
-      //   // static-distribute
-      //   // std::unordered_map<int, int> result;
-        
-      //   // txn_nodes_involved(txn.get(), true, txns_coord_cost, 
-      //   //                   busy_local, 
-      //   //                   replicate_busy_local);
-
-      // // } else {
-      //   DCHECK(txn->is_distributed == 0);
-      //   pure_single_txn_cnt += 1;
-      //   txn->destination_coordinator = txn->partition_id % context.coordinator_num;
-      // } 
-
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        txn_nodes_involved(txn.get(), txns_coord_cost, 
+                           busy_local, replicate_busy_local);
+      } else {
+        txn_nodes_involved_tpcc(txn.get(), txns_coord_cost, 
+                           busy_local, replicate_busy_local);
+      }
 
       if(txn->is_real_distributed){
         real_distribute_num += 1;

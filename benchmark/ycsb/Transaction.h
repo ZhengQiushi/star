@@ -47,7 +47,8 @@ public:
         }
 
 
-  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::atomic<uint32_t> &worker_status,
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, 
+                  std::atomic<uint32_t> &worker_status,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, simpleTransaction& simple_txn)
@@ -65,7 +66,8 @@ public:
         }
 
 
-  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::atomic<uint32_t> &worker_status,
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, 
+                  std::atomic<uint32_t> &worker_status,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, 

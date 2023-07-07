@@ -45,18 +45,22 @@ public:
 
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-    if(workload_type == 1) {
-      partition_id = partition_id / 2 * 2;
-    } else if(workload_type == 3){
-      partition_id = partition_id / 2 * 2 + 1;
+    // 同一个节点的不同部分（前后部分）
+    if(workload_type <= 2) {
+    // if(workload_type % 2 == 0) {
+      partition_id = partition_id % (context.partition_num / 2);
+    } else {
+      partition_id = context.partition_num / 2 + partition_id % (context.partition_num / 2);
     }
 
 
     if (context.workloadType == TPCCWorkloadType::MIXED) {
       if (x <= 50) {
         p = std::make_unique<NewOrder<Transaction>>(
-            coordinator_id, partition_id, db, context, random, partitioner,
-            storage);
+            coordinator_id, partition_id, 
+            worker_status,
+            db, context, random, partitioner,
+            storage, cur_timestamp);
       } else {
         p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
                                                    db, context, random,
@@ -64,8 +68,10 @@ public:
       }
     } else if (context.workloadType == TPCCWorkloadType::NEW_ORDER_ONLY) {
       p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
+                                                  worker_status, 
                                                   db, context, random,
-                                                  partitioner, storage);
+                                                  partitioner, storage, 
+                                                  cur_timestamp);
     } else {
       p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
                                                  db, context, random,
@@ -79,9 +85,9 @@ public:
                                                     std::size_t partition_id,
                                                     StorageType &storage, simpleTransaction& simple_txn) {
     std::unique_ptr<TransactionType>  p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
-                                                //  worker_status, 
-                                                 db, context, random,
-                                                 partitioner, storage, simple_txn);
+     worker_status,
+     db, context, random,
+     partitioner, storage, simple_txn);
     return p;
   }
 

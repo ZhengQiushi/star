@@ -48,9 +48,6 @@ int main(int argc, char *argv[]) {
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler(); 
   google::ParseCommandLineFlags(&argc, &argv, true);
-  // FLAGS_log_dir = "/Users/lion/project/01_star/star/logs/";
-  // FLAGS_alsologtostderr = 1;
-  // FLAGS_logtostderr = 0;
 
   star::ycsb::Context context;
   SETUP_CONTEXT(context);
@@ -70,20 +67,6 @@ int main(int argc, char *argv[]) {
   star::Coordinator c(FLAGS_id, db, context);
   c.connectToPeers();
   c.start();
-
-  // test 
-  // using TransactionType = star::SiloTransaction;
-  // using WorkloadType =
-  //         typename InferType<star::ycsb::Context>::template WorkloadType<TransactionType>;
-  // std::atomic<uint32_t> worker_status;
-  // std::unique_ptr<star::Clay<WorkloadType>> my_clay = std::make_unique<star::Clay<WorkloadType>>(context, db, worker_status);
-  
-
-  // my_clay->init_with_history("/home/star/data/result_test.xls");
-  // my_clay->metis_partition_graph();
-
-  // test done 
-
 
   google::ShutdownGoogleLogging();
 

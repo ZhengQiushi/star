@@ -175,7 +175,7 @@ namespace star
             access_frequency = 0;
         }
     };
-
+    
     template <class Workload>
     struct myMove
     {   

@@ -28,7 +28,7 @@ public:
   template <class Transaction>
   using WorkloadType = star::tpcc::Workload<Transaction>;
 
-  // using KeyType = tpcc::tpcc::key; 
+  // using KeyType = tpcc::tpcc::key;
   // using ValueType = tpcc::tpcc::value;
   // using KeyType = ycsb::ycsb::key;
   // using ValueType = ycsb::ycsb::value;
@@ -120,29 +120,52 @@ int main(int argc, char *argv[]) {
 
   if(context.protocol == "Lion"){
     dst_file = "resultss_partition_0_30.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, 0, 60);
+    int time_start = 0;
+    int time_end   = time_start + context.workload_time;
+    my_clay->my_run_offline(src_file, dst_file, time_start, time_end);
+
+    time_start += context.workload_time; 
+    time_end += context.workload_time;
 
     dst_file = "resultss_partition_30_60.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, 60, 120);
+    my_clay->my_run_offline(src_file, dst_file, time_start + 10, time_end);
+
+    time_start += context.workload_time; 
+    time_end += context.workload_time;
 
     dst_file = "resultss_partition_60_90.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, 120, 180);
+    my_clay->my_run_offline(src_file, dst_file, time_start + 10, time_end);
 
+    time_start += context.workload_time; 
+    time_end += context.workload_time;
+    
     dst_file = "resultss_partition_90_120.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, 180, 240);
+    my_clay->my_run_offline(src_file, dst_file, time_start + 10, time_end);
   } else {
     std::string src_file = "resultss.xls";
     std::string dst_file = "clay_resultss_partition_0_30.xls"; 
-    my_clay->run_clay_offline(src_file, dst_file, 0, 30 - 5);
+    int time_start = 0;
+    int time_end   = time_start + context.workload_time;
+
+    my_clay->run_clay_offline(src_file, dst_file, time_start, time_end);
+
+    time_start += context.workload_time; 
+    time_end += context.workload_time;
 
     dst_file = "clay_resultss_partition_30_60.xls"; 
-    my_clay->run_clay_offline(src_file, dst_file, 30 + 5, 60 - 5);
+    my_clay->run_clay_offline(src_file, dst_file, time_start + 10, time_end);
+
+    time_start += context.workload_time; 
+    time_end += context.workload_time;
 
     dst_file = "clay_resultss_partition_60_90.xls"; 
-    my_clay->run_clay_offline(src_file, dst_file, 60 + 5, 90 - 5);
+    my_clay->run_clay_offline(src_file, dst_file, time_start + 10, time_end);
+
+    time_start += context.workload_time; 
+    time_end += context.workload_time;
 
     dst_file = "clay_resultss_partition_90_120.xls"; 
-    my_clay->run_clay_offline(src_file, dst_file, 90 + 5, 120 - 5);
+    my_clay->run_clay_offline(src_file, dst_file, time_start + 10, time_end);
   }
   // dst_file = "clay_resultss_partition_90_120.xls"; 
 

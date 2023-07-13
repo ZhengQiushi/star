@@ -93,99 +93,6 @@ public:
   }
 
 
-  void txn_nodes_involved(simpleTransaction* t, bool is_dynamic) {
-    
-      std::unordered_map<int, int> from_nodes_id; // dynamic replica nums
-      // std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      std::vector<int> coordi_nums_;
-
-      
-      size_t ycsbTableID = ycsb::ycsb::tableID;
-      auto query_keys = t->keys;
-      int max_cnt = INT_MIN;
-      int max_node = -1;
-
-      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
-        // judge if is cross txn
-        size_t cur_c_id = -1;
-        size_t secondary_c_ids;
-        if(is_dynamic){
-          // look-up the dynamic router to find-out where
-          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
-          // secondary_c_ids = db.get_secondary_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
-        } else {
-          // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
-        }
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
-
-        if(from_nodes_id[cur_c_id] > max_cnt){
-          max_cnt = from_nodes_id[cur_c_id];
-          max_node = cur_c_id;
-        }
-      }
-
-      t->destination_coordinator = max_node;
-      t->execution_cost = query_keys.size() - max_cnt;
-
-      // VLOG(DEBUG_V8) << t->keys[0] << "(" << test << ")" << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " = " << t->execution_cost;
-
-
-     return;
-   }
-
-
-  // int select_best_node(simpleTransaction* t) {
-    
-  //   int max_node = -1;
-  //   if(t->is_distributed){
-  //     std::unordered_map<int, int> result;
-  //     result = txn_nodes_involved(t, max_node, true);
-  //   } else {
-  //     max_node = t->partition_id % context.coordinator_num;
-  //   }
-
-  //   DCHECK(max_node != -1);
-  //   return max_node;
-  // }
-  
-  // struct cmp{
-  //   bool operator()(simpleTransaction* a, 
-  //                   simpleTransaction* b){
-  //     return a->execution_cost < b->execution_cost;
-  //   }
-  // };
-
-  // long long cal_load_distribute(int aver_val, 
-  //                         std::unordered_map<int, long long>& busy_){
-  //   long long cur_val = 0;
-  //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-  //     // 
-  //     cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
-  //   }
-  //   cur_val /= context.coordinator_num;
-
-  //   return cur_val;
-  // }
-  
-  // long long cal_load_average(std::unordered_map<int, long long>& busy_){
-  //   long long cur_val = 0;
-  //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-  //     // 
-  //     cur_val += busy_[i];
-  //   }
-  //   cur_val /= context.coordinator_num;
-
-  //   return cur_val;
-  // }
-
   int router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
@@ -388,7 +295,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
+        int start_offset = 5 * 1000; // 10 * 1000 * 2; // debug
         // 
         int cur_workload = 0;
 

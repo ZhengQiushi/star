@@ -68,7 +68,19 @@ public:
 
     return p;
   }
-  
+
+
+  std::unique_ptr<TransactionType> unpack_transaction(const ContextType &context,
+                                                    std::size_t partition_id,
+                                                    StorageType &storage, simpleTransaction& simple_txn, bool is_transmit) {
+
+    std::unique_ptr<TransactionType> p =
+        std::make_unique<ReadModifyWrite<Transaction>>(
+            coordinator_id, partition_id, worker_status, db, context, random, partitioner,
+            storage, simple_txn);
+
+    return p;
+  }
 
   std::unique_ptr<TransactionType> reset_transaction(const ContextType &context,
                                                     std::size_t partition_id,

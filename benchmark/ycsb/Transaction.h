@@ -179,7 +179,10 @@ public:
   ExecutorStatus get_worker_status() override {
     return static_cast<ExecutorStatus>(worker_status_.load());
   }
-
+  TransactionResult transmit_execute(std::size_t worker_id) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     
     size_t keys_num_ = query.Y_KEY.size();

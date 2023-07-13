@@ -5,7 +5,6 @@
 #pragma once
 
 #include "glog/logging.h"
-
 #include "benchmark/tpcc/Database.h"
 #include "benchmark/tpcc/Query.h"
 #include "benchmark/tpcc/Schema.h"
@@ -61,8 +60,10 @@ public:
 
           query.W_ID = w_id;
           query.D_ID = d_id;
+          DCHECK(query.D_ID >= 1);
 
           query.C_ID = c_id;
+          DCHECK(query.C_ID >= 1);
           query.O_OL_CNT = 10; // random.uniform_dist(5, 10);
 
           for (auto i = 0; i < query.O_OL_CNT; i++) {
@@ -77,6 +78,23 @@ public:
           }
           is_transmit_request = simple_txn.is_transmit_request;
         }
+
+  NewOrder(std::size_t coordinator_id, std::size_t partition_id,  
+           std::atomic<uint32_t> &worker_status, 
+           DatabaseType &db, const ContextType &context,
+           RandomType &random, Partitioner &partitioner,
+           Storage &storage, simpleTransaction& simple_txn, bool is_transmit)
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random), storage(storage) {
+          // size_t size_ = simple_txn.keys.size();
+
+          // DCHECK(simple_txn.keys.size() == 13);
+          // 
+          query.record_keys = simple_txn.keys;
+          is_transmit_request = simple_txn.is_transmit_request;
+        }
+
 
   virtual ~NewOrder() override = default;
   bool is_transmit_requests() override {
@@ -305,6 +323,53 @@ public:
 
     return TransactionResult::READY_TO_COMMIT;
   }
+
+
+  TransactionResult transmit_execute(std::size_t worker_id) override {
+    storage.key_value.clear();
+    for(int i = 0 ; i < query.record_keys.size(); i ++ ){
+      Record move;
+      move.set_real_key(query.record_keys[i]);
+      storage.key_value.push_back(move);
+
+      switch (move.table_id)
+      {
+      case tpcc::warehouse::tableID:
+          this->search_for_update(move.table_id, 
+                                  move.key.w_key.W_ID - 1, 
+                                  storage.key_value[i].key.w_key, 
+                                  storage.key_value[i].value.w_val);
+          break;
+      case tpcc::district::tableID:
+          this->search_for_update(move.table_id, 
+                                  move.key.d_key.D_W_ID - 1, 
+                                  storage.key_value[i].key.d_key, 
+                                  storage.key_value[i].value.d_val);
+          break;
+      case tpcc::customer::tableID:
+          this->search_for_update(move.table_id, 
+                                  move.key.c_key.C_W_ID - 1, 
+                                  storage.key_value[i].key.c_key, 
+                                  storage.key_value[i].value.c_val);
+          break;
+      case tpcc::stock::tableID:
+          this->search_for_update(move.table_id, 
+                                  move.key.s_key.S_W_ID - 1, 
+                                  storage.key_value[i].key.s_key, 
+                                  storage.key_value[i].value.s_val);
+          break;
+      default:
+          DCHECK(false);
+          break;
+      }
+    }
+
+    if (this->process_requests(worker_id)) {
+      return TransactionResult::ABORT;
+    }
+    return TransactionResult::TRANSMIT_REQUEST;
+  }
+
 
   ExecutorStatus get_worker_status() override {
     return static_cast<ExecutorStatus>(worker_status_.load());
@@ -646,6 +711,11 @@ public:
                                                    (W_ID << RECORD_COUNT_W_ID_OFFSET) + 
                                                    (D_ID << RECORD_COUNT_D_ID_OFFSET) + 
                                                    (C_ID << RECORD_COUNT_C_ID_OFFSET);
+
+    int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >>RECORD_COUNT_W_ID_OFFSET;
+    int32_t d_id = (c_record_key & RECORD_COUNT_D_ID_VALID) >>RECORD_COUNT_D_ID_OFFSET;
+    int32_t c_id = (c_record_key & RECORD_COUNT_C_ID_VALID) >>RECORD_COUNT_C_ID_OFFSET;
+    DCHECK(D_ID >= 1 && C_ID >= 1);
     record_keys.push_back(w_record_key);
     record_keys.push_back(d_record_key);
     record_keys.push_back(c_record_key);
@@ -943,6 +1013,13 @@ public:
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
   };
+
+  TransactionResult transmit_execute(std::size_t worker_id) override {
+    DCHECK(false);
+    return TransactionResult::READY_TO_COMMIT;
+  };
+
+
   TransactionResult read_execute(std::size_t worker_id, ReadMethods local_read_only) override {
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;

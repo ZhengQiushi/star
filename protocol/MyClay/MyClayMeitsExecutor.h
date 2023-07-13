@@ -65,10 +65,7 @@ public:
   }
 
 
-  void unpack_route_transaction(WorkloadType& workload, StorageType& storage, 
-                                // ShareQueue<simpleTransaction>& router_transactions_queue_,
-                                std::deque<std::unique_ptr<TransactionType>>& r_transactions_queue_, 
-                                std::deque<std::unique_ptr<TransactionType>>& t_transactions_queue_){
+  void unpack_route_transaction(WorkloadType& workload, StorageType& storage){
     // int size_ = router_transactions_queue.size();
 
     // while(size_ > 0){
@@ -87,12 +84,12 @@ public:
       // // DCHECK(success == true);
       
       n_network_size.fetch_add(simple_txn.size);
-      auto p = workload.unpack_transaction(context, 0, storage, simple_txn);
+      auto p = workload.unpack_transaction(context, 0, storage, simple_txn, true);
 
       if(simple_txn.is_transmit_request){
-        t_transactions_queue_.push_back(std::move(p));
+        t_transactions_queue.push_back(std::move(p));
       } else {
-        r_transactions_queue_.push_back(std::move(p));
+        DCHECK(false);
       }
       // router_recv_txn_num -- ;
     }
@@ -136,7 +133,7 @@ public:
           // std::size_t partition_id = transaction->get_partition_id();
           setupHandlers(*transaction);
         }
-        auto result = transaction->execute(id);
+        auto result = transaction->transmit_execute(id);
         // if(!transaction->is_transmit_requests()){
         //   if(transaction->distributed_transaction){
         //     cross_txn_num ++ ;
@@ -224,15 +221,14 @@ public:
 
       auto now = std::chrono::steady_clock::now();
 
-      unpack_route_transaction(workload, storage, // router_transactions_queue, 
-                               r_transactions_queue, t_transactions_queue); // 
+      unpack_route_transaction(workload, storage); // 
 
-      size_t r_size = r_transactions_queue.size() + t_transactions_queue.size();
+      size_t r_size =  t_transactions_queue.size();
       if(r_size <= 0) {
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         continue;
       }
-      VLOG_IF(DEBUG_V, id==0) << r_transactions_queue.size() << " " << t_transactions_queue.size();
+      VLOG_IF(DEBUG_V, id==0) << " " << t_transactions_queue.size();
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - now)
@@ -491,7 +487,7 @@ protected:
 
   ShareQueue<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
-  std::deque<std::unique_ptr<TransactionType>> r_transactions_queue, t_transactions_queue; // to transaction
+  std::deque<std::unique_ptr<TransactionType>> t_transactions_queue; // to transaction
 
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *> in_queue, out_queue;

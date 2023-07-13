@@ -23,20 +23,20 @@ struct NewOrderQuery {
   }
 
   void unpack_transaction(const simpleTransaction& t){
+    auto record_key = t.keys[2];
+    this->W_ID = (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+    this->D_ID = (record_key & RECORD_COUNT_D_ID_VALID) >>  RECORD_COUNT_D_ID_OFFSET;
+    DCHECK(this->D_ID >= 1);
+    this->C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
+    DCHECK(this->C_ID >= 1);
+
     for(int i = 0 ; i < t.keys.size(); i ++ ){
       auto record_key = t.keys[i];
-      int32_t table_id = (record_key >> RECORD_COUNT_TABLE_ID_OFFSET);
-
-      W_ID = (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
-      D_ID = (record_key & RECORD_COUNT_D_ID_VALID) >>  RECORD_COUNT_D_ID_OFFSET;
-      C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
-
       if(i >= 3){
         INFO[i - 3].OL_I_ID = (record_key & RECORD_COUNT_OL_ID_VALID);
         INFO[i - 3].OL_SUPPLY_W_ID = 
           (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
       }
-
     }
   }
 
@@ -52,6 +52,7 @@ struct NewOrderQuery {
   };
 
   NewOrderQueryInfo INFO[15];
+  std::vector<uint64_t> record_keys; // for migration
 };
 
 class makeNewOrderQuery {
@@ -79,7 +80,7 @@ public:
     // The non-uniform random customer number (C_ID) is selected using the
     // NURand(1023,1,3000) function from the selected district number (C_D_ID =
     // D_ID) and the home warehouse number (C_W_ID = W_ID).
-    double my_thresh = 0.3;
+    double my_thresh = 0.01;
     int x = random.uniform_dist(1, 100);
     if (x <= context.newOrderCrossPartitionProbability &&
              context.partition_num > 1) {
@@ -88,6 +89,7 @@ public:
         // query.C_ID = random.uniform_dist(3000 * my_thresh + 1, 3000);
         query.C_ID = random.uniform_dist(1, 3000 * my_thresh);
     }
+    DCHECK(query.C_ID >= 1);
 
     // The number of items in the order (ol_cnt) is randomly selected within [5
     // .. 15] (an average of 10).

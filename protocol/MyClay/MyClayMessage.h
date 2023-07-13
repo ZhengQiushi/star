@@ -884,7 +884,7 @@ public:
     dec >> write_lock;
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
-    LOG(INFO) << "ABORT_REQUEST " << *(int*)key << " " << write_lock;
+    // LOG(INFO) << "ABORT_REQUEST " << *(int*)key << " " << write_lock;
     if (write_lock) {
       TwoPLHelper::write_lock_release(tid);
     } else {

@@ -12,7 +12,7 @@
 #include "core/Worker.h"
 #include "glog/logging.h"
 #include <chrono>
-
+#include <algorithm>
 #include "core/Coordinator.h"
 #include <mutex>          // std::mutex, std::lock_guard
 
@@ -201,19 +201,40 @@ public:
      * @note add by truth 22-01-24
      */
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+
+      } else {
+        hot_area_size = context.coordinator_num;
+      }
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
-        partition_id = 0;
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          partition_id = 0;
+        } else {
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        }
       } else {
         // 0 < 50
         //正常
       }
       // 
-      std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
-                                  partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
+      std::size_t partition_id_;
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;
+      } else {
+        if(context.skew_factor >= skew_factor) {
+          partition_id_ = partition_id / hot_area_size * hot_area_size;
+
+        } else {
+          partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;;
+        }
+      }
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -370,6 +391,22 @@ public:
       std::vector<int> query_keys;
       star::tpcc::NewOrderQuery keys;
       keys.unpack_transaction(*t);
+      // warehouse_key
+      auto warehouse_key = tpcc::warehouse::key(keys.W_ID);
+        size_t warehouse_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::warehouse::tableID)->search_value((void*)&warehouse_key))->get_dynamic_coordinator_id();
+      from_nodes_id[warehouse_coordinator_id] += 1;
+      query_keys.push_back(warehouse_coordinator_id);
+      // district_key
+      auto district_key = tpcc::district::key(keys.W_ID, keys.D_ID);
+        size_t district_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::district::tableID)->search_value((void*)&district_key))->get_dynamic_coordinator_id();
+      from_nodes_id[district_coordinator_id] += 1;
+      query_keys.push_back(district_coordinator_id);
+      // customer_key
+      auto customer_key = tpcc::customer::key(keys.W_ID, keys.D_ID, keys.C_ID);
+        size_t customer_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::customer::tableID)->search_value((void*)&customer_key))->get_dynamic_coordinator_id();
+      from_nodes_id[customer_coordinator_id] += 1;
+      query_keys.push_back(customer_coordinator_id);
+        
       for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
@@ -423,11 +460,13 @@ public:
       }
 
 
-      if(context.random_router > 0){
-        // 
-        // size_t random_value = random.uniform_dist(0, 9);
-        max_node = query_keys[0];
-      } 
+      // if(context.random_router > 0){
+      //   // 
+      //   // size_t random_value = random.uniform_dist(0, 9);
+      //   size_t coordinator_id = (keys.W_ID - 1) % context.coordinator_num;
+      //   max_node = coordinator_id; // query_keys[0];
+        
+      // } 
 
 
       t->destination_coordinator = max_node;
@@ -561,12 +600,12 @@ public:
           outfile_excel << current_timestamp << "\t";
           for(auto item: txn->keys){
             outfile_excel << item << "\t";
+            // MoveRecord<WorkloadType> record;
+            // record.set_real_key(item);
           }
           outfile_excel << "\n";
 
       }
-
-
 
       if(WorkloadType::which_workload == myTestSet::YCSB){
         txn_nodes_involved(txn.get(), txns_coord_cost, 
@@ -606,7 +645,9 @@ public:
 
 
     long long threshold = 200 * 200; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
-    
+    if(WorkloadType::which_workload == myTestSet::TPCC){
+      threshold = 300 * 300;
+    }
     int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
     long long cur_val = cal_load_distribute(aver_val, busy_);
 
@@ -620,7 +661,8 @@ public:
 
     LOG(INFO) << "busy: ";
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
+      LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
+                << cur_val  << " " << aver_val << " "      << cur_val;
     }
     LOG(INFO) << "replicate_busy: ";
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
@@ -628,7 +670,12 @@ public:
     }
 
     if(cur_val > threshold && context.random_router == 0){ 
-      balance_master(aver_val, threshold);
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        balance_master(aver_val, threshold);  
+      } else {
+        balance_master_tpcc(aver_val, threshold);  
+      }
+      
     }
 
     if(replica_cur_val > replica_threshold && context.random_router == 0){
@@ -654,6 +701,213 @@ public:
 
   }
 
+  struct Clump {
+    using T = u_int64_t;
+  public:
+    int hot;
+    std::vector<std::shared_ptr<simpleTransaction>> txns;
+    std::unordered_map<T, int> keys;
+    int dest;
+
+    int move_cost[MAX_COORDINATOR_NUM] = {0};
+    std::vector<std::vector<int>>& cost;
+
+    Clump(std::shared_ptr<simpleTransaction>& txn, std::vector<std::vector<int>>& cost)
+    : cost(cost){
+      hot = 0;
+      dest = -1;
+      memset(move_cost, 0, sizeof(move_cost));
+      
+      AddTxn(txn);
+    }
+    // 
+    bool CountTxn(std::shared_ptr<simpleTransaction>& txn){
+        for(auto& i : txn->keys){
+          if(keys.count(i)){
+            return true;
+          }
+        }
+        return false;
+    }
+    void AddTxn(std::shared_ptr<simpleTransaction>& txn){
+      for(auto& i : txn->keys){
+        keys[i] += 1;
+      }
+      auto& costs = cost[txn->idx_];
+
+      int min_cost = INT_MAX;
+      int idx = -1;
+
+      for(int i = 0 ; i < costs.size(); i ++ ){
+        move_cost[i] += costs[i];
+        if(min_cost > move_cost[i]){
+          min_cost = move_cost[i];
+          idx = i;
+        }
+      }
+
+      this->dest = idx;
+      txns.push_back(txn);
+      hot += 1;
+    }
+
+    std::pair<int, int> CalIdleNode(const std::unordered_map<size_t, int>& idle_node,
+                                    bool is_init){
+      int idle_coord_id = -1;                        
+      int min_cost = INT_MAX;
+      // int idle_coord_id = -1;
+      for(auto& idle: idle_node){
+        // 
+        if(is_init){
+          if(min_cost > move_cost[idle.first]){
+            min_cost = move_cost[idle.first];
+            idle_coord_id = idle.first;
+          }
+        } else {
+          if(move_cost[idle.first] <= -150){
+            idle_coord_id = idle.first;
+          }
+        }
+      }
+      return std::make_pair(idle_coord_id, min_cost);
+    }
+
+    void UpdateDest(int new_dest){
+      dest = new_dest;
+      for(auto& t : txns){
+        t->is_distributed = true;
+        // add dest busy
+        t->is_real_distributed = true;
+        t->destination_coordinator = new_dest;
+      }
+    }
+
+  };
+
+  struct Clumps {
+  public:
+    std::vector<Clump> clumps;
+    std::vector<std::vector<int>>& cost;
+    Clumps(std::vector<std::vector<int>>& cost):cost(cost){
+
+    }
+    void AddTxn(std::shared_ptr<simpleTransaction>& txn){
+      bool need_new_clump = true;
+      for(int i = 0 ; i < clumps.size(); i ++ ){
+        if(clumps[i].CountTxn(txn)){
+          need_new_clump = false;
+          clumps[i].AddTxn(txn);
+          break;
+        }
+      }
+      if(need_new_clump){
+        clumps.push_back(Clump(txn, cost));
+      }
+    }
+    size_t Size(){
+      return clumps.size();
+    }
+    Clump& At(int i){
+      return clumps[i];
+    }
+    std::vector<int> Sort(){
+      std::vector<int> ret;
+
+      for(int i = 0 ; i < clumps.size(); i ++ ){
+        ret.push_back(i);
+      }
+      std::sort(ret.begin(), ret.end(), [&](int a, int b){
+        return clumps[a].hot < clumps[b].hot;
+      });
+      return ret;
+    }
+  };
+
+  void balance_master_tpcc(long long aver_val, 
+                      long long threshold){
+
+      auto & txns              = schedule_meta.node_txns;
+      auto & busy              = schedule_meta.node_busy;
+      auto & node_replica_busy = schedule_meta.node_replica_busy;
+      auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
+
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+      int workload_type = ((int)cur_timestamp / context.workload_time) + 1;
+      
+      size_t sz = cur_txn_num * dispatcher_num;
+
+      Clumps clumps(txns_coord_cost);
+      for(size_t i = 0 ; i < sz; i ++ ){
+        clumps.AddTxn(txns[i]);
+      }
+
+      bool is_ok = true;
+      std::vector<int> used(clumps.Size(), 0);
+      std::vector<int> priority = clumps.Sort();
+
+      do {
+        // start tradeoff for balancing
+        bool useClump = false;
+        for(int i = 0 ; i < priority.size(); i ++ ){ 
+          int cur_idx = priority[i];
+          if(used[cur_idx]) continue;
+          auto& cur = clumps.At(cur_idx);
+
+          std::unordered_map<size_t, int> overload_node;
+          std::unordered_map<size_t, int> idle_node;
+
+          find_imbalanced_node(overload_node, idle_node, 
+                              busy, aver_val, threshold);
+          if(overload_node.size() == 0 || idle_node.size() == 0){
+            is_ok = false;
+            break;
+          }
+          // std::shared_ptr<simpleTransaction> t = q_.top();
+          // q_.pop();
+
+          if(overload_node.count(cur.dest)){
+            // find minial cost in idle_node
+            auto [idle_coord_id, min_cost] = cur.CalIdleNode(idle_node, 
+                                              (workload_type == 1 || context.lion_with_metis_init == 0));
+            if(idle_coord_id == -1){
+              continue;
+            }
+            used[cur_idx] = true;
+            useClump = true;
+            // minus busy
+            busy[cur.dest] -= cur.hot;
+            overload_node[cur.dest] -= cur.hot;
+            if(overload_node[cur.dest] <= 0){
+              overload_node.erase(cur.dest);
+            }
+            // 
+            cur.UpdateDest(idle_coord_id);
+            // 
+            busy[idle_coord_id] += cur.hot;
+            idle_node[idle_coord_id] -= cur.hot;
+            if(idle_node[idle_coord_id] <= 0){
+              idle_node.erase(idle_coord_id);
+            }
+            LOG(INFO) << " after move : " << cur.hot;
+            for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
+              LOG(INFO) <<" busy[" << j << "] = " << busy[j];
+            }
+          }
+          if(cal_load_distribute(aver_val, busy) <= threshold) {
+            break;
+          }
+          if(overload_node.size() == 0 || idle_node.size() == 0){
+            break;
+          }
+
+        }
+        if(!useClump){
+          is_ok = false;
+        }
+      } while(cal_load_distribute(aver_val, busy) > threshold && is_ok);
+  }
 
   void balance_master(long long aver_val, 
                       long long threshold){

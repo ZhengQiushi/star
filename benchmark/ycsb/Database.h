@@ -118,13 +118,6 @@ public:
           DCHECK(context.getPartitionID(i) == partitionID);
           ycsb::key key(i);
 
-          // if(context.protocol == "Hermes"){
-          //   int router_coordinator = (partitionID) % context.coordinator_num;
-          //   size_t router_secondary_coordinator = (partitionID + 1) % context.coordinator_num;
-
-          //   ITable *table_router = tbl_ycsb_vec_router[router_coordinator].get(); // 两个不能相同
-          //   table_router->insert(&key, &router_secondary_coordinator); // 
-          // } else {
           int router_coordinator = (partitionID + 1) % context.coordinator_num;
           size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
 

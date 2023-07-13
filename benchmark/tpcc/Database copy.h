@@ -41,7 +41,7 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
+  ImyRouterTable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
     DCHECK(table_id < tbl_vecs.size());
     // DCHECK(coordinator_id < tbl_vecs[table_id].size());
     return tbl_vecs_router[table_id]; // [coordinator_id];
@@ -57,7 +57,7 @@ public:
     return tbl_vecs[table_id][partition_id];
   }
 
-  ITable *find_router_table(std::size_t table_id, std::size_t replica_id) { // , std::size_t coordinator_id
+  ImyRouterTable *find_router_table(std::size_t table_id, std::size_t replica_id) { // , std::size_t coordinator_id
     DCHECK(false) << "todo";
     // DCHECK(table_id < tbl_vecs.size());
     // DCHECK(coordinator_id < tbl_vecs[table_id].size());
@@ -288,7 +288,7 @@ public:
       // void warehouseInit(std::size_t partitionID) {
       warehouse::key key;
       key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
-      ITable *table_router = tbl_warehouse_vec_router.get();
+      ImyRouterTable *table_router = tbl_warehouse_vec_router.get();
       table_router->insert(&key, &router_coordinator);
 
       // void districtInit(std::size_t partitionID)
@@ -349,6 +349,7 @@ public:
   void allocate_router_table(const Context& context){
 
     // for(size_t i = 0 ; i <= context.coordinator_num; i ++ ){
+      
       size_t i = 0;
       auto warehouseTableID = warehouse::tableID;
       tbl_warehouse_vec_router =
@@ -385,7 +386,9 @@ public:
           std::make_unique<Table<997, order_line::key, order_line::value>>(
               orderLineTableID, i));
       auto stockTableID = stock::tableID;
-      tbl_stock_vec_router = (
+      tbl_stock_vec_router = (std::make_unique<myRouterTable<stock::key, RouterValue>>(sz,ycsbTableID, 0));
+      
+      = (
 
           std::make_unique<Table<997, stock::key, stock::value>>(stockTableID,
                                                                  i));
@@ -501,27 +504,6 @@ public:
       tbl_vecs_router[8] = tbl_item_vec_router.get();
       tbl_vecs_router[9] = tbl_stock_vec_router.get();
 
-      // std::transform(.begin(), tbl_warehouse_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[0]), tFunc);
-      // std::transform(tbl_district_vec_router.begin(), tbl_district_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[1]), tFunc);
-      // std::transform(tbl_customer_vec_router.begin(), tbl_customer_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[2]), tFunc);
-      // std::transform(tbl_customer_name_idx_vec_router.begin(),
-      //               tbl_customer_name_idx_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[3]), tFunc);
-      // std::transform(tbl_history_vec_router.begin(), tbl_history_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[4]), tFunc);
-      // std::transform(tbl_new_order_vec_router.begin(), tbl_new_order_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[5]), tFunc);
-      // std::transform(tbl_order_vec_router.begin(), tbl_order_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[6]), tFunc);
-      // std::transform(tbl_order_line_vec_router.begin(), tbl_order_line_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[7]), tFunc);
-      // std::transform(tbl_item_vec_router.begin(), tbl_item_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[8]), tFunc);
-      // std::transform(tbl_stock_vec_router.begin(), tbl_stock_vec_router.end(),
-      //               std::back_inserter(tbl_vecs_router[9]), tFunc);
       if(context.protocol == "Lion" || context.protocol == "LionNS" || context.protocol == "Hermes" || 
          context.protocol == "MyClay"){
         init_router_table(context);
@@ -593,7 +575,7 @@ public:
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
-    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    ImyRouterTable* tab = find_router_table(table_id); // , coordinator_id);
     auto router_val = (RouterValue*)(tab->search_value(key));
     return router_val->get_dynamic_coordinator_id();
   }
@@ -611,7 +593,7 @@ public:
      * @brief from router table to find the coordinator
      * 
      */
-    ITable* tab = find_router_table(table_id); // , coordinator_id);
+    ImyRouterTable* tab = find_router_table(table_id); // , coordinator_id);
     auto router_val = (RouterValue*)(tab->search_value(key));
     return router_val->get_secondary_coordinator_id();
   }
@@ -1111,7 +1093,7 @@ private:
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;
-  std::vector<ITable *> tbl_vecs_router;
+  std::vector<ImyRouterTable *> tbl_vecs_router;
 
   std::vector<std::unique_ptr<ITable>> tbl_warehouse_vec;
   std::vector<std::unique_ptr<ITable>> tbl_district_vec;
@@ -1125,16 +1107,16 @@ private:
   std::vector<std::unique_ptr<ITable>> tbl_stock_vec;
 
 
-  std::unique_ptr<ITable> tbl_warehouse_vec_router;
-  std::unique_ptr<ITable> tbl_district_vec_router;
-  std::unique_ptr<ITable> tbl_customer_vec_router;
-  std::unique_ptr<ITable> tbl_customer_name_idx_vec_router;
-  std::unique_ptr<ITable> tbl_history_vec_router;
-  std::unique_ptr<ITable> tbl_new_order_vec_router;
-  std::unique_ptr<ITable> tbl_order_vec_router;
-  std::unique_ptr<ITable> tbl_order_line_vec_router;
-  std::unique_ptr<ITable> tbl_item_vec_router;
-  std::unique_ptr<ITable> tbl_stock_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_warehouse_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_district_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_customer_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_customer_name_idx_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_history_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_new_order_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_order_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_order_line_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_item_vec_router;
+  std::unique_ptr<ImyRouterTable> tbl_stock_vec_router;
 
   std::size_t coordinator_id; // = context.coordinator_id;
   std::size_t partitionNum; // = context.partition_num;

@@ -54,6 +54,9 @@ public:
   virtual TransactionResult prepare_update_execute(std::size_t worker_id) = 0;
 
   virtual TransactionResult execute(std::size_t worker_id) = 0;
+
+  virtual TransactionResult transmit_execute(std::size_t worker_id) = 0;
+  
   virtual void reset_query() = 0;
 
   virtual const std::vector<u_int64_t> get_query() = 0;

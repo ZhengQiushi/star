@@ -324,37 +324,81 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   }
 
+  std::vector<size_t> debug_record_keys() override {
+    return query.record_keys;
+  }
 
-  TransactionResult transmit_execute(std::size_t worker_id) override {
-    storage.key_value.clear();
+  std::vector<size_t> debug_record_keys_master() override {
+    std::vector<size_t> record_keys;
+
     for(int i = 0 ; i < query.record_keys.size(); i ++ ){
-      Record move;
-      move.set_real_key(query.record_keys[i]);
-      storage.key_value.push_back(move);
+      Record rec;
+      rec.set_real_key(query.record_keys[i]);;
+      int w_c_id, d_c_id, c_c_id, s_c_id;
 
-      switch (move.table_id)
+      switch (rec.table_id)
       {
       case tpcc::warehouse::tableID:
-          this->search_for_update(move.table_id, 
-                                  move.key.w_key.W_ID - 1, 
+          w_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                      tpcc::warehouse::tableID, 
+                                                      (void*)& rec.key.w_key);
+
+          record_keys.push_back(w_c_id);
+          break;
+      case tpcc::district::tableID:
+          d_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                      tpcc::district::tableID, 
+                                                      (void*)& rec.key.d_key);
+          record_keys.push_back(d_c_id);
+          break;
+      case tpcc::customer::tableID:
+          c_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                      tpcc::customer::tableID, 
+                                                      (void*)& rec.key.c_key);
+          record_keys.push_back(c_c_id);
+          break;
+      case tpcc::stock::tableID:
+          s_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                      tpcc::stock::tableID, 
+                                                      (void*)& rec.key.s_key);
+          record_keys.push_back(s_c_id);
+          break;
+      default:
+          DCHECK(false);
+          break;
+      }
+    }
+    return record_keys;
+  }
+
+  TransactionResult transmit_execute(std::size_t worker_id) override {
+    storage.key_value.reserve(query.record_keys.size());
+    for(int i = 0 ; i < query.record_keys.size(); i ++ ){
+      storage.key_value[i].set_real_key(query.record_keys[i]);;
+
+      switch (storage.key_value[i].table_id)
+      {
+      case tpcc::warehouse::tableID:
+          this->search_for_update(storage.key_value[i].table_id, 
+                                  storage.key_value[i].key.w_key.W_ID - 1, 
                                   storage.key_value[i].key.w_key, 
                                   storage.key_value[i].value.w_val);
           break;
       case tpcc::district::tableID:
-          this->search_for_update(move.table_id, 
-                                  move.key.d_key.D_W_ID - 1, 
+          this->search_for_update(storage.key_value[i].table_id, 
+                                  storage.key_value[i].key.d_key.D_W_ID - 1, 
                                   storage.key_value[i].key.d_key, 
                                   storage.key_value[i].value.d_val);
           break;
       case tpcc::customer::tableID:
-          this->search_for_update(move.table_id, 
-                                  move.key.c_key.C_W_ID - 1, 
+          this->search_for_update(storage.key_value[i].table_id, 
+                                  storage.key_value[i].key.c_key.C_W_ID - 1, 
                                   storage.key_value[i].key.c_key, 
                                   storage.key_value[i].value.c_val);
           break;
       case tpcc::stock::tableID:
-          this->search_for_update(move.table_id, 
-                                  move.key.s_key.S_W_ID - 1, 
+          this->search_for_update(storage.key_value[i].table_id, 
+                                  storage.key_value[i].key.s_key.S_W_ID - 1, 
                                   storage.key_value[i].key.s_key, 
                                   storage.key_value[i].value.s_val);
           break;
@@ -363,8 +407,8 @@ public:
           break;
       }
     }
-
-    if (this->process_requests(worker_id)) {
+    LOG(INFO) << "pendingResponses : " << this->pendingResponses;
+    if (this->process_remaster_requests(worker_id)) {
       return TransactionResult::ABORT;
     }
     return TransactionResult::TRANSMIT_REQUEST;
@@ -742,6 +786,58 @@ public:
     return record_keys;
   }
 
+  const std::vector<u_int64_t> get_query_master() override{
+    /**
+     * @brief for generate the COUNT message for Recorder!
+     * @add by truth 22-02-24
+     */
+    using T = u_int64_t;
+    std::vector<T> record_keys;
+    // 4bit    | 6bit | 10bit | 15bit | 20bit
+    // tableID | W_id | D_id  | C_id  | Lo_id
+
+    // record_keys
+    // record_keys[0-2]: w_record_key, d_record_key, c_record_key
+    // record_keys[3-13]: ol_supply_w_record_keys
+    //
+
+    T W_ID = this->partition_id + 1; 
+    T D_ID = query.D_ID;
+    T C_ID = query.C_ID;
+
+    tpcc::warehouse::key w_id = tpcc::warehouse::key(W_ID);
+    tpcc::district::key  d_id = tpcc::district::key(W_ID, D_ID);
+    tpcc::customer::key  c_id = tpcc::customer::key(W_ID, D_ID, C_ID);
+
+    auto w_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                tpcc::warehouse::tableID, 
+                                                (void*)& w_id);
+    auto d_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                tpcc::district::tableID, 
+                                                (void*)& d_id);
+    auto c_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                tpcc::customer::tableID, 
+                                                (void*)& c_id);
+
+    record_keys.push_back(w_c_id);
+    record_keys.push_back(d_c_id);
+    record_keys.push_back(c_c_id);
+    
+    for (int i = 0; i < query.O_OL_CNT; i++) {
+      T OL_I_ID = query.INFO[i].OL_I_ID;
+      T OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
+      tpcc::stock::key s_id = tpcc::stock::key(OL_SUPPLY_W_ID, OL_I_ID);
+
+      auto s_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                  tpcc::stock::tableID, 
+                                                  (void*)& s_id);
+      record_keys.push_back(s_c_id);
+    }
+
+    return record_keys;
+  }
+
+
   const std::string get_query_printed() override {
     std::string print_ = "";
     for(auto i : get_query()){
@@ -1014,6 +1110,14 @@ public:
     return TransactionResult::READY_TO_COMMIT;
   };
 
+  std::vector<size_t> debug_record_keys() override {
+    return query.record_keys;
+  }
+  std::vector<size_t> debug_record_keys_master() override {
+    std::vector<size_t> query_master;
+    DCHECK(false);
+    return query_master;
+  }
   TransactionResult transmit_execute(std::size_t worker_id) override {
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
@@ -1046,6 +1150,16 @@ public:
     return record_keys;
   }
 
+  const std::vector<u_int64_t> get_query_master() override{
+    /**
+     * @brief for generate the COUNT message for Recorder!
+     * @add by truth 22-02-24
+     */
+    using T = u_int64_t;
+    std::vector<T> record_keys;
+    DCHECK(false);
+    return record_keys;
+  }
   const std::string get_query_printed() override {
     std::string print_ = "";
     for(auto i : get_query()){

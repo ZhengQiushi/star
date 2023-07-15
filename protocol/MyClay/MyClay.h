@@ -117,7 +117,7 @@ public:
           TwoPLHelper::write_lock_release(tid);
         } else {
           // auto coordinatorID = partitioner.master_coordinator(partitionId);
-          LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << true;
+          // LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << true;
           txn.network_size += MessageFactoryType::new_abort_message(
               *syncMessages[coordinatorID], *table, readKey.get_key(), true);
         }

@@ -179,6 +179,14 @@ public:
   ExecutorStatus get_worker_status() override {
     return static_cast<ExecutorStatus>(worker_status_.load());
   }
+  std::vector<size_t> debug_record_keys() override {
+    return query.record_keys;
+  }
+  std::vector<size_t> debug_record_keys_master() override {
+    std::vector<size_t> query_master;
+    DCHECK(false);
+    return query_master;
+  }
   TransactionResult transmit_execute(std::size_t worker_id) override {
     DCHECK(false);
     return TransactionResult::READY_TO_COMMIT;
@@ -303,6 +311,18 @@ public:
   }
   
   const std::vector<u_int64_t> get_query() override{
+    using T = u_int64_t;
+
+    std::vector<T> record_keys;
+    size_t keys_num_ = query.Y_KEY.size();
+    for (auto i = 0u; i < keys_num_; i++) {
+      auto key = static_cast<T>(query.Y_KEY[i]);
+      record_keys.push_back(key);
+    }
+    return record_keys;
+  }
+
+  const std::vector<u_int64_t> get_query_master() override{
     using T = u_int64_t;
 
     std::vector<T> record_keys;

@@ -40,6 +40,61 @@ enum class MyClayMessage {
   NFIELDS
 };
 
+
+  uint64_t my_debug_key(int table_id, int partition_id, const void* key){
+    uint64_t record_key;
+    tpcc::warehouse::key k1;
+    tpcc::district::key k2;
+    tpcc::customer::key k3;
+    tpcc::stock::key k4;
+
+    uint64_t W_ID, D_W_ID, D_ID, C_W_ID, C_D_ID, C_ID, S_W_ID, S_I_ID;
+
+
+    switch (table_id)
+    {
+    case tpcc::warehouse::tableID:
+      k1 = *(tpcc::warehouse::key*)key;
+      W_ID = k1.W_ID;
+      record_key = (static_cast<uint64_t>(tpcc::warehouse::tableID) << RECORD_COUNT_TABLE_ID_OFFSET) + (W_ID << RECORD_COUNT_W_ID_OFFSET); 
+      break;
+    case tpcc::district::tableID:
+      k2 = *(tpcc::district::key*)key;
+      D_W_ID = k2.D_W_ID;
+      D_ID   = k2.D_ID;
+      record_key = (static_cast<uint64_t>(tpcc::district::tableID)  << RECORD_COUNT_TABLE_ID_OFFSET) 
+      + (D_W_ID << RECORD_COUNT_W_ID_OFFSET) 
+      + (D_ID << RECORD_COUNT_D_ID_OFFSET);
+      break;
+    case tpcc::customer::tableID:
+      k3 = *(tpcc::customer::key*)key;
+      C_W_ID = k3.C_W_ID;
+      C_D_ID = k3.C_D_ID;
+      C_ID   = k3.C_ID;
+
+      record_key = (static_cast<uint64_t>(tpcc::customer::tableID)  << RECORD_COUNT_TABLE_ID_OFFSET) 
+      + (C_W_ID << RECORD_COUNT_W_ID_OFFSET) 
+      + (C_D_ID << RECORD_COUNT_D_ID_OFFSET) 
+      + (C_ID << RECORD_COUNT_C_ID_OFFSET);
+      break;
+    case tpcc::stock::tableID:
+      k4 = *(tpcc::stock::key*)key;
+      S_W_ID = k4.S_W_ID;
+      S_I_ID = k4.S_I_ID;
+      // stock_keys.push_back(stock::key(OL_SUPPLY_W_ID, OL_I_ID));
+      record_key = 
+      (static_cast<uint64_t>(tpcc::stock::tableID) << RECORD_COUNT_TABLE_ID_OFFSET) 
+      + (S_W_ID << RECORD_COUNT_W_ID_OFFSET) 
+      + (S_I_ID);
+      break;
+    default:
+      break;
+    }
+    
+
+    return record_key;
+  }
+
 class MyClayMessageFactory {
 
 public:
@@ -294,7 +349,9 @@ public:
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
     dec >> key_offset >> remaster; // index offset in the readSet from source request node
-    // LOG(INFO) << "TRANSMIT_REQUEST " << *(int*)key;
+
+
+
     DCHECK(dec.size() == 0);
 
     if(remaster == true){
@@ -318,7 +375,7 @@ public:
 
     success = table.contains(key);
     if(!success){
-      VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+      LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -329,8 +386,9 @@ public:
     // try to lock tuple. Ensure not locked by current node
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
-    if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
+    if(!success){ // VLOG(DEBUG_V12) 
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << "  can't Lock " << test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -358,42 +416,46 @@ public:
 
     if(coordinator_id_new != coordinator_id_old){
       // 数据更新到 发req的对面
-      // LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
       
       // update the router 
       router_val->set_dynamic_coordinator_id(coordinator_id_new);
       router_val->set_secondary_coordinator_id(coordinator_id_new);
 
-      encoder << latest_tid << key_offset << success << remaster;
-      // reserve size for read
-      responseMessage.data.append(value_size, 0);
-      
-      // auto value = table.search_value(key);
-      // LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
-      
-      if(success == true && remaster == false){
-        // transfer: read from db and load data into message buffer
-        void *dest =
-            &responseMessage.data[0] + responseMessage.data.size() - value_size;
-        auto row = table.search(key);
-        TwoPLHelper::read(row, dest, value_size);
-      }
-      responseMessage.flush();
+
 
     } else if(coordinator_id_new == coordinator_id_old) {
-      success = false;
-      VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
-      encoder << latest_tid << key_offset << success << remaster;
-      responseMessage.data.append(value_size, 0);
-      responseMessage.flush();
+      success = true;
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << test << " " << tid;
+      // encoder << latest_tid << key_offset << success << remaster;
+      // responseMessage.data.append(value_size, 0);
+      // responseMessage.flush();
     
     } else {
       DCHECK(false);
     }
-
+    encoder << latest_tid << key_offset << success << remaster;
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+    
+    // auto value = table.search_value(key);
+    // LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << "" << " remaster: " << remaster << " " << new_secondary_coordinator_id;
+    
+    if(success == true && remaster == false){
+      // transfer: read from db and load data into message buffer
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      auto row = table.search(key);
+      TwoPLHelper::read(row, dest, value_size);
+    }
+    responseMessage.flush();
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
   }
+
+
   static void transmit_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
@@ -434,7 +496,10 @@ public:
     MyClayRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    // LOG(INFO) << "TRANSMIT_RESPONSE " << *(int*)key;
+    auto test = my_debug_key(table_id, partition_id, key);
+    LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
+                                      << test << " "
+                                      << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
 
     uint64_t last_tid = 0;
 

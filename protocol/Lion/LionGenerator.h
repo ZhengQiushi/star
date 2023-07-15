@@ -600,8 +600,8 @@ public:
           outfile_excel << current_timestamp << "\t";
           for(auto item: txn->keys){
             outfile_excel << item << "\t";
-            // MoveRecord<WorkloadType> record;
-            // record.set_real_key(item);
+            MoveRecord<WorkloadType> record;
+            record.set_real_key(item);
           }
           outfile_excel << "\n";
 

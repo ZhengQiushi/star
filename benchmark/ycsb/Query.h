@@ -20,6 +20,7 @@ struct YCSBQuery {
     Y_KEY.resize(query_size, 0);
     UPDATE.resize(query_size, false);
   }
+  std::vector<size_t> record_keys;// for migration
 };
 
 class makeYCSBQuery {

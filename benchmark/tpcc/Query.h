@@ -166,6 +166,8 @@ struct PaymentQuery {
   int32_t C_D_ID;
   int32_t C_W_ID;
   float H_AMOUNT;
+
+  std::vector<uint64_t> record_keys; // for migration
 };
 
 class makePaymentQuery {

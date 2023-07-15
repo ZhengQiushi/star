@@ -35,10 +35,13 @@ public:
   MyClayMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
-           std::atomic<uint32_t> &n_started_workers)
+           std::atomic<uint32_t> &n_started_workers,
+           clay::TransactionMeta<WorkloadType>& txn_meta
+           )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        txn_meta(txn_meta),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -70,6 +73,8 @@ public:
 
     // while(size_ > 0){
     //   size_ -- ;
+    t_simple_txn.clear();
+    
     while(true){
       // size_ -- ;
       // bool is_ok = false;
@@ -85,6 +90,7 @@ public:
       
       n_network_size.fetch_add(simple_txn.size);
       auto p = workload.unpack_transaction(context, 0, storage, simple_txn, true);
+      t_simple_txn.push_back(simple_txn);
 
       if(simple_txn.is_transmit_request){
         t_transactions_queue.push_back(std::move(p));
@@ -93,6 +99,22 @@ public:
       }
       // router_recv_txn_num -- ;
     }
+  }
+
+  void retry_transactions(simpleTransaction& simple_txn){
+    uint32_t txn_id;
+    {
+      std::unique_ptr<TransactionType> null_txn(nullptr);
+      std::lock_guard<std::mutex> l(txn_meta.t_l);
+      txn_id = txn_meta.t_transactions_queue.size();
+      if(txn_id >= txn_meta.t_storages.size()){
+        DCHECK(false) << txn_id << " " << txn_meta.t_storages.size();
+      }
+      txn_meta.t_transactions_queue.push_back(std::move(null_txn));
+      txn_meta.t_txn_id_queue.push_no_wait(txn_id);
+    }
+    auto p = workload.unpack_transaction(context, 0, txn_meta.t_storages[txn_id], simple_txn, true);
+    txn_meta.t_transactions_queue[txn_id] = std::move(p);
   }
 
     void run_transaction(const ContextType& phase_context,
@@ -137,9 +159,15 @@ public:
         // if(!transaction->is_transmit_requests()){
         //   if(transaction->distributed_transaction){
         //     cross_txn_num ++ ;
-        //     if(i < 5){
-        //       LOG(INFO) << "cross_txn_num ++ : " << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
-        //     }
+            // if(i < 5){
+              auto debug = transaction->debug_record_keys();
+              auto debug_master = transaction->debug_record_keys_master();
+
+              LOG(INFO) << " new ";
+              for(int i = 0 ; i < debug.size(); i ++){
+                LOG(INFO) << " !!!!! : " << debug[i] << " " << debug_master[i]; 
+              }
+            // }
         //   } else {
         //     single_txn_num ++ ;
 
@@ -156,10 +184,14 @@ public:
           // pass
           uint64_t commit_tid = protocol.generate_tid(*transaction);
           protocol.release_lock(*transaction, commit_tid, sync_messages);
-
-          n_commit.fetch_add(1);
-          n_migrate.fetch_add(transaction->migrate_cnt);
-          n_remaster.fetch_add(transaction->remaster_cnt);
+          if(!transaction->abort_lock){
+            n_commit.fetch_add(1);
+            n_migrate.fetch_add(transaction->migrate_cnt);
+            n_remaster.fetch_add(transaction->remaster_cnt);
+          } else {
+            n_abort_lock.fetch_add(1);
+            retry_transactions(t_simple_txn[i]);
+          }
         } else {
           protocol.abort(*transaction, sync_messages);
           n_abort_no_retry.fetch_add(1);
@@ -424,6 +456,79 @@ public:
       }
       return 0;
     };
+    txn.migrate_request_handler =
+        [this, &txn](std::size_t table_id, std::size_t partition_id,
+                     uint32_t key_offset, const void *key, void *value,
+                     bool local_index_read, bool write_lock, bool &success,
+                     bool &remote) -> uint64_t {
+      if (local_index_read) {
+        success = true;
+        remote = false;
+        return this->protocol.search(table_id, partition_id, key, value);
+      }
+
+      bool local_read = false;
+      auto &readKey = txn.readSet[key_offset];
+      ITable *table = this->db.find_table(table_id, partition_id);
+      size_t coordinatorID = readKey.get_dynamic_coordinator_id();
+      // master-replica
+      // size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
+      // uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
+      // if(readKey.get_write_lock_request_bit()){
+      //   // write key, the find all its replica
+      //   LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner.get());
+      //   coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
+      // }
+      // // sec keys replicas
+      // readKey.set_dynamic_coordinator_id(coordinatorID);
+      // readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
+
+      bool remaster = false;
+
+      if (coordinatorID == context.coordinator_id) {
+        
+        remote = false;
+
+        std::atomic<uint64_t> &tid = table->search_metadata(key);
+
+        if (write_lock) {
+          TwoPLHelper::write_lock(tid, success);
+        } else {
+          TwoPLHelper::read_lock(tid, success);
+        }
+
+        if (success) {
+          return this->protocol.search(table_id, partition_id, key, value);
+        } else {
+          return 0;
+        }
+
+      } else {
+        remote = true;
+
+        for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
+          // also send to generator to update the router-table
+          if(i == coordinator_id){
+            continue; // local
+          }
+          if(i == coordinatorID){
+            // target
+              VLOG(DEBUG_V14) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
+              txn.network_size += MessageFactoryType::new_transmit_message(
+                  *(this->sync_messages[coordinatorID]), *table, key, key_offset, remaster);
+              //  txn.pendingResponses++; already added at myclayTransactions
+          } else {
+              // others, only change the router
+              txn.network_size += MessageFactoryType::new_transmit_router_only_message(
+                  *(this->sync_messages[i]), *table, key, key_offset);
+              txn.pendingResponses++;
+          }            
+        }
+
+        txn.distributed_transaction = true;
+      }
+      return 0;
+    };
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
     txn.message_flusher = [this]() { 
@@ -468,7 +573,8 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;
   // Partitioner* partitioner_ptr;
-  
+  clay::TransactionMeta<WorkloadType>& txn_meta;
+
   RandomType random;
   ProtocolType protocol;
   WorkloadType workload;
@@ -488,6 +594,7 @@ protected:
   ShareQueue<simpleTransaction> router_transactions_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
   std::deque<std::unique_ptr<TransactionType>> t_transactions_queue; // to transaction
+  std::vector<simpleTransaction> t_simple_txn;
 
   std::vector<std::size_t> message_stats, message_sizes;
   LockfreeQueue<Message *> in_queue, out_queue;

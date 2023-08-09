@@ -75,7 +75,7 @@ public:
     query.W_ID = W_ID;
     // The district number (D_ID) is randomly selected within [1 .. 10] from the
     // home warehouse (D_W_ID = W_ID).
-    query.D_ID = random.uniform_dist(1, 10);
+    
 
     // The non-uniform random customer number (C_ID) is selected using the
     // NURand(1023,1,3000) function from the selected district number (C_D_ID =
@@ -84,10 +84,12 @@ public:
     int x = random.uniform_dist(1, 100);
     if (x <= context.newOrderCrossPartitionProbability &&
              context.partition_num > 1) {
+        query.D_ID = random.uniform_dist(1, 5);
         query.C_ID = random.uniform_dist(1, 3000 * my_thresh);
     } else {
         // query.C_ID = random.uniform_dist(3000 * my_thresh + 1, 3000);
-        query.C_ID = random.uniform_dist(1, 3000 * my_thresh);
+        query.D_ID = random.uniform_dist(6, 10);
+        query.C_ID = 3000 * my_thresh + random.uniform_dist(1, 3000 * my_thresh);
     }
     DCHECK(query.C_ID >= 1);
 
@@ -114,7 +116,8 @@ public:
       bool retry;
       // do {
       //   retry = false;
-      query.INFO[i].OL_I_ID = (query.C_ID - 1) * query.O_OL_CNT + i + 1;// (query.W_ID - 1) * 3000 + query.C_ID;
+      query.INFO[i].OL_I_ID = query.D_ID * 1000 +  
+                             (query.C_ID - 1) * query.O_OL_CNT + i + 1;// (query.W_ID - 1) * 3000 + query.C_ID;
             // random.non_uniform_distribution(8191, 1, 100000);
         // figure out the GOODS_ID you need to buy
       //   for (int k = 0; k < i; k++) {
@@ -156,6 +159,44 @@ public:
 
     return query;
   }
+
+  NewOrderQuery operator()(const std::vector<size_t>& keys) const {
+    NewOrderQuery query;
+
+    size_t size_ = keys.size();
+
+    DCHECK(size_ == 13);
+    // 
+    auto c_record_key = keys[2];
+
+    int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+
+    
+    int32_t d_id = (c_record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
+    int32_t c_id = (c_record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
+
+    query.W_ID = w_id;
+    query.D_ID = d_id;
+    DCHECK(query.D_ID >= 1);
+
+    query.C_ID = c_id;
+    DCHECK(query.C_ID >= 1);
+    query.O_OL_CNT = 10; // random.uniform_dist(5, 10);
+
+    for (auto i = 0; i < query.O_OL_CNT; i++) {
+      auto cur_key = keys[3 + i];
+
+      int32_t w_id = (cur_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
+      int32_t s_id = (cur_key & RECORD_COUNT_OL_ID_VALID);
+
+      query.INFO[i].OL_I_ID = s_id;// (query.C_ID - 1) * query.O_OL_CNT + i + 1;// (query.W_ID - 1) * 3000 + query.C_ID;
+      query.INFO[i].OL_SUPPLY_W_ID = w_id;
+      query.INFO[i].OL_QUANTITY = 5;// random.uniform_dist(1, 10);
+    }
+    query.record_keys = keys;
+    return query;
+  }
+  
 };
 
 struct PaymentQuery {

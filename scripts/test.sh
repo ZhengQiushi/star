@@ -3,7 +3,7 @@ set -x
 
 user="centos"
 #TODO@luoyu: read from ips.txt
-ips=(10.77.70.250 10.77.70.251 10.77.70.252 10.77.70.253) 
+ips=(10.77.70.116 10.77.70.251 10.77.70.252 10.77.70.253) 
 # 10.77.110.147
 nodes=3 # replace with the size of ips
 port=20010

@@ -185,56 +185,43 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-    /* partition_num = 6, coordinator_num = 2, thread_num = 1
-     ----
-     Hotarea_0   
-        0 <- partition_id
-          1
-        2 
-     ----
-     Hotarea_1
-        4 <-
-          5
-        6
-    */
-
-    /* partition_num = 8, coordinator_num = 2, thread_num = 2
-     ----
-     Hotarea_0   
-        0 <- partition_id
-          1
-        2 
-          3
-     ----
-     Hotarea_1
-        4 <-
-          5
-        6
-          7
-    */
-      // first key locate at the first partition of every hot area
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
 
-      DCHECK(context.partition_num % context.worker_num == 0);
-      std::size_t partition_per_thread =  context.partition_num / context.worker_num;
-      
+      if(WorkloadType::which_workload == myTestSet::YCSB){
 
-      std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); 
-                                // id * partition_per_thread + 
-                                //  random.uniform_dist(0, partition_per_thread - 1); 
-                                 // get_random_partition_id(n, context.coordinator_num);
-
+      } else {
+        hot_area_size = context.coordinator_num;
+      }
+      std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
-        partition_id = 0;
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          partition_id = 0;
+        } else {
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        }
       } else {
         // 0 < 50
         //正常
       }
-      
-      std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
-                                  partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
+      // 
+      std::size_t partition_id_;
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;
+      } else {
+        if(context.skew_factor >= skew_factor) {
+          partition_id_ = partition_id / hot_area_size * hot_area_size;
+
+        } else {
+          partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;;
+        }
+      }
+
+      // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
       
       simpleTransaction* txn = new simpleTransaction();
@@ -249,8 +236,10 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
-    return transactions_queue_self_.push_no_wait(txn);
+
+    return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
+
 
     void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn) {
     // router transaction to coordinators
@@ -371,6 +360,45 @@ public:
   };
 
 
+
+  int get_dynamic_coordinator_id(MoveRecord<WorkloadType>& record){
+    
+    size_t coordinator_id;
+    int32_t table_id = record.table_id;
+    switch (table_id)
+    {
+    case tpcc::warehouse::tableID:
+        coordinator_id = 
+        db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                      record.table_id, 
+                                      (void*)& record.key.w_key);
+        break;
+    case tpcc::district::tableID:
+        coordinator_id = 
+        db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                      record.table_id, 
+                                      (void*)& record.key.d_key);
+        break;
+    case tpcc::customer::tableID:
+        coordinator_id = 
+        db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                      record.table_id, 
+                                      (void*)& record.key.c_key);
+        break;
+    case tpcc::stock::tableID:
+        coordinator_id = 
+        db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                      record.table_id, 
+                                      (void*)& record.key.s_key);
+        break;
+    default:
+        DCHECK(false);
+        break;
+    }
+    return coordinator_id;
+    
+  }
+
   void txn_nodes_involved(simpleTransaction* t, 
                           std::vector<std::vector<int>>& txns_coord_cost) {
     
@@ -437,44 +465,6 @@ public:
 
      return;
    }
-
-  int get_dynamic_coordinator_id(MoveRecord<WorkloadType>& record){
-    
-    size_t coordinator_id;
-    int32_t table_id = record.table_id;
-    switch (table_id)
-    {
-    case tpcc::warehouse::tableID:
-        coordinator_id = 
-        db.get_dynamic_coordinator_id(context.coordinator_num, 
-                                      record.table_id, 
-                                      (void*)& record.key.w_key);
-        break;
-    case tpcc::district::tableID:
-        coordinator_id = 
-        db.get_dynamic_coordinator_id(context.coordinator_num, 
-                                      record.table_id, 
-                                      (void*)& record.key.d_key);
-        break;
-    case tpcc::customer::tableID:
-        coordinator_id = 
-        db.get_dynamic_coordinator_id(context.coordinator_num, 
-                                      record.table_id, 
-                                      (void*)& record.key.c_key);
-        break;
-    case tpcc::stock::tableID:
-        coordinator_id = 
-        db.get_dynamic_coordinator_id(context.coordinator_num, 
-                                      record.table_id, 
-                                      (void*)& record.key.s_key);
-        break;
-    default:
-        DCHECK(false);
-        break;
-    }
-    return coordinator_id;
-    
-  }
 
   void txn_nodes_involved_tpcc(simpleTransaction* t, 
                                std::vector<std::vector<int>>& txns_coord_cost) {

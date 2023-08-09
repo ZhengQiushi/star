@@ -29,6 +29,7 @@ struct ScheduleMeta {
 
     start_schedule.store(0);
     done_schedule.store(0);
+    all_done_schedule.store(0);
   }
   void clear(){
     for(int i = 0 ; i < coordinator_num; i ++ ){
@@ -41,6 +42,7 @@ struct ScheduleMeta {
 
     start_schedule.store(0);
     done_schedule.store(0);
+    all_done_schedule.store(0);
   }
   int coordinator_num;
   int batch_size;
@@ -56,6 +58,7 @@ struct ScheduleMeta {
 
   std::atomic<uint32_t> start_schedule;
   std::atomic<uint32_t> done_schedule;
+  std::atomic<uint32_t> all_done_schedule;
 };
 
 

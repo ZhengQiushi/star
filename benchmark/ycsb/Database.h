@@ -52,6 +52,17 @@ public:
     ImyRouterTable* tab = find_router_table(table_id); // , coordinator_id);
     return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
   }
+  std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key, int replica_id){
+    /**
+     * @brief from router table to find the coordinator
+     * 
+     */
+    DCHECK(isolation_replica == true && replica_id != -1);
+    ImyRouterTable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
+    return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
+  }
+
+
 
   std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
     /**
@@ -60,6 +71,15 @@ public:
      */
     DCHECK(isolation_replica == false);
     ImyRouterTable* tab = find_router_table(table_id); // , coordinator_id);
+    return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
+  }
+  std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key, int replica_id){
+    /**
+     * @brief from router table to find the coordinator
+     * 
+     */
+    DCHECK(isolation_replica == true && replica_id != -1);
+    ImyRouterTable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
     return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
   }
   // 
@@ -78,25 +98,6 @@ public:
     return tbl_vecs_router_[replica_id][table_id]; // tbl_vecs_router[table_id][coordinator_id];
   }
 
-  std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key, int replica_id){
-    /**
-     * @brief from router table to find the coordinator
-     * 
-     */
-    DCHECK(isolation_replica == true && replica_id != -1);
-    ImyRouterTable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
-    return ((RouterValue*)(tab->search_value(key)))->get_dynamic_coordinator_id();
-  }
-
-  std::size_t get_secondary_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key, int replica_id){
-    /**
-     * @brief from router table to find the coordinator
-     * 
-     */
-    DCHECK(isolation_replica == true && replica_id != -1);
-    ImyRouterTable* tab = find_router_table(table_id, replica_id); // , coordinator_id);
-    return ((RouterValue*)(tab->search_value(key)))->get_secondary_coordinator_id();
-  }
 
 
   void init_router_table(const Context& context){
@@ -263,7 +264,7 @@ public:
   void MyInitTables(const Context& context,
                     const std::string &name, InitFunc initFunc,
                     std::size_t partitionNum, std::size_t threadsNum,
-                    Partitioner *partitioner, std::size_t replica_id) {
+                    Partitioner *partitioner, int replica_id) {
 
     std::vector<int> all_parts;
 

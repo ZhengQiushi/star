@@ -388,23 +388,33 @@ public:
       int from_nodes_id[MAX_COORDINATOR_NUM] = {0};              // dynamic replica nums
       int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0};; // secondary replica nums
       // std::unordered_map<int, int> nodes_cost;              // cost on each node
+      int weight_w = 10;
+      int weight_d = 5;
+      int weight_c = 1;
+      int weight_s = 1;
+
+      int weight_sum = 0;
+
       std::vector<int> query_keys;
       star::tpcc::NewOrderQuery keys;
       keys.unpack_transaction(*t);
       // warehouse_key
       auto warehouse_key = tpcc::warehouse::key(keys.W_ID);
         size_t warehouse_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::warehouse::tableID)->search_value((void*)&warehouse_key))->get_dynamic_coordinator_id();
-      from_nodes_id[warehouse_coordinator_id] += 1;
+      from_nodes_id[warehouse_coordinator_id] += weight_w;
+      weight_sum += weight_w;
       query_keys.push_back(warehouse_coordinator_id);
       // district_key
       auto district_key = tpcc::district::key(keys.W_ID, keys.D_ID);
         size_t district_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::district::tableID)->search_value((void*)&district_key))->get_dynamic_coordinator_id();
-      from_nodes_id[district_coordinator_id] += 1;
+      from_nodes_id[district_coordinator_id] += weight_d;
+      weight_sum += weight_d;
       query_keys.push_back(district_coordinator_id);
       // customer_key
       auto customer_key = tpcc::customer::key(keys.W_ID, keys.D_ID, keys.C_ID);
         size_t customer_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::customer::tableID)->search_value((void*)&customer_key))->get_dynamic_coordinator_id();
-      from_nodes_id[customer_coordinator_id] += 1;
+      from_nodes_id[customer_coordinator_id] += weight_c;
+      weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
       for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
@@ -415,7 +425,8 @@ public:
         size_t stock_coordinator_id = tab->get_dynamic_coordinator_id();
 
         
-        from_nodes_id[stock_coordinator_id] += 1;
+        from_nodes_id[stock_coordinator_id] += weight_s;
+        weight_sum += weight_s;
         query_keys.push_back(stock_coordinator_id);
       }
 
@@ -436,9 +447,9 @@ public:
         if(context.migration_only){
           cur_score += 100 * cnt_master;
         } else {
-          if(cnt_master == query_keys.size()){
-            cur_score += 100 * (int)query_keys.size();
-          } else if(cnt_secondary + cnt_master == query_keys.size()){
+          if(cnt_master == weight_sum){
+            cur_score += 100 * weight_sum;
+          } else if(cnt_secondary + cnt_master == weight_sum){
             cur_score += 50 * cnt_master + 25 * cnt_secondary;
           } else {
             cur_score += 25 * cnt_master + 15 * cnt_secondary;
@@ -455,7 +466,7 @@ public:
           replica_most_cnt = cnt_secondary;
         }
 
-        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)weight_sum - cur_score;
         replicate_busy_local[cur_c_id] += cnt_secondary;
       }
 
@@ -470,8 +481,8 @@ public:
 
 
       t->destination_coordinator = max_node;
-      t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
-      t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
+      t->execution_cost = 10 * weight_sum - max_cnt;
+      t->is_real_distributed = (max_cnt == 100 * weight_sum) ? false : true;
 
       t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){
@@ -701,128 +712,6 @@ public:
 
   }
 
-  struct Clump {
-    using T = u_int64_t;
-  public:
-    int hot;
-    std::vector<std::shared_ptr<simpleTransaction>> txns;
-    std::unordered_map<T, int> keys;
-    int dest;
-
-    int move_cost[MAX_COORDINATOR_NUM] = {0};
-    std::vector<std::vector<int>>& cost;
-
-    Clump(std::shared_ptr<simpleTransaction>& txn, std::vector<std::vector<int>>& cost)
-    : cost(cost){
-      hot = 0;
-      dest = -1;
-      memset(move_cost, 0, sizeof(move_cost));
-      
-      AddTxn(txn);
-    }
-    // 
-    bool CountTxn(std::shared_ptr<simpleTransaction>& txn){
-        for(auto& i : txn->keys){
-          if(keys.count(i)){
-            return true;
-          }
-        }
-        return false;
-    }
-    void AddTxn(std::shared_ptr<simpleTransaction>& txn){
-      for(auto& i : txn->keys){
-        keys[i] += 1;
-      }
-      auto& costs = cost[txn->idx_];
-
-      int min_cost = INT_MAX;
-      int idx = -1;
-
-      for(int i = 0 ; i < costs.size(); i ++ ){
-        move_cost[i] += costs[i];
-        if(min_cost > move_cost[i]){
-          min_cost = move_cost[i];
-          idx = i;
-        }
-      }
-
-      this->dest = idx;
-      txns.push_back(txn);
-      hot += 1;
-    }
-
-    std::pair<int, int> CalIdleNode(const std::unordered_map<size_t, int>& idle_node,
-                                    bool is_init){
-      int idle_coord_id = -1;                        
-      int min_cost = INT_MAX;
-      // int idle_coord_id = -1;
-      for(auto& idle: idle_node){
-        // 
-        if(is_init){
-          if(min_cost > move_cost[idle.first]){
-            min_cost = move_cost[idle.first];
-            idle_coord_id = idle.first;
-          }
-        } else {
-          if(move_cost[idle.first] <= -150){
-            idle_coord_id = idle.first;
-          }
-        }
-      }
-      return std::make_pair(idle_coord_id, min_cost);
-    }
-
-    void UpdateDest(int new_dest){
-      dest = new_dest;
-      for(auto& t : txns){
-        t->is_distributed = true;
-        // add dest busy
-        t->is_real_distributed = true;
-        t->destination_coordinator = new_dest;
-      }
-    }
-
-  };
-
-  struct Clumps {
-  public:
-    std::vector<Clump> clumps;
-    std::vector<std::vector<int>>& cost;
-    Clumps(std::vector<std::vector<int>>& cost):cost(cost){
-
-    }
-    void AddTxn(std::shared_ptr<simpleTransaction>& txn){
-      bool need_new_clump = true;
-      for(int i = 0 ; i < clumps.size(); i ++ ){
-        if(clumps[i].CountTxn(txn)){
-          need_new_clump = false;
-          clumps[i].AddTxn(txn);
-          break;
-        }
-      }
-      if(need_new_clump){
-        clumps.push_back(Clump(txn, cost));
-      }
-    }
-    size_t Size(){
-      return clumps.size();
-    }
-    Clump& At(int i){
-      return clumps[i];
-    }
-    std::vector<int> Sort(){
-      std::vector<int> ret;
-
-      for(int i = 0 ; i < clumps.size(); i ++ ){
-        ret.push_back(i);
-      }
-      std::sort(ret.begin(), ret.end(), [&](int a, int b){
-        return clumps[a].hot < clumps[b].hot;
-      });
-      return ret;
-    }
-  };
-
   void balance_master_tpcc(long long aver_val, 
                       long long threshold){
 
@@ -840,7 +729,7 @@ public:
 
       Clumps clumps(txns_coord_cost);
       for(size_t i = 0 ; i < sz; i ++ ){
-        clumps.AddTxn(txns[i]);
+        clumps.AddTxn(txns[i].get());
       }
 
       bool is_ok = true;

@@ -41,48 +41,6 @@ public:
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context,
            RandomType &random, Partitioner &partitioner,
-           Storage &storage, simpleTransaction& simple_txn)
-      : Transaction(coordinator_id, partition_id, partitioner), 
-        worker_status_(worker_status), db(db),
-        context(context), random(random), storage(storage) {
-          size_t size_ = simple_txn.keys.size();
-
-          DCHECK(simple_txn.keys.size() == 13);
-          // 
-          auto c_record_key = simple_txn.keys[2];
-
-          int32_t w_id = (c_record_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
-
-          this->partition_id = w_id - 1;
-          
-          int32_t d_id = (c_record_key & RECORD_COUNT_D_ID_VALID) >> RECORD_COUNT_D_ID_OFFSET;
-          int32_t c_id = (c_record_key & RECORD_COUNT_C_ID_VALID) >> RECORD_COUNT_C_ID_OFFSET;
-
-          query.W_ID = w_id;
-          query.D_ID = d_id;
-          DCHECK(query.D_ID >= 1);
-
-          query.C_ID = c_id;
-          DCHECK(query.C_ID >= 1);
-          query.O_OL_CNT = 10; // random.uniform_dist(5, 10);
-
-          for (auto i = 0; i < query.O_OL_CNT; i++) {
-            auto cur_key = simple_txn.keys[3 + i];
-
-            int32_t w_id = (cur_key & RECORD_COUNT_W_ID_VALID) >> RECORD_COUNT_W_ID_OFFSET;
-            int32_t s_id = (cur_key & RECORD_COUNT_OL_ID_VALID);
-
-            query.INFO[i].OL_I_ID = s_id;// (query.C_ID - 1) * query.O_OL_CNT + i + 1;// (query.W_ID - 1) * 3000 + query.C_ID;
-            query.INFO[i].OL_SUPPLY_W_ID = w_id;
-            query.INFO[i].OL_QUANTITY = 5;// random.uniform_dist(1, 10);
-          }
-          is_transmit_request = simple_txn.is_transmit_request;
-        }
-
-  NewOrder(std::size_t coordinator_id, std::size_t partition_id,  
-           std::atomic<uint32_t> &worker_status, 
-           DatabaseType &db, const ContextType &context,
-           RandomType &random, Partitioner &partitioner,
            Storage &storage, simpleTransaction& simple_txn, bool is_transmit)
       : Transaction(coordinator_id, partition_id, partitioner), 
         worker_status_(worker_status), db(db),
@@ -95,6 +53,41 @@ public:
           is_transmit_request = simple_txn.is_transmit_request;
         }
 
+  NewOrder(std::size_t coordinator_id, std::size_t partition_id,  
+           std::atomic<uint32_t> &worker_status, 
+           DatabaseType &db, const ContextType &context,
+           RandomType &random, Partitioner &partitioner,
+           Storage &storage, simpleTransaction& simple_txn)
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random), storage(storage),
+        query(makeNewOrderQuery()(simple_txn.keys)) {
+          this->partition_id = query.W_ID - 1;
+          this->is_transmit_request = simple_txn.is_transmit_request;
+        }
+
+
+  NewOrder(std::size_t coordinator_id, std::size_t partition_id, 
+                  std::atomic<uint32_t> &worker_status,
+                  DatabaseType &db, const ContextType &context,
+                  RandomType &random, Partitioner &partitioner,
+                  Storage &storage, 
+                  Transaction& txn)
+      : Transaction(coordinator_id, partition_id, partitioner), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random), storage(storage),
+        partition_id(partition_id), 
+        query(makeNewOrderQuery()(txn.get_query())) {
+          /**
+           * @brief convert from the generated txns
+           * 
+           */
+          this->partition_id = query.W_ID - 1;
+          // this->is_transmit_request = txn.is_transmit_request;
+
+          this->on_replica_id = txn.on_replica_id;
+          // LOG(INFO) << "reset ! " << txn.on_replica_id;
+        }
 
   virtual ~NewOrder() override = default;
   bool is_transmit_requests() override {
@@ -162,8 +155,8 @@ public:
         return TransactionResult::ABORT_NORETRY;
       }
 
-      this->search_local_index(itemTableID, 0, storage.item_keys[i],
-                               storage.item_values[i]);
+      // this->search_local_index(itemTableID, 0, storage.item_keys[i],
+      //                          storage.item_values[i]);
 
       // The row in the STOCK table with matching S_I_ID (equals OL_I_ID) and
       // S_W_ID (equals OL_SUPPLY_W_ID) is selected.

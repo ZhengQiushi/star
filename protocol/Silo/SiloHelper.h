@@ -79,6 +79,17 @@ public:
       DCHECK(ok);
     }
   }
+  static void unlock_if_locked(std::atomic<uint64_t> &a, uint64_t newValue) {
+    // try to lock the whole write set?
+    // what if partial of the set has already been locked by others? 
+    // And these records have already been unlocked! 
+    // No nessessary to unlock them twice!
+    uint64_t oldValue = a.load();
+    if(is_locked(oldValue)){
+      bool ok = a.compare_exchange_strong(oldValue, newValue);
+      DCHECK(ok);
+    }
+  }
   static void unlock(std::atomic<uint64_t> &a, uint64_t newValue) {
     uint64_t oldValue = a.load();
     DCHECK(is_locked(oldValue));

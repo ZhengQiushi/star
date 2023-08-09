@@ -105,9 +105,15 @@ public:
                                                     std::size_t partition_id,
                                                     StorageType &storage, 
                                                     TransactionType& txn) {
+    std::unique_ptr<TransactionType> p =
+        std::make_unique<NewOrder<Transaction>>(
+            coordinator_id, partition_id, 
+            worker_status, 
+            db, context, random, 
+            partitioner, storage, txn);
+            
+    p->startTime = txn.startTime;
 
-    std::unique_ptr<TransactionType> p(nullptr);
-    DCHECK(false);
     return p;
   }
 

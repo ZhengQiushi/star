@@ -967,7 +967,7 @@ private:
       std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>* ,std::deque<int>* )>>
       controlMessageHandlers;
 
-  LockfreeQueue<Message *, 10086> in_queue, out_queue;
+  LockfreeQueue<Message *, 100860> in_queue, out_queue;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;

@@ -249,14 +249,19 @@ public:
       }
       unpack_route_transaction(); // 
 
+      LOG(INFO) << txn_meta.transactions_prepared.load();
+      
       txn_meta.transactions_prepared.fetch_add(1);
       while(txn_meta.transactions_prepared.load() < context.worker_num){
+        int a = txn_meta.transactions_prepared.load();
         std::this_thread::yield();
         process_request();
       }
 
 
-        VLOG_IF(DEBUG_V, id==0) << txn_meta.c_transactions_queue.size() << " "  << txn_meta.s_transactions_queue.size();
+      VLOG_IF(DEBUG_V, id==0) << txn_meta.transactions_prepared.load() << " " 
+                              << txn_meta.c_transactions_queue.size()  << " "  
+                              << txn_meta.s_transactions_queue.size();
 
       VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -268,7 +273,7 @@ public:
       // c_phase
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " c_phase";
       if (coordinator_id == 0) {
-        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to run_transaction";
+        VLOG_IF(DEBUG_V, id==0) << "[C_PHASE] worker " << id << " ready to run_transaction";
         n_started_workers.fetch_add(1);
 
         // size_t r_size = c_transactions_queue.size();
@@ -286,7 +291,7 @@ public:
         // }
 
         n_complete_workers.fetch_add(1);
-        VLOG_IF(DEBUG_V, id==0) << "worker " << id << " finish run_transaction";
+        VLOG_IF(DEBUG_V, id==0) << "[C_PHASE] worker " << id << " finish run_transaction";
       } else {
         
         n_started_workers.fetch_add(1);

@@ -25,12 +25,137 @@
 #include <unistd.h>
 #include <metis.h>
 #include <map>
+#include <limits.h>
 
 #include <glog/logging.h>
 
 #define TOP_SIZE 10000000
 namespace star
 {
+    #define MAX_COORDINATOR_NUM 20
+    struct Clump {
+        using T = u_int64_t;
+    public:
+        int hot;
+        std::vector<simpleTransaction*> txns;
+        std::unordered_map<T, int> keys;
+        int dest;
+
+        int move_cost[MAX_COORDINATOR_NUM] = {0};
+        std::vector<std::vector<int>>& cost;
+
+        Clump(simpleTransaction* txn, std::vector<std::vector<int>>& cost)
+        : cost(cost){
+        hot = 0;
+        dest = -1;
+        memset(move_cost, 0, sizeof(move_cost));
+        
+        AddTxn(txn);
+        }
+        // 
+        bool CountTxn(simpleTransaction* txn){
+            for(auto& i : txn->keys){
+            if(keys.count(i)){
+                return true;
+            }
+            }
+            return false;
+        }
+        void AddTxn(simpleTransaction* txn){
+        for(auto& i : txn->keys){
+            keys[i] += 1;
+        }
+        auto& costs = cost[txn->idx_];
+
+        int min_cost = INT_MAX;
+        int idx = -1;
+
+        for(int i = 0 ; i < costs.size(); i ++ ){
+            move_cost[i] += costs[i];
+            if(min_cost > move_cost[i]){
+            min_cost = move_cost[i];
+            idx = i;
+            }
+        }
+
+        this->dest = idx;
+        txns.push_back(txn);
+        hot += 1;
+        }
+
+        std::pair<int, int> CalIdleNode(const std::unordered_map<size_t, int>& idle_node,
+                                        bool is_init){
+        int idle_coord_id = -1;                        
+        int min_cost = INT_MAX;
+        // int idle_coord_id = -1;
+        for(auto& idle: idle_node){
+            // 
+            if(is_init){
+            if(min_cost > move_cost[idle.first]){
+                min_cost = move_cost[idle.first];
+                idle_coord_id = idle.first;
+            }
+            } else {
+            if(move_cost[idle.first] <= -150){
+                idle_coord_id = idle.first;
+            }
+            }
+        }
+        return std::make_pair(idle_coord_id, min_cost);
+        }
+
+        void UpdateDest(int new_dest){
+        dest = new_dest;
+        for(auto& t : txns){
+            t->is_distributed = true;
+            // add dest busy
+            t->is_real_distributed = true;
+            t->destination_coordinator = new_dest;
+        }
+        }
+
+    };
+
+      struct Clumps {
+  public:
+    std::vector<Clump> clumps;
+    std::vector<std::vector<int>>& cost;
+    Clumps(std::vector<std::vector<int>>& cost):cost(cost){
+
+    }
+    void AddTxn(simpleTransaction* txn){
+      bool need_new_clump = true;
+      for(int i = 0 ; i < clumps.size(); i ++ ){
+        if(clumps[i].CountTxn(txn)){
+          need_new_clump = false;
+          clumps[i].AddTxn(txn);
+          break;
+        }
+      }
+      if(need_new_clump){
+        clumps.push_back(Clump(txn, cost));
+      }
+    }
+    size_t Size(){
+      return clumps.size();
+    }
+    Clump& At(int i){
+      return clumps[i];
+    }
+    std::vector<int> Sort(){
+      std::vector<int> ret;
+
+      for(int i = 0 ; i < clumps.size(); i ++ ){
+        ret.push_back(i);
+      }
+      std::sort(ret.begin(), ret.end(), [&](int a, int b){
+        return clumps[a].hot < clumps[b].hot;
+      });
+      return ret;
+    }
+  };
+
+
     template <class Workload>
     struct MoveRecord{
         using myKeyType = uint64_t;

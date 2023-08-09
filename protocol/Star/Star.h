@@ -343,7 +343,7 @@ private:
     // }
 
     for (auto i = 0u; i < tids.size(); i++) {
-      SiloHelper::unlock(*tids[i], commit_tid);
+      SiloHelper::unlock_if_locked(*tids[i]);
     }
   }
 

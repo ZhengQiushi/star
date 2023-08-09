@@ -115,7 +115,9 @@ public:
             
             while(status != ExecutorStatus::EXIT){
                   // wait for start
-                  while(schedule_meta.start_schedule.load() == 0 && status != ExecutorStatus::EXIT){
+                  while((schedule_meta.start_schedule.load() == 0 
+                  || schedule_meta.done_schedule.load() == context.worker_num * context.coordinator_num)
+                  && status != ExecutorStatus::EXIT){
                     status = static_cast<ExecutorStatus>(worker_status.load());
                     if(is_full_signal_self[dispatcher_id].load() == true){
                       std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -156,16 +158,18 @@ public:
 
                   schedule_meta.done_schedule.fetch_add(1);
                   status = static_cast<ExecutorStatus>(worker_status.load());
-
+                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
                   // wait for end
                   while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
+                    auto i = schedule_meta.done_schedule.load();
                     std::this_thread::sleep_for(std::chrono::microseconds(5));
                     status = static_cast<ExecutorStatus>(worker_status.load());
                   }
+                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
 
                   is_full_signal_self[dispatcher_id].store(false);
 
-                  schedule_meta.start_schedule.store(0);
+                  schedule_meta.all_done_schedule.fetch_add(1);
                 }
             }, n, this->id);
 
@@ -193,6 +197,124 @@ public:
     router_transactions_send.fetch_add(1);
   };
 
+  void txn_nodes_involved(simpleTransaction* t, 
+                          std::vector<std::vector<int>>& txns_coord_cost) {
+      
+      std::set<int> coordinator_ids;
+      std::unordered_map<int, int>  from_nodes_id;              // dynamic replica nums
+      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
+      // std::unordered_map<int, int> nodes_cost;              // cost on each node
+      std::vector<int> coordi_nums_;
+
+      
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto query_keys = t->keys;
+
+
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        size_t secondary_c_ids;
+        cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        if(!from_nodes_id.count(cur_c_id)){
+          from_nodes_id[cur_c_id] = 1;
+          // 
+          coordi_nums_.push_back(cur_c_id);
+        } else {
+          from_nodes_id[cur_c_id] += 1;
+        }
+        coordinator_ids.insert(cur_c_id);
+
+        // key on which node
+        for(size_t i = 0; i <= context.coordinator_num; i ++ ){
+            if(secondary_c_ids & 1 && i != cur_c_id){
+                from_nodes_id_secondary[i] += 1;
+            }
+            secondary_c_ids = secondary_c_ids >> 1;
+        }
+      }
+
+      int max_cnt = INT_MIN;
+      int max_node = -1;
+
+      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
+        int cur_score = 0;
+        size_t cnt_master = from_nodes_id[cur_c_id];
+        size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
+        if(cnt_master == query_keys.size()){
+          cur_score = 100 * (int)query_keys.size();
+        // } else if(cnt_secondary + cnt_master == query_keys.size()){
+        //   cur_score = 50 * cnt_master;// + 25 * cnt_secondary;
+        } else {
+          cur_score = 25 * cnt_master;// + 15 * cnt_secondary;
+        }
+        if(cur_score > max_cnt){
+          max_node = cur_c_id;
+          max_cnt = cur_score;
+        }
+        txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+      }
+
+
+      max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
+
+      if(coordinator_ids.size() > 1){
+        t->is_distributed = true;
+      }
+      t->destination_coordinator = max_node;
+      t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
+
+     return;
+   }
+
+  void txn_nodes_involved_tpcc(simpleTransaction* t, 
+                               std::vector<std::vector<int>>& txns_coord_cost) {
+      std::set<int> coordinator_ids;
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};              // dynamic replica nums
+      // std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
+      // std::unordered_map<int, int> nodes_cost;              // cost on each node
+      std::vector<int> query_keys;
+      star::tpcc::NewOrderQuery keys;
+      keys.unpack_transaction(*t);
+      for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
+        size_t stock_coordinator_id = (keys.INFO[i].OL_SUPPLY_W_ID - 1) % context.coordinator_num;
+        from_nodes_id[stock_coordinator_id] += 1;
+        query_keys.push_back(stock_coordinator_id);
+        coordinator_ids.insert(stock_coordinator_id);
+      }
+
+      int max_cnt = INT_MIN;
+      int max_node = -1;
+
+      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
+        int cur_score = 0;
+        size_t cnt_master = from_nodes_id[cur_c_id];
+        // size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
+        if(cnt_master == query_keys.size()){
+          cur_score = 100 * (int)query_keys.size();
+        // } else if(cnt_secondary + cnt_master == query_keys.size()){
+        //   cur_score = 50 * cnt_master;// + 25 * cnt_secondary;
+        } else {
+          cur_score = 25 * cnt_master;// + 15 * cnt_secondary;
+        }
+        if(cur_score > max_cnt){
+          max_node = cur_c_id;
+          max_cnt = cur_score;
+        }
+        txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+      }
+
+      max_node = query_keys[0];
+
+      if(coordinator_ids.size() > 1){
+        t->is_distributed = true;
+      }
+      t->destination_coordinator = max_node;
+      t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
+
+     return;
+   }
 
   void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
@@ -231,7 +353,13 @@ public:
 
       DCHECK(success == true);
 
-      txn->destination_coordinator = txn->partition_id % context.coordinator_num;
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        txn_nodes_involved(txn.get(), txns_coord_cost);
+      } else {
+        txn_nodes_involved_tpcc(txn.get(), txns_coord_cost);
+      }
+
+      // txn->destination_coordinator = txn->partition_id % context.coordinator_num;
       // router_transaction_to_coordinator(txn, coordinator_id_dst); // c_txn send to coordinator
       if(txn->is_distributed){
         txn->destination_coordinator = 0;
@@ -267,7 +395,6 @@ public:
     }
   }
 
-
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
       ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_){
     /** 
@@ -276,19 +403,41 @@ public:
      */
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
 
-      std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      if(WorkloadType::which_workload == myTestSet::YCSB){
 
+      } else {
+        hot_area_size = context.coordinator_num;
+      }
+      std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
-        partition_id = 0;
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          partition_id = 0;
+        } else {
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        }
       } else {
         // 0 < 50
         //正常
       }
+      // 
+      std::size_t partition_id_;
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;
+      } else {
+        if(context.skew_factor >= skew_factor) {
+          partition_id_ = partition_id / hot_area_size * hot_area_size;
 
-      std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
-                                  partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
+        } else {
+          partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;;
+        }
+      }
+
+      // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
       
       simpleTransaction* txn = new simpleTransaction();
@@ -296,15 +445,17 @@ public:
       txn->update = cur_transaction->get_query_update();
       txn->partition_id = cur_transaction->get_partition_id();
       // 
-      bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
-      if(is_cross_txn_static){
-        txn->is_distributed = true;
-      } else {
-        DCHECK(txn->is_distributed == false);
-      }
+      // bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
+      // if(is_cross_txn_static){
+      //   txn->is_distributed = true;
+      // } else {
+      //   DCHECK(txn->is_distributed == false);
+      // }
     
-    return transactions_queue_self_.push_no_wait(txn);
+
+    return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
+
 
   void router_fence(){
 
@@ -371,9 +522,10 @@ public:
 
       schedule_meta.start_schedule.store(1);
       // wait for end
-      while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
+      while(schedule_meta.all_done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         status = static_cast<ExecutorStatus>(worker_status.load());
+        process_request();
       }
 
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(

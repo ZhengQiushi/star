@@ -240,79 +240,13 @@ public:
     }
     return std::make_pair(idle_coord_id, min_cost);
   }
-
-  void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
-
-    if(transactions_queue_self[dispatcher_id].size() < (size_t)cur_txn_num * dispatcher_num){
-      DCHECK(false);
-    }
-    // int cur_txn_num = context.batch_size * context.coordinator_num / dispatcher_num;
-    int idx_offset = dispatcher_id * cur_txn_num;
-
-    auto & txns            = schedule_meta.node_txns;
-    auto & busy_           = schedule_meta.node_busy;
-    auto & txns_coord_cost = schedule_meta.txns_coord_cost;
-    
-    auto staart = std::chrono::steady_clock::now();
-
-    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - start_time)
-                 .count() * 1.0 / 1000 / 1000;
-    int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-    // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
-    
-    std::vector<std::vector<int>> busy_local(replica_num, std::vector<int>(context.coordinator_num, 0));
-    int real_distribute_num = 0;
-    for(size_t i = 0; i < (size_t)cur_txn_num; i ++ ){
-      bool success = false;
-      std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
-      int idx = i + idx_offset;
-
-      for(size_t r = 0 ; r < replica_num; r ++ ){
-        txns[r][idx] = *new_txn;
-        auto& txn = txns[r][idx];
-        txn.idx_ = idx;      
-        txn_replica_involved(&txn, r, txns_coord_cost[r]);
-        // txn_nodes_involved(txn.get(), false, txns_coord_cost);
-        busy_local[r][txn.destination_coordinator] += 1;
-      }
-    }
-
-    double cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - staart)
-                 .count() * 1.0 / 1000 ;              
-    if(real_distribute_num > 0){
-      LOG(INFO) << "real_distribute_num = " << real_distribute_num;
-    }
-
-    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
-    schedule_meta.txn_id.fetch_add(1);
-    {
-      std::lock_guard<std::mutex> l(schedule_meta.l);
-      for(size_t r = 0; r < replica_num; r ++ ){
-        for(size_t i = 0; i < context.coordinator_num; i ++ ){
-            busy_[r][i] += busy_local[r][i];
-        }
-      }
-
-    }
-
-    while((int)schedule_meta.txn_id.load() < dispatcher_num){
-      auto i = schedule_meta.txn_id.load();
-      std::this_thread::sleep_for(std::chrono::microseconds(5));
-    }
-
-    long long threshold = 200 * 200; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
-    
-    int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
-    long long cur_val = cal_load_distribute(aver_val, busy_[0]);
-
-    if(dispatcher_id == 0){
-    
-
-    if(cur_val > threshold && context.random_router == 0){ 
+  void balance_master(long long aver_val, 
+                      long long threshold){
       // start tradeoff for balancing
+      auto & txns            = schedule_meta.node_txns;
+      auto & busy_           = schedule_meta.node_busy;
+      auto & txns_coord_cost = schedule_meta.txns_coord_cost;
+    
       int batch_num = 50; // 
       for(size_t r = 0 ; r < replica_num; r ++ ){
         auto& cur_busy = busy_[r];
@@ -386,6 +320,199 @@ public:
         } while(cal_load_distribute(aver_val, cur_busy) > threshold && is_ok);
 
       }
+  }
+
+  void find_imbalanced_node(std::unordered_map<size_t, int>& overload_node,
+                            std::unordered_map<size_t, int>& idle_node,
+                            std::unordered_map<size_t, int>& busy,
+                            long long aver_val,
+                            long long threshold
+                            ){
+    for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
+      // if((long long) (busy[j] - aver_val) * (busy[j] - aver_val) > threshold){
+        if((busy[j] - aver_val) > 0){
+          overload_node[j] = busy[j] - aver_val;
+        } else {
+          idle_node[j] = aver_val - busy[j];
+        } 
+      // }
+    }    
+  }
+
+  void balance_master_tpcc(long long aver_val, 
+                      long long threshold){
+
+      auto & txns              = schedule_meta.node_txns;
+      auto & busy              = schedule_meta.node_busy;
+      // auto & node_replica_busy = schedule_meta.node_replica_busy;
+      auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
+
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+      int workload_type = ((int)cur_timestamp / context.workload_time) + 1;
+      
+      size_t sz = cur_txn_num * dispatcher_num;
+
+      for(size_t r = 0 ; r < replica_num; r ++ ){
+        auto& cur_busy = busy[r];
+
+        Clumps clumps(txns_coord_cost[r]);
+        for(size_t i = 0 ; i < sz; i ++ ){
+          clumps.AddTxn(&txns[r][i]);
+        }
+
+        bool is_ok = true;
+        std::vector<int> used(clumps.Size(), 0);
+        std::vector<int> priority = clumps.Sort();
+
+        do {
+          // start tradeoff for balancing
+          bool useClump = false;
+          for(int i = 0 ; i < priority.size(); i ++ ){ 
+            int cur_idx = priority[i];
+            if(used[cur_idx]) continue;
+            auto& cur = clumps.At(cur_idx);
+
+            std::unordered_map<size_t, int> overload_node;
+            std::unordered_map<size_t, int> idle_node;
+
+            find_imbalanced_node(overload_node, idle_node, 
+                                cur_busy, aver_val, threshold);
+            if(overload_node.size() == 0 || idle_node.size() == 0){
+              is_ok = false;
+              break;
+            }
+            // std::shared_ptr<simpleTransaction> t = q_.top();
+            // q_.pop();
+
+            if(overload_node.count(cur.dest)){
+              // find minial cost in idle_node
+              auto [idle_coord_id, min_cost] = cur.CalIdleNode(idle_node, 
+                                                (workload_type == 1 || context.lion_with_metis_init == 0));
+              if(idle_coord_id == -1){
+                continue;
+              }
+              used[cur_idx] = true;
+              useClump = true;
+              // minus busy
+              cur_busy[cur.dest] -= cur.hot;
+              overload_node[cur.dest] -= cur.hot;
+              if(overload_node[cur.dest] <= 0){
+                overload_node.erase(cur.dest);
+              }
+              // 
+              cur.UpdateDest(idle_coord_id);
+              // 
+              cur_busy[idle_coord_id] += cur.hot;
+              idle_node[idle_coord_id] -= cur.hot;
+              if(idle_node[idle_coord_id] <= 0){
+                idle_node.erase(idle_coord_id);
+              }
+              LOG(INFO) << " after move : " << cur.hot;
+              for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
+                LOG(INFO) <<" busy[" << j << "] = " << cur_busy[j];
+              }
+            }
+            if(cal_load_distribute(aver_val, cur_busy) <= threshold) {
+              break;
+            }
+            if(overload_node.size() == 0 || idle_node.size() == 0){
+              break;
+            }
+
+          }
+          if(!useClump){
+            is_ok = false;
+          }
+        } while(cal_load_distribute(aver_val, cur_busy) > threshold && is_ok);
+      }
+  }
+
+  
+  
+  void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
+
+    if(transactions_queue_self[dispatcher_id].size() < (size_t)cur_txn_num * dispatcher_num){
+      DCHECK(false);
+    }
+    // int cur_txn_num = context.batch_size * context.coordinator_num / dispatcher_num;
+    int idx_offset = dispatcher_id * cur_txn_num;
+
+    auto & txns            = schedule_meta.node_txns;
+    auto & busy_           = schedule_meta.node_busy;
+    auto & txns_coord_cost = schedule_meta.txns_coord_cost;
+    
+    auto staart = std::chrono::steady_clock::now();
+
+    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time)
+                 .count() * 1.0 / 1000 / 1000;
+    int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
+    // find minimal cost routing 
+    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    
+    std::vector<std::vector<int>> busy_local(replica_num, std::vector<int>(context.coordinator_num, 0));
+    int real_distribute_num = 0;
+    for(size_t i = 0; i < (size_t)cur_txn_num; i ++ ){
+      bool success = false;
+      std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
+      int idx = i + idx_offset;
+
+      for(size_t r = 0 ; r < replica_num; r ++ ){
+        txns[r][idx] = *new_txn;
+        auto& txn = txns[r][idx];
+        txn.idx_ = idx;      
+
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          txn_replica_involved(&txn, r, txns_coord_cost[r]);
+        } else {
+          txn_replica_involved_tpcc(&txn, r, txns_coord_cost[r]);
+        }
+        // txn_nodes_involved(txn.get(), false, txns_coord_cost);
+        busy_local[r][txn.destination_coordinator] += 1;
+      }
+    }
+
+    double cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - staart)
+                 .count() * 1.0 / 1000 ;              
+    if(real_distribute_num > 0){
+      LOG(INFO) << "real_distribute_num = " << real_distribute_num;
+    }
+
+    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
+    schedule_meta.txn_id.fetch_add(1);
+    {
+      std::lock_guard<std::mutex> l(schedule_meta.l);
+      for(size_t r = 0; r < replica_num; r ++ ){
+        for(size_t i = 0; i < context.coordinator_num; i ++ ){
+            busy_[r][i] += busy_local[r][i];
+        }
+      }
+
+    }
+
+    while((int)schedule_meta.txn_id.load() < dispatcher_num){
+      auto i = schedule_meta.txn_id.load();
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+    }
+
+    long long threshold = 300 * 300; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    
+    int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
+    long long cur_val = cal_load_distribute(aver_val, busy_[0]);
+
+    if(dispatcher_id == 0){
+    
+
+    if(cur_val > threshold && context.random_router == 0){ 
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        balance_master(aver_val, threshold);
+      } else {
+        balance_master_tpcc(aver_val, threshold);
+      }
+      
     }
 
     LOG(INFO) << " after: ";
@@ -414,27 +541,48 @@ public:
 
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-                                   ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_){
-
+      ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
       std::size_t hot_area_size = context.partition_num / context.coordinator_num;
 
-      std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      if(WorkloadType::which_workload == myTestSet::YCSB){
 
+      } else {
+        hot_area_size = context.coordinator_num;
+      }
+      std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
-        partition_id = 0;
+        if(WorkloadType::which_workload == myTestSet::YCSB){
+          partition_id = 0;
+        } else {
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        }
       } else {
         // 0 < 50
         //正常
       }
-      
-      std::size_t partition_id_ = partition_id / hot_area_size * hot_area_size + 
-                                  partition_id / hot_area_size % context.coordinator_num; // get_partition_id();
+      // 
+      std::size_t partition_id_;
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+        partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;
+      } else {
+        if(context.skew_factor >= skew_factor) {
+          partition_id_ = partition_id / hot_area_size * hot_area_size;
+
+        } else {
+          partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                  partition_id / hot_area_size % context.coordinator_num;;
+        }
+      }
+
+      // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
       
       simpleTransaction* txn = new simpleTransaction();
@@ -449,8 +597,10 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
-    return transactions_queue_self_.push_no_wait(txn);
+
+    return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
+
 
   void router_fence(){
 
@@ -462,6 +612,99 @@ public:
     router_transaction_done.store(0);//router_transaction_done.fetch_sub(router_transactions_send.load());
     router_transactions_send.store(0);
   }
+
+    void txn_replica_involved_tpcc(simpleTransaction* t, 
+                                   int replica_id,
+                                   std::vector<std::vector<int>>& txns_coord_cost_) {
+      // 
+      int replica_master_coordinator[2] = {0};
+    
+      int replica_destination = -1;
+      
+      // check master num at this replica on each node
+      size_t from_nodes_id[20] = {0};
+      size_t master_max_cnt = 0;
+
+      std::vector<int> query_keys;
+      star::tpcc::NewOrderQuery keys;
+      keys.unpack_transaction(*t);
+      // warehouse_key
+      auto warehouse_key = tpcc::warehouse::key(keys.W_ID);
+      size_t warehouse_coordinator_id = db.get_dynamic_coordinator_id(
+                                            context.coordinator_num, 
+                                            tpcc::warehouse::tableID, 
+                                            (void*)& warehouse_key, replica_id);
+      from_nodes_id[warehouse_coordinator_id] += 1;
+      query_keys.push_back(warehouse_coordinator_id);
+      // district_key
+      auto district_key = tpcc::district::key(keys.W_ID, keys.D_ID);
+      size_t district_coordinator_id = db.get_dynamic_coordinator_id(
+                                            context.coordinator_num, 
+                                            tpcc::district::tableID, 
+                                            (void*)& district_key, replica_id);
+      from_nodes_id[district_coordinator_id] += 1;
+      query_keys.push_back(district_coordinator_id);
+
+      // customer_key
+      auto customer_key = tpcc::customer::key(keys.W_ID, keys.D_ID, keys.C_ID);
+      size_t customer_coordinator_id = db.get_dynamic_coordinator_id(
+                                            context.coordinator_num, 
+                                            tpcc::customer::tableID, 
+                                            (void*)& customer_key, replica_id);
+
+      from_nodes_id[customer_coordinator_id] += 1;
+      query_keys.push_back(customer_coordinator_id);
+        
+      for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
+        auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
+        size_t stock_coordinator_id = db.get_dynamic_coordinator_id(
+                                            context.coordinator_num, 
+                                            tpcc::stock::tableID, 
+                                            (void*)& stock_key, replica_id);
+
+        from_nodes_id[stock_coordinator_id] += 1;
+        query_keys.push_back(stock_coordinator_id);
+      }
+
+    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+      if(from_nodes_id[i] > master_max_cnt){
+        master_max_cnt = from_nodes_id[i];
+        replica_destination = i;
+      }
+    }
+
+    // int max_node = -1;
+    int max_cnt = INT_MIN;
+    for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
+      int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
+      size_t cnt_master = from_nodes_id[cur_c_id];
+      if(context.migration_only){
+        cur_score += 100 * cnt_master;
+      } else {
+        if(cnt_master == query_keys.size()){
+          cur_score += 100 * (int)query_keys.size();
+        } else {
+          cur_score += 25 * cnt_master;
+        }
+      }
+      if(cur_score > max_cnt){
+        // max_node = cur_c_id;
+        max_cnt = cur_score;
+      }
+      txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+    }
+
+    t->on_replica_id = replica_id;
+    t->destination_coordinator = replica_destination;
+    if(master_max_cnt == query_keys.size()){
+      t->is_real_distributed = false;
+    } else {
+      t->is_real_distributed = true;
+    }
+    t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
+
+     return;
+   }
 
   void txn_replica_involved(simpleTransaction* t, int replica_id,
                             std::vector<std::vector<int>>& txns_coord_cost_) {

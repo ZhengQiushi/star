@@ -41,7 +41,7 @@ public:
     abort_read_validation = false;
     local_validated = false;
     si_in_serializable = false;
-    distributed_transaction = false;
+    // distributed_transaction = false;
     fully_single_transaction = false;
     execution_phase = true;
 

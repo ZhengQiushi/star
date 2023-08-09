@@ -213,6 +213,16 @@ public:
           // if(cur_real_distributed_cnt < 10){
           //   LOG(INFO) << " test if abort?? " << simple_txn.keys[0] << " " << simple_txn.keys[1];
           // }
+          // if(transaction->distributed_transaction){
+              auto debug = p->debug_record_keys();
+              auto debug_master = p->debug_record_keys_master();
+
+              LOG(INFO) << " OMG ";
+              for(int i = 0 ; i < debug.size(); i ++){
+                LOG(INFO) << " #### : " << debug[i] << " " << debug_master[i]; 
+              }
+          // }
+
         } 
         p->id = txn_id;
         // if(p.get() == nullptr) continue;
@@ -634,6 +644,8 @@ public:
           } else {
             setupHandlers(*transaction, *protocol);
           }
+
+
           //#####
           int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
                                                                 std::chrono::steady_clock::now() - transaction->b.startTime)
@@ -654,6 +666,8 @@ public:
           now = std::chrono::steady_clock::now();
           transaction->b.time_local_locks += prepare_read;
           //#####
+
+
           
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           // ####
@@ -682,6 +696,7 @@ public:
             transaction->b.time_execute += write_time;
             // #### 
           }
+
 
 
           if (result == TransactionResult::READY_TO_COMMIT) {
@@ -878,8 +893,9 @@ public:
             .count();
       cur_trans[i]->b.time_other_module += remaster_time;
 
-      n_migrate.fetch_add(cur_trans[i]->migrate_cnt);
+      // n_migrate.fetch_add(cur_trans[i]->migrate_cnt);
       n_remaster.fetch_add(cur_trans[i]->remaster_cnt);
+      n_network_size.fetch_add(cur_trans[i]->network_size);
 
       cur_trans[i]->reset();
 

@@ -64,7 +64,8 @@ public:
   bool lion_no_switch = false;
   
   bool lion_with_trace_log = false;
-
+  bool replica_sync = false;
+  
   bool cpu_affinity = true;
 
   bool sleep_on_retry = false;

@@ -313,13 +313,14 @@ private:
           txn.network_size += MessageFactoryType::new_replication_message(
               *asyncMessages[coordinatorID], *table, writeKey.get_key(),
               writeKey.get_value(), commit_tid);
+          txn.pendingResponses++;
         }
       }
 
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 
-    sync_messages(txn, false);
+    sync_messages(txn, context.replica_sync);
   }
 
   void sync_messages(TransactionType &txn, bool wait_response = true) {

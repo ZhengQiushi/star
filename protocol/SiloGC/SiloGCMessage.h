@@ -175,6 +175,10 @@ public:
     table.serialize_value(encoder, value);
     encoder << commit_tid;
     message.flush();
+
+    // LOG(INFO) << "new_replication_message " << message.get_source_node_id() << "->" << message.get_dest_node_id() 
+    //           << " " << *(int*)key;
+
     return message_size;
   }
 };
@@ -571,6 +575,9 @@ public:
     Decoder dec(stringPiece);
     dec >> commit_tid;
 
+    // LOG(INFO) << " handle REPLICATION_REQUEST from " << responseMessage.get_source_node_id() << " to " << responseMessage.get_dest_node_id() << " " << *(int*)key;
+
+
     DCHECK(dec.size() == 0);
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
@@ -609,6 +616,9 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size());
+    
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
 
     // auto stringPiece = inputPiece.toStringPiece();
     // Decoder dec(stringPiece);
@@ -620,7 +630,7 @@ public:
     // const void *key_ = stringPiece.data();
     // key = *(int*) key_;
 
-    // VLOG(DEBUG_V16) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " " << key;
+    // LOG(INFO) << "replication_response_handler: " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id(); //  << " " << key;
   }
 
 

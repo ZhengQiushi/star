@@ -341,8 +341,9 @@ public:
 
     // 
     std::size_t replica_num = partitioner->replica_num();
-    DCHECK(replica_num == 2) << " todo.";
+
     if(isolation_replica){
+      DCHECK(replica_num == 2) << " todo.";
       for(size_t i = 0; i < replica_num; i ++ ){
         for (auto partitionID = 0u; partitionID < partitionNum; partitionID++) {
           tbl_ycsb_vec_[i].push_back(

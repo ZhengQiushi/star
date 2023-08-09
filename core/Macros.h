@@ -59,6 +59,8 @@ DEFINE_int32(migration_only, 0, "migrate only");
 DEFINE_int32(random_router, 0, "random transfer");
 DEFINE_bool(lion_with_trace_log, false, "use metis to initialize");
 
+DEFINE_bool(replica_sync, false, "replica_sync");
+
 DEFINE_int32(data_transform_interval, 5, "");
 
 DEFINE_int32(time_to_run, 60, "running time");
@@ -121,6 +123,7 @@ DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
   context.data_src_path_dir = FLAGS_data_src_path_dir;                         \
   context.random_router = FLAGS_random_router;                                 \
   context.lion_with_trace_log = FLAGS_lion_with_trace_log;                     \
+  context.replica_sync = FLAGS_replica_sync;                                   \
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
   context.skew_factor = FLAGS_skew_factor;                                     \
   context.repartition_strategy = FLAGS_repartition_strategy;                   \

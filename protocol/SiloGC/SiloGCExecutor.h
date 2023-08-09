@@ -323,7 +323,7 @@ void unpack_route_transaction(){
       ExecutorStatus status;
       do {
         status = static_cast<ExecutorStatus>(worker_status.load());
-
+        process_request();
         if (status == ExecutorStatus::EXIT) {
           LOG(INFO) << "SiloGCExecutor " << id << " exits.";
           return;
@@ -409,6 +409,11 @@ void unpack_route_transaction(){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
+      VLOG_IF(DEBUG_V, id==0) << "CLEANUP "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count()
+              << " milliseconds.";
       if(id == 0){
         txn_meta.clear();
       }
@@ -462,7 +467,32 @@ void unpack_route_transaction(){
     return partition_id;
   }
 
-  void push_message(Message *message) override { in_queue.push(message); }
+  void push_message(Message *message) override { 
+    // MessagePiece messagePiece = *(message->begin());
+    // auto message_type =
+    // static_cast<int>(messagePiece.get_message_type());
+    // for (auto it = message->begin(); it != message->end(); it++) {
+    //   auto messagePiece = *it;
+    //   auto message_type = messagePiece.get_message_type();
+    //   //!TODO replica 
+    //   if(message_type == static_cast<int>(SiloGCMessage::REPLICATION_RESPONSE)){
+
+
+    //     // async_message_respond_num.fetch_add(1); // "async_message_respond_num : " << async_message_respond_num.load()
+    //     LOG(INFO) << " get RESPONSE from " << message->get_source_node_id() << " to " << message->get_dest_node_id(); // << " " << debug_key;
+    //   } else if(message_type == static_cast<int>(SiloGCMessage::REPLICATION_REQUEST)){
+    //     auto message_length = messagePiece.get_message_length();
+    //     int debug_key;
+    //     auto stringPiece = messagePiece.toStringPiece();
+    //     Decoder dec(stringPiece);
+    //     dec >> debug_key;
+
+    //     // async_message_respond_num.fetch_add(1); // "async_message_respond_num : " << async_message_respond_num.load()
+    //     LOG(INFO) << " get REPLICATION_REQUEST from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
+    //   }
+    // }
+    in_queue.push(message); 
+  }
 
   Message *pop_message() override {
     if (out_queue.empty())
@@ -560,7 +590,10 @@ void unpack_route_transaction(){
     };
 
     txn.remote_request_handler = [this]() { return this->process_request(); };
-    txn.message_flusher = [this]() { this->flush_sync_messages(); };
+    txn.message_flusher = [this]() { 
+      this->flush_sync_messages(); 
+      this->flush_async_messages();
+    };
   };
 
 protected:

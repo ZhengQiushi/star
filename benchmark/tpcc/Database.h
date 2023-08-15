@@ -26,6 +26,8 @@
 namespace star {
 namespace tpcc {
 
+const int stock_num = 50000;
+
 class Database {
 public:
   using MetaDataType = std::atomic<uint64_t>;
@@ -186,7 +188,7 @@ public:
               << " milliseconds.";
   }
 
-  void init_router_table(const Context& context){
+  void init_router_table(const Context& context, std::unique_ptr<Partitioner> &partitioner){
     /**
      * @brief for Lion only.
      * 
@@ -200,13 +202,23 @@ public:
     for (auto p_id = 0u; p_id < partitionNum; p_id++) {
       auto partitionID = p_id;
 
-      int router_coordinator = (partitionID + 1) % context.coordinator_num;
-      size_t router_secondary_coordinator = (partitionID) % context.coordinator_num;
-
+      size_t last_replica = (partitionID + 1) % context.coordinator_num;
+      size_t first_replica = (last_replica - partitioner->replica_num() + 1 + context.coordinator_num) % context.coordinator_num;
+      
       RouterValue router;
-      router.set_dynamic_coordinator_id(router_coordinator);
-      router.set_secondary_coordinator_id(router_coordinator);
-      router.set_secondary_coordinator_id(router_secondary_coordinator);
+      router.set_dynamic_coordinator_id(last_replica);
+      if(first_replica <= last_replica){
+        for(int k = first_replica; k <= last_replica; k += 1){
+          router.set_secondary_coordinator_id(k);
+        }
+      } else {
+        for(int k = 0; k <= last_replica; k += 1){
+          router.set_secondary_coordinator_id(k);
+        }
+        for(int k = first_replica; k < context.coordinator_num; k += 1){
+          router.set_secondary_coordinator_id(k);
+        }
+      }
 
       // void warehouseInit(std::size_t partitionID) {
       warehouse::key key;
@@ -243,7 +255,7 @@ public:
 
       // stockInit
       table_router = tbl_stock_vec_router.get();
-      for (int i = 1; i <= 100000; i++) {
+      for (int i = 1; i <= stock_num; i++) {
         stock::key key;
         key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
         key.S_I_ID = i;
@@ -259,7 +271,7 @@ public:
     //   ITable *table_router = tbl_item_vec_router.get();
 
     //   // 100,000 rows in the ITEM table
-    //   for (int i = 1; i <= 100000; i++) {
+    //   for (int i = 1; i <= stock_num; i++) {
     //     item::key key;
     //     key.I_ID = i;
 
@@ -318,7 +330,7 @@ public:
 
       // stockInit
       table_router = tbl_stock_vec_router.get();
-      for (int i = 1; i <= 100000; i++) {
+      for (int i = 1; i <= stock_num; i++) {
         stock::key key;
         key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
         key.S_I_ID = i;
@@ -334,7 +346,7 @@ public:
     //   ITable *table = tbl_item_vec_router.get();
 
     //   // 100,000 rows in the ITEM table
-    //   for (int i = 1; i <= 100000; i++) {
+    //   for (int i = 1; i <= stock_num; i++) {
     //     item::key key;
     //     key.I_ID = i;
 
@@ -404,7 +416,7 @@ public:
       tbl_vecs_router[9] = tbl_stock_vec_router.get();
     // }    
   }
-  void init_hermes_router_table(const Context& context, int replica_id){
+  void init_hermes_router_table(const Context& context, int replica_id, int threadNum){
     /**
      * @brief for Lion only.
      * 
@@ -415,59 +427,72 @@ public:
     auto coordinatorNum = context.coordinator_num;
 
     std::size_t totalKeys = keysPerPartition * partitionNum;
-    
-    for (auto p_id = 0u; p_id < partitionNum; p_id++) {
-      auto partitionID = p_id;
 
-      int router_coordinator = (partitionID + replica_id) % context.coordinator_num;
+    std::vector<std::thread> v;
+    auto now = std::chrono::steady_clock::now();
 
-      RouterValue router;
-      router.set_dynamic_coordinator_id(router_coordinator);
-      router.set_secondary_coordinator_id(router_coordinator);
+    for (auto threadID = 0u; threadID < threadsNum; threadID++) {
+      v.emplace_back([=]() {
+        for (auto p_id = threadID; p_id < partitionNum; p_id += threadsNum) {
+          auto partitionID = p_id;
 
-      // void warehouseInit(std::size_t partitionID) {
-      warehouse::key key;
-      key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
-      ITable *table_router = tbl_warehouse_vec_router_[replica_id].get();
-      table_router->insert(&key, &router);
+          int router_coordinator = (partitionID + replica_id) % context.coordinator_num;
 
-      // void districtInit(std::size_t partitionID)
-      table_router = tbl_district_vec_router_[replica_id].get();
-      for (int i = 1; i <= 10; i++) {
-        district::key key;
-        key.D_W_ID = partitionID + 1;
-        key.D_ID = i;
-        table_router->insert(&key, &router);
-      }
+          RouterValue router;
+          router.set_dynamic_coordinator_id(router_coordinator);
+          router.set_secondary_coordinator_id(router_coordinator);
 
-      // customerInit(std::size_t partitionID)
-      table_router = tbl_customer_vec_router_[replica_id].get();
-      for (int i = 1; i <= 10; i++) {
-        for (int j = 1; j <= 3000; j++) {
-
-          customer::key key;
-          key.C_W_ID = partitionID + 1;
-          key.C_D_ID = i;
-          key.C_ID = j;
-
+          // void warehouseInit(std::size_t partitionID) {
+          warehouse::key key;
+          key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
+          ITable *table_router = tbl_warehouse_vec_router_[replica_id].get();
           table_router->insert(&key, &router);
-        }
+
+          // void districtInit(std::size_t partitionID)
+          table_router = tbl_district_vec_router_[replica_id].get();
+          for (int i = 1; i <= 10; i++) {
+            district::key key;
+            key.D_W_ID = partitionID + 1;
+            key.D_ID = i;
+            table_router->insert(&key, &router);
+          }
+
+          // customerInit(std::size_t partitionID)
+          table_router = tbl_customer_vec_router_[replica_id].get();
+          for (int i = 1; i <= 10; i++) {
+            for (int j = 1; j <= 3000; j++) {
+
+              customer::key key;
+              key.C_W_ID = partitionID + 1;
+              key.C_D_ID = i;
+              key.C_ID = j;
+
+              table_router->insert(&key, &router);
+            }
+          }
+
+          // customerNameIdxInit
+          table_router = tbl_customer_name_idx_vec_router_[replica_id].get();
+          // todo
+
+          // stockInit
+          table_router = tbl_stock_vec_router_[replica_id].get();
+          for (int i = 1; i <= stock_num; i++) {
+            stock::key key;
+            key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
+            key.S_I_ID = i;
+            table_router->insert(&key, &router);
+          }
+
       }
 
-      // customerNameIdxInit
-      table_router = tbl_customer_name_idx_vec_router_[replica_id].get();
-      // todo
+      });
+    }
 
-      // stockInit
-      table_router = tbl_stock_vec_router_[replica_id].get();
-      for (int i = 1; i <= 100000; i++) {
-        stock::key key;
-        key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
-        key.S_I_ID = i;
-        table_router->insert(&key, &router);
-      }
+    for (auto &t : v) {
+      t.join();
+    }
 
-  }
 
   }
   void initialize_replica_table(const Context& context, 
@@ -653,7 +678,7 @@ public:
         }
         
         for(size_t i = 0; i < replica_num; i ++ ){
-          init_hermes_router_table(context, i);
+          init_hermes_router_table(context, i, threadsNum);
         }
 
   }
@@ -814,8 +839,8 @@ public:
       initialize_database(context, partitioner.get());
       allocate_router_table(context);
 
-      if(context.protocol == "Lion" || context.protocol == "MyClay"){
-        init_router_table(context);
+      if(context.protocol.find("Lion") != context.protocol.npos || context.protocol == "MyClay"){
+        init_router_table(context, partitioner);
       } else if (context.protocol == "Star"){
         init_star_router_table(context);
       }
@@ -1054,7 +1079,7 @@ private:
         value.C_ZIP.assign(random.rand_zip());
         value.C_PHONE.assign(random.n_string(16, 16));
         value.C_SINCE = Time::now();
-        value.C_CREDIT_LIM = 50000;
+        value.C_CREDIT_LIM = stock_num;
         value.C_DISCOUNT =
             static_cast<float>(random.uniform_dist(0, 5000)) / 10000;
         value.C_BALANCE = -10;
@@ -1264,7 +1289,7 @@ private:
           key.OL_NUMBER = k;
 
           order_line::value value;
-          value.OL_I_ID = random.uniform_dist(1, 100000);
+          value.OL_I_ID = random.uniform_dist(1, stock_num);
           value.OL_SUPPLY_W_ID = partitionID + 1;
           value.OL_QUANTITY = 5;
           value.OL_DIST_INFO.assign(random.a_string(24, 24));
@@ -1292,7 +1317,7 @@ private:
 
     // 100,000 rows in the ITEM table
 
-    for (int i = 1; i <= 100000; i++) {
+    for (int i = 1; i <= stock_num; i++) {
 
       item::key key;
       key.I_ID = i;
@@ -1332,7 +1357,7 @@ private:
 
     // For each row in the WAREHOUSE table, 100,000 rows in the STOCK table
 
-    for (int i = 1; i <= 100000; i++) {
+    for (int i = 1; i <= stock_num; i++) {
 
       stock::key key;
       key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1

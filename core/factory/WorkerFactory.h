@@ -201,7 +201,7 @@ public:
       workers.push_back(manager);
       // workers.push_back(recorder);
 
-    } else if (context.protocol == "Lion") {
+    } else if (context.protocol.find("Lion") != context.protocol.npos) {
 
       CHECK(context.partition_num %
                 (context.worker_num * context.coordinator_num) ==
@@ -532,7 +532,7 @@ public:
       // workers.push_back(recorder);
 
     }
-    else if (context.protocol == "Lion") {
+    else if (context.protocol.find("Lion") != context.protocol.npos) {
 
       CHECK(context.partition_num %
                 (context.worker_num * context.coordinator_num) ==

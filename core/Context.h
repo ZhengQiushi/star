@@ -45,7 +45,7 @@ public:
   std::size_t skew_factor = 0;
   std::size_t time_to_run = 25;
   std::size_t workload_time = 30;
-  std::size_t init_time = 10;
+  std::size_t init_time = 0;
   std::size_t sample_time_interval = 2;
                 
   std::size_t data_transform_interval = 5;

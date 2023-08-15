@@ -75,6 +75,7 @@ public:
   virtual TransactionResult transmit_execute(std::size_t worker_id) = 0;
 
   virtual void reset_query() = 0;
+  virtual std::string print_raw_query_str() =0;
 
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::string get_query_printed() = 0;
@@ -371,6 +372,6 @@ public:
 
   int router_coordinator_id;
   int on_replica_id;
-  int is_real_distributed;
+  int _distributed;
 };
 } // namespace star

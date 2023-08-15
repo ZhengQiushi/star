@@ -39,7 +39,14 @@ struct NewOrderQuery {
       }
     }
   }
-
+  void print(){
+    LOG(INFO) << this->W_ID << " " << this->D_ID << " " << this->C_ID;
+  }
+  std::string print_str(){
+    return std::to_string(this->W_ID) + " " + 
+           std::to_string(this->D_ID) + " " + 
+           std::to_string(this->C_ID) ;
+  }
   int32_t W_ID;
   int32_t D_ID;
   int32_t C_ID;
@@ -72,6 +79,7 @@ public:
 
     NewOrderQuery query;
     // W_ID is constant over the whole measurement interval
+    DCHECK(W_ID != 0);
     query.W_ID = W_ID;
     // The district number (D_ID) is randomly selected within [1 .. 10] from the
     // home warehouse (D_W_ID = W_ID).

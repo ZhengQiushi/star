@@ -290,7 +290,7 @@ public:
 
         // look-up the dynamic router to find-out where
         auto router_table = db.find_router_table(ycsbTableID);// ,master_coordinator_id);
-        auto tab = static_cast<RouterValue*>(router_table->search_value((void*) query_keys[j]));
+        auto tab = static_cast<RouterValue*>(router_table->search_value((void*) &query_keys[j]));
 
         cur_c_id = tab->get_dynamic_coordinator_id();
         secondary_c_ids = tab->get_secondary_coordinator_id();
@@ -353,7 +353,7 @@ public:
       if(context.random_router > 0){
         // 
         // size_t random_value = random.uniform_dist(0, 9);
-        max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
+        max_node = (query_keys[0] / context.keysPerPartition + 1) % context.coordinator_num;
       } 
 
 

@@ -56,7 +56,7 @@ public:
   // partition id
 
   void set_partition_id(uint32_t partition_id) {
-    DCHECK(partition_id < (1 << 16));
+    DCHECK(partition_id < (1 << 30)) << partition_id << " " << (1 << 30);
     clear_partition_id();
     bitvec |= partition_id << PARTITION_ID_OFFSET;
   }

@@ -88,16 +88,12 @@ struct TransactionMeta {
     this->coordinator_num = coordinator_num;
     storages.resize(batch_size * coordinator_num * 2);
     transactions_prepared.store(0);
-    s_transactions_queue.resize(batch_size);
+    s_transactions_queue.resize(batch_size * 3);
   }
   void clear(){
     s_txn_id.store(0);
     // c_txn_id.store(0);
     // s_transactions_queue.clear();
-    for(auto& i : s_transactions_queue){
-        if(i.get() != nullptr)
-            i->on_replica_id = -1;
-    }
     // c_transactions_queue.clear();
     transactions_prepared.store(0);
   }

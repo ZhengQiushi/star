@@ -214,6 +214,8 @@ public:
                n_abort_read_validation = 0, n_local = 0,
                n_si_in_serializable = 0, n_network_size = 0, 
                metis_n_network_size = 0;
+      
+      uint64_t n_singled = 0, n_distributed = 0;
 
       // switch type in every 10 second;
       int cur_workload_type = std::chrono::duration_cast<std::chrono::seconds>(
@@ -257,7 +259,7 @@ public:
                         << workers[i]->total_latency.nth(95) << "\n" ;
                         ;
         }
-        if((context.protocol == "Lion" || context.protocol == "MyClay") && i == context.worker_num){
+        if((context.protocol.find("Lion") != context.protocol.npos || context.protocol == "MyClay") && i == context.worker_num){
           metis_commit += workers[i]->n_commit.load();
           workers[i]->n_commit.store(0);
 
@@ -300,6 +302,11 @@ public:
 
         workers[i]->workload_type = cur_workload_type;
 
+        n_singled += workers[i]->singled_num.load();
+        workers[i]->singled_num.store(0);
+
+        n_distributed += workers[i]->distributed_num.load();
+        workers[i]->distributed_num.store(0);
 
         workers[i]->clear_status.store(true);
         workers[i]->total_latency.clear();
@@ -323,9 +330,9 @@ public:
                   << metis_remaster << " | " << metis_migrate << "\t" 
                   << cpu_usage << "\t" 
                   << (1.0 * n_network_size + metis_n_network_size) / n_commit << "\t" 
-                  << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\n";
-
-
+                  << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\t" 
+                  << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";
+                  // n_singled << " | " << n_distributed << " = " << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";
 
 
       LOG(INFO) << "workload: " << cur_workload_type << " commit: " << n_commit 
@@ -343,7 +350,8 @@ public:
                 << ", avg metis_n_network_size : " << 1.0 * metis_n_network_size / metis_commit
                 << ", si_in_serializable: " << n_si_in_serializable << " "
                 << 100.0 * n_si_in_serializable / n_commit << " %"
-                << ", local: " << 100.0 * n_local / n_commit << " %";
+                << ", local: " << 100.0 * n_local / n_commit << " %\n"
+                << "n_singled: " << n_singled << " , n_distributed: " << n_distributed << " " <<  1.0 * n_distributed / (n_distributed + n_singled)  << " % ";
       count++;
       if (count > warmup && count <= timeToRun - cooldown) {
         total_commit += n_commit;

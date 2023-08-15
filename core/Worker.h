@@ -27,6 +27,9 @@ public:
     n_si_in_serializable.store(0);
     n_network_size.store(0);
     clear_status.store(0);
+    distributed_num.store(0);
+    singled_num.store(0);
+    
   }
 
   virtual ~Worker() = default;
@@ -75,6 +78,7 @@ public:
   int workload_type; // 0-5
   std::chrono::steady_clock::time_point start_time;
 
+  std::atomic<uint64_t> distributed_num, singled_num;
 
   std::atomic<int> clear_status;
 

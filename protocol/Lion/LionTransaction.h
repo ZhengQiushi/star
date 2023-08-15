@@ -68,7 +68,7 @@ public:
 
 
   virtual void reset_query() = 0;
-
+  virtual std::string print_raw_query_str() =0;
   virtual const std::vector<u_int64_t> get_query() = 0;
   virtual const std::string get_query_printed() = 0;
   virtual const std::vector<u_int64_t> get_query_master() = 0;

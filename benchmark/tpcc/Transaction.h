@@ -34,7 +34,9 @@ public:
         worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
-        query(makeNewOrderQuery()(context, partition_id + 1, cur_timestamp, random)) {}
+        query(makeNewOrderQuery()(context, partition_id + 1, cur_timestamp, random)) {
+          DCHECK(this->partition_id < (1 << 30));
+        }
 
 
   NewOrder(std::size_t coordinator_id, std::size_t partition_id,  
@@ -44,11 +46,13 @@ public:
            Storage &storage, simpleTransaction& simple_txn, bool is_transmit)
       : Transaction(coordinator_id, partition_id, partitioner), 
         worker_status_(worker_status), db(db),
-        context(context), random(random), storage(storage) {
+        context(context), random(random), storage(storage),
+        query(makeNewOrderQuery()(simple_txn.keys)) {
           // size_t size_ = simple_txn.keys.size();
-
           // DCHECK(simple_txn.keys.size() == 13);
           // 
+          this->partition_id = query.W_ID - 1;
+          DCHECK(this->partition_id < (1 << 30));
           query.record_keys = simple_txn.keys;
           is_transmit_request = simple_txn.is_transmit_request;
         }
@@ -63,6 +67,7 @@ public:
         context(context), random(random), storage(storage),
         query(makeNewOrderQuery()(simple_txn.keys)) {
           this->partition_id = query.W_ID - 1;
+          DCHECK(this->partition_id < (1 << 30));
           this->is_transmit_request = simple_txn.is_transmit_request;
         }
 
@@ -84,7 +89,7 @@ public:
            */
           this->partition_id = query.W_ID - 1;
           // this->is_transmit_request = txn.is_transmit_request;
-
+          DCHECK(this->partition_id < (1 << 30));
           this->on_replica_id = txn.on_replica_id;
           // LOG(INFO) << "reset ! " << txn.on_replica_id;
         }
@@ -431,6 +436,7 @@ public:
     // if(key_partition_id == context.partition_num){
     //   return TransactionResult::ABORT_NORETRY;
     // }
+    DCHECK(key_partition_id < (1 << 30));
     this->search_for_read(warehouseTableID, key_partition_id, storage.warehouse_key,
                           storage.warehouse_value);
 
@@ -715,7 +721,9 @@ public:
     return ret; 
   };
 
-
+  std::string print_raw_query_str() override{
+    return std::to_string(query.W_ID) + " " + std::to_string(query.D_ID) + " " + std::to_string(query.C_ID);
+  }
 
   const std::vector<u_int64_t> get_query() override{
     /**
@@ -1133,6 +1141,9 @@ public:
   // }
   void reset_query() override {
     query = makePaymentQuery()(context, partition_id, random);
+  }
+  std::string print_raw_query_str() override{
+    DCHECK(false);
   }
   const std::vector<u_int64_t> get_query() override{
     using T = u_int64_t;

@@ -179,22 +179,6 @@ public:
       
       uint32_t txn_id;
       
-      // if(!simple_txn.is_distributed){
-      //   {
-      //     std::unique_ptr<TransactionType> null_txn(nullptr);
-      //     std::lock_guard<std::mutex> l(txn_meta.s_l);
-      //     txn_id = txn_meta.s_transactions_queue.size();
-      //     if(txn_id >= txn_meta.s_storages.size()){
-      //       DCHECK(false);
-      //     }
-      //     txn_meta.s_transactions_queue.push_back(std::move(null_txn));
-      //     txn_meta.s_txn_id_queue.push_no_wait(txn_id);
-      //   }
-      //   auto p = s_workload->unpack_transaction(context, 0, txn_meta.s_storages[txn_id], simple_txn);
-      //   p->fully_single_transaction = true;
-      //   // if(p.get() == nullptr) continue;
-      //   txn_meta.s_transactions_queue[txn_id] = std::move(p);
-      // } else {
         {
           std::unique_ptr<TransactionType> null_txn(nullptr);
           std::lock_guard<std::mutex> l(txn_meta.c_l);
@@ -214,18 +198,17 @@ public:
           //   LOG(INFO) << " test if abort?? " << simple_txn.keys[0] << " " << simple_txn.keys[1];
           // }
           // if(transaction->distributed_transaction){
-              auto debug = p->debug_record_keys();
-              auto debug_master = p->debug_record_keys_master();
+              // auto debug = p->debug_record_keys();
+              // auto debug_master = p->debug_record_keys_master();
 
-              LOG(INFO) << " OMG ";
-              for(int i = 0 ; i < debug.size(); i ++){
-                LOG(INFO) << " #### : " << debug[i] << " " << debug_master[i]; 
-              }
+              // LOG(INFO) << " OMG ";
+              // for(int i = 0 ; i < debug.size(); i ++){
+              //   LOG(INFO) << " #### : " << debug[i] << " " << debug_master[i]; 
+              // }
           // }
 
         } 
         p->id = txn_id;
-        // if(p.get() == nullptr) continue;
         txn_meta.c_transactions_queue[txn_id] = std::move(p);
       // }
     }
@@ -375,101 +358,12 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count()
               << " milliseconds.";
-      // now = std::chrono::steady_clock::now();
-      // wait to s_phase
-      
-      // replication_fence(ExecutorStatus::START);
 
-      // commit transaction in c_phase;
-      // commit_transactions();
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::CLEANUP) {
         process_request();
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
-      // now = std::chrono::steady_clock::now();
-      //   VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] worker " << id << " wait to s_phase";
-      //   while (static_cast<ExecutorStatus>(worker_status.load()) !=
-      //         ExecutorStatus::S_PHASE) {
-      //     std::this_thread::sleep_for(std::chrono::microseconds(5));
-      //     process_request(); 
-      //   }
-
-      // VLOG_IF(DEBUG_V, id==0) << "S_phase enter"
-      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                std::chrono::steady_clock::now() - begin)
-      //                .count()
-      //         << " milliseconds.";
-
-      // // if(id == 0){
-      // //   transactions_prepared.store(0);
-      // // }
-
-      // if(skip_s_phase.load() == false){
-      //   // s_phase
-      //   VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] wait for s-phase "
-      //           << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                 std::chrono::steady_clock::now() - begin)
-      //                 .count()
-      //           << " milliseconds.";
-      //   // now = std::chrono::steady_clock::now();
-
-      //   n_started_workers.fetch_add(1);
-      //   VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] worker " << id << " ready to run_transaction";
-
-      //   // r_size = txn_meta.s_transactions_queue.size();
-      //   // LOG(INFO) << "txn_meta.s_transactions_queue.size() : " <<  r_size;
-      //   run_transaction(ExecutorStatus::S_PHASE, 
-      //   txn_meta.s_transactions_queue, 
-      //   txn_meta.s_txn_id_queue,
-      //   async_message_num);
-        
-      //   // VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
-
-      //   VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] done "
-      //           << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                 std::chrono::steady_clock::now() - begin)
-      //                 .count()
-      //           << " milliseconds.";
-      //   // now = std::chrono::steady_clock::now();
-        
-      //   // replication_fence(ExecutorStatus::S_PHASE);
-      //   n_complete_workers.fetch_add(1);
-      //   VLOG_IF(DEBUG_V, id==0) << "[S-PHASE] fence "
-      //           << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                 std::chrono::steady_clock::now() - begin)
-      //                 .count()
-      //           << " milliseconds.";
-      //   // now = std::chrono::steady_clock::now();
-
-      //   // once all workers are stop, we need to process the replication
-      //   // requests
-
-      //   while (static_cast<ExecutorStatus>(worker_status.load()) ==
-      //         ExecutorStatus::S_PHASE) {
-      //     process_request();
-      //     std::this_thread::sleep_for(std::chrono::microseconds(5));
-      //   }
-
-      //   VLOG_IF(DEBUG_V, id==0) << "wait back "
-      //           << std::chrono::duration_cast<std::chrono::milliseconds>(
-      //                 std::chrono::steady_clock::now() - begin)
-      //                 .count()
-      //           << " milliseconds.";
-      //   // now = std::chrono::steady_clock::now();
-
-
-      //   // n_complete_workers has been cleared
-      //   process_request();
-      //   n_complete_workers.fetch_add(1);
-      //   txn_meta.done.fetch_add(1);
-      // } else {
-      //   VLOG_IF(DEBUG_V, id==0) << "skip s phase";
-      //   process_request();
-      //   n_complete_workers.fetch_add(1);
-      //   txn_meta.done.fetch_add(1);
-      // }
-
 
       auto execution_schedule_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - begin)
@@ -499,15 +393,6 @@ public:
   }
 
   void record_commit_transactions(TransactionType &txn){
-
-    // time_router.add(txn.b.time_router);
-    // time_scheuler.add(txn.b.time_scheuler);
-    // time_local_locks.add(txn.b.time_local_locks);
-    // time_remote_locks.add(txn.b.time_remote_locks);
-    // time_execute.add(txn.b.time_execute);
-    // time_commit.add(txn.b.time_commit);
-    // time_wait4serivce.add(txn.b.time_wait4serivce);
-    // time_other_module.add(txn.b.time_other_module);
 
     txn.b.time_latency = std::chrono::duration_cast<std::chrono::microseconds>(
                          std::chrono::steady_clock::now() - txn.b.startTime)
@@ -709,7 +594,12 @@ public:
               
               n_migrate.fetch_add(transaction->migrate_cnt);
               n_remaster.fetch_add(transaction->remaster_cnt);
-
+              if(transaction->migrate_cnt > 0 || transaction->remaster_cnt > 0){
+                distributed_num.fetch_add(1);
+                LOG(INFO) << distributed_num.load();
+              } else {
+                singled_num.fetch_add(1);
+              }
               // ####
               int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
                                                                     std::chrono::steady_clock::now() - transaction->b.startTime)
@@ -894,11 +784,13 @@ public:
       cur_trans[i]->b.time_other_module += remaster_time;
 
       // n_migrate.fetch_add(cur_trans[i]->migrate_cnt);
-      n_remaster.fetch_add(cur_trans[i]->remaster_cnt);
+      // n_remaster.fetch_add(cur_trans[i]->remaster_cnt);
+      int remaster_num = cur_trans[i]->remaster_cnt;
       n_network_size.fetch_add(cur_trans[i]->network_size);
 
       cur_trans[i]->reset();
-
+      cur_trans[i]->remaster_cnt = remaster_num;
+      
       if (i % context.batch_flush == 0) {
         flush_async_messages(); 
         flush_sync_messages();

@@ -226,6 +226,13 @@ void unpack_route_transaction(){
             n_commit.fetch_add(1);
             retry_transaction = false;
 
+              if(transaction->distributed_transaction > 0){
+                distributed_num.fetch_add(1);
+                LOG(INFO) << distributed_num.load();
+              } else {
+                singled_num.fetch_add(1);
+              }
+
               // ####
               int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
                                                                     std::chrono::steady_clock::now() - transaction->b.startTime)

@@ -309,7 +309,9 @@ public:
   void reset_query() override {
     query = makeYCSBQuery()(context, partition_id, random, db, 0, 0);
   }
-  
+  std::string print_raw_query_str() override{
+    DCHECK(false);
+  }
   const std::vector<u_int64_t> get_query() override{
     using T = u_int64_t;
 

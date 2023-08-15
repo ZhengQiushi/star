@@ -313,7 +313,9 @@ private:
           txn.network_size += MessageFactoryType::new_replication_message(
               *asyncMessages[coordinatorID], *table, writeKey.get_key(),
               writeKey.get_value(), commit_tid);
-          txn.pendingResponses++;
+          // if(context.replica_sync){
+          //   txn.pendingResponses++;
+          // }
         }
       }
 

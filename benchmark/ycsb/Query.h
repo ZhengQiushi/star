@@ -66,6 +66,9 @@ public:
     }
     
     int cross_partition_probalility = context.crossPartitionProbability ; 
+    if(cur_timestamp < context.init_time){
+      cross_partition_probalility = 0;
+    }
     
     // generate a key in a partition
     if (crossPartition <= cross_partition_probalility &&

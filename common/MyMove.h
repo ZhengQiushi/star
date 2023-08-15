@@ -32,6 +32,58 @@
 #define TOP_SIZE 10000000
 namespace star
 {
+    struct TPCCdebug {
+  bool isRemote() {
+    for (auto i = 0; i < O_OL_CNT; i++) {
+      if (INFO[i].OL_SUPPLY_W_ID != W_ID) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void unpack_transaction(const simpleTransaction& t){
+    auto record_key = t.keys[2];
+    this->W_ID = (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+    this->D_ID = (record_key & RECORD_COUNT_D_ID_VALID) >>  RECORD_COUNT_D_ID_OFFSET;
+    DCHECK(this->D_ID >= 1);
+    this->C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
+    DCHECK(this->C_ID >= 1);
+
+    for(int i = 0 ; i < t.keys.size(); i ++ ){
+      auto record_key = t.keys[i];
+      if(i >= 3){
+        INFO[i - 3].OL_I_ID = (record_key & RECORD_COUNT_OL_ID_VALID);
+        INFO[i - 3].OL_SUPPLY_W_ID = 
+          (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+      }
+    }
+  }
+  void print(){
+    LOG(INFO) << this->W_ID << " " << this->D_ID << " " << this->C_ID;
+  }
+  std::string print_str(){
+    return std::to_string(this->W_ID) + " " + 
+           std::to_string(this->D_ID) + " " + 
+           std::to_string(this->C_ID) ;
+  }
+
+  int32_t W_ID;
+  int32_t D_ID;
+  int32_t C_ID;
+  int8_t O_OL_CNT;
+
+  struct NewOrderQueryInfo {
+    int32_t OL_I_ID;
+    int32_t OL_SUPPLY_W_ID;
+    int8_t OL_QUANTITY;
+  };
+
+  NewOrderQueryInfo INFO[15];
+  std::vector<uint64_t> record_keys; // for migration
+};
+
+
     #define MAX_COORDINATOR_NUM 20
     struct Clump {
         using T = u_int64_t;
@@ -106,12 +158,24 @@ namespace star
 
         void UpdateDest(int new_dest){
         dest = new_dest;
+
+        std::string print = "";
         for(auto& t : txns){
             t->is_distributed = true;
             // add dest busy
             t->is_real_distributed = true;
+            // t->keys
+
+            // TPCCdebug debug;
+            // debug.unpack_transaction(*t);
+            // print += debug.print_str();
+            // print += " -> " + std::to_string(t->destination_coordinator) + " " 
+            //                 + std::to_string(new_dest) + "     ";
+
+            
             t->destination_coordinator = new_dest;
         }
+        LOG(INFO) << print;
         }
 
     };

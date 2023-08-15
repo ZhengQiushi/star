@@ -153,7 +153,7 @@ public:
                     int idx = idx_offset + j;
 
                     for(size_t r = 0; r < replica_num; r ++ ){
-                      txns[r][idx].idx_ = idx;
+                      txns[r][idx].idx_ = r * context.batch_size + idx;
                       router_request(router_send_txn_cnt, &txns[r][idx]);   
                       coordinator_send[txns[r][idx].destination_coordinator] ++ ;
                     }
@@ -240,7 +240,8 @@ public:
     }
     return std::make_pair(idle_coord_id, min_cost);
   }
-  void balance_master(long long aver_val, 
+  void balance_master(int r, 
+                      long long aver_val, 
                       long long threshold){
       // start tradeoff for balancing
       auto & txns            = schedule_meta.node_txns;
@@ -248,7 +249,7 @@ public:
       auto & txns_coord_cost = schedule_meta.txns_coord_cost;
     
       int batch_num = 50; // 
-      for(size_t r = 0 ; r < replica_num; r ++ ){
+      // for(size_t r = 0 ; r < replica_num; r ++ ){
         auto& cur_busy = busy_[r];
         long long cur_val = cal_load_distribute(aver_val, cur_busy);
         for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
@@ -319,7 +320,7 @@ public:
           
         } while(cal_load_distribute(aver_val, cur_busy) > threshold && is_ok);
 
-      }
+      // }
   }
 
   void find_imbalanced_node(std::unordered_map<size_t, int>& overload_node,
@@ -339,7 +340,7 @@ public:
     }    
   }
 
-  void balance_master_tpcc(long long aver_val, 
+  void balance_master_tpcc(int r, long long aver_val, 
                       long long threshold){
 
       auto & txns              = schedule_meta.node_txns;
@@ -354,7 +355,7 @@ public:
       
       size_t sz = cur_txn_num * dispatcher_num;
 
-      for(size_t r = 0 ; r < replica_num; r ++ ){
+      
         auto& cur_busy = busy[r];
 
         Clumps clumps(txns_coord_cost[r]);
@@ -426,7 +427,7 @@ public:
             is_ok = false;
           }
         } while(cal_load_distribute(aver_val, cur_busy) > threshold && is_ok);
-      }
+      // }
   }
 
   
@@ -498,30 +499,33 @@ public:
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 
-    long long threshold = 300 * 300; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    long long threshold = 400 * 400; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
     
     int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
-    long long cur_val = cal_load_distribute(aver_val, busy_[0]);
+    
 
     if(dispatcher_id == 0){
     
-
-    if(cur_val > threshold && context.random_router == 0){ 
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-        balance_master(aver_val, threshold);
-      } else {
-        balance_master_tpcc(aver_val, threshold);
-      }
-      
-    }
-
-    LOG(INFO) << " after: ";
       for(size_t r = 0 ; r < replica_num; r ++ ){
+        long long cur_val = cal_load_distribute(aver_val, busy_[r]);
+        if(cur_val > threshold && context.random_router == 0){ 
+          if(WorkloadType::which_workload == myTestSet::YCSB){
+            balance_master(r, aver_val, threshold);
+          } else {
+            balance_master_tpcc(r, aver_val, threshold);
+          }
+        }
+        cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - staart)
+                    .count() * 1.0 / 1000 ;
+        LOG(INFO) << "scheduler + reorder : " << cur_timestamp__  << " " << cur_val << " " << aver_val << " " << threshold;
+
+        LOG(INFO) << " after: ";
         auto& cur_busy = busy_[r];
         for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
           LOG(INFO) <<" busy[" << i << "] = " << cur_busy[i];
         }
-    }
+      }
 
     schedule_meta.reorder_done.store(true);
     }
@@ -530,10 +534,6 @@ public:
     while(schedule_meta.reorder_done.load() == false){
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
-    cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - staart)
-                 .count() * 1.0 / 1000 ;
-    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
 
 
 
@@ -620,7 +620,14 @@ public:
       int replica_master_coordinator[2] = {0};
     
       int replica_destination = -1;
-      
+
+      int weight_w = 10;
+      int weight_d = 5;
+      int weight_c = 1;
+      int weight_s = 1;
+
+      int weight_sum = 0;
+
       // check master num at this replica on each node
       size_t from_nodes_id[20] = {0};
       size_t master_max_cnt = 0;
@@ -634,7 +641,8 @@ public:
                                             context.coordinator_num, 
                                             tpcc::warehouse::tableID, 
                                             (void*)& warehouse_key, replica_id);
-      from_nodes_id[warehouse_coordinator_id] += 1;
+      from_nodes_id[warehouse_coordinator_id] += weight_w;
+      weight_sum += weight_w;
       query_keys.push_back(warehouse_coordinator_id);
       // district_key
       auto district_key = tpcc::district::key(keys.W_ID, keys.D_ID);
@@ -642,7 +650,8 @@ public:
                                             context.coordinator_num, 
                                             tpcc::district::tableID, 
                                             (void*)& district_key, replica_id);
-      from_nodes_id[district_coordinator_id] += 1;
+      from_nodes_id[district_coordinator_id] += weight_d;
+      weight_sum += weight_d;
       query_keys.push_back(district_coordinator_id);
 
       // customer_key
@@ -652,7 +661,8 @@ public:
                                             tpcc::customer::tableID, 
                                             (void*)& customer_key, replica_id);
 
-      from_nodes_id[customer_coordinator_id] += 1;
+      from_nodes_id[customer_coordinator_id] += weight_c;
+      weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
       for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
@@ -662,7 +672,8 @@ public:
                                             tpcc::stock::tableID, 
                                             (void*)& stock_key, replica_id);
 
-        from_nodes_id[stock_coordinator_id] += 1;
+        from_nodes_id[stock_coordinator_id] += weight_s;
+        weight_sum += weight_s;
         query_keys.push_back(stock_coordinator_id);
       }
 
@@ -681,8 +692,8 @@ public:
       if(context.migration_only){
         cur_score += 100 * cnt_master;
       } else {
-        if(cnt_master == query_keys.size()){
-          cur_score += 100 * (int)query_keys.size();
+        if(cnt_master == weight_sum){
+          cur_score += 100 * weight_sum;
         } else {
           cur_score += 25 * cnt_master;
         }
@@ -691,17 +702,17 @@ public:
         // max_node = cur_c_id;
         max_cnt = cur_score;
       }
-      txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+      txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)weight_sum - cur_score;
     }
 
     t->on_replica_id = replica_id;
     t->destination_coordinator = replica_destination;
-    if(master_max_cnt == query_keys.size()){
+    if(master_max_cnt == weight_sum){
       t->is_real_distributed = false;
     } else {
       t->is_real_distributed = true;
     }
-    t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
+    t->execution_cost = 10 * weight_sum - max_cnt;
 
      return;
    }

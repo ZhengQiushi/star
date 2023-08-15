@@ -485,6 +485,86 @@ public:
 
 };
 
+template <std::size_t N> class LionInitReplicaPartitioner : public Partitioner {
+public:
+  LionInitReplicaPartitioner(std::size_t coordinator_id, std::size_t coordinator_num)
+      : Partitioner(coordinator_id, coordinator_num) {
+    CHECK(coordinator_num >= 1);
+  }
+
+  ~LionInitReplicaPartitioner() override = default;
+
+  std::size_t replica_num() const override { return N; }
+
+  bool is_replicated() const override { return true; }
+
+  bool has_master_partition(std::size_t partition_id) const override {
+    return master_coordinator(partition_id) == coordinator_id;
+  }
+
+  std::size_t master_coordinator(std::size_t partition_id) const override {
+    // the dynamic replica is a unit after static replica at initial state
+    return (partition_id + 1) % coordinator_num;
+  }
+
+  std::size_t secondary_coordinator(std::size_t partition_id) const override {
+    // the static replica is master at initial state
+    DCHECK(false);
+    return (partition_id) % coordinator_num;
+  }
+  bool is_partition_replicated_on(std::size_t partition_id,
+                                  std::size_t coordinator_id) const override {
+    // judge if it is replicated partition or not
+    DCHECK(coordinator_id <= coordinator_num);
+    if(coordinator_num == 1){
+      return true;
+    }
+    // 
+    auto last_replica = master_coordinator(partition_id); // partition_id + 1
+    //  [partition_id - N + 1, partition_id]
+    std::size_t first_replica = (last_replica - N + 1 + coordinator_num) % coordinator_num;
+    //
+    if (last_replica >= first_replica) {
+      return first_replica <= coordinator_id && coordinator_id <= last_replica;
+    } else {
+      return coordinator_id >= first_replica || coordinator_id <= last_replica;
+    }
+  }
+  
+  bool has_master_partition(int table_id, int partition_id, const void* key) const override { // std::size_t partition_id, 
+    DCHECK(false);
+    return false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key) const override {
+    return secondary_coordinator(partition_id); // false;
+  }
+  
+  std::size_t master_coordinator(int table_id, int partition_id, const void* key) const override {
+    DCHECK(false);
+    return false;
+
+  }
+
+    std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return master_coordinator(partition_id); // false;
+  }
+  std::size_t secondary_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {
+    DCHECK(false);
+    return secondary_coordinator(partition_id); // false;
+  }
+  bool is_partition_replicated_on(int table_id, int partition_id, const void* key,
+                                  std::size_t coordinator_id) const override {
+    DCHECK(false);
+    return false;
+  }
+  bool is_backup() const override { return false; }
+
+  bool is_dynamic() const override { return false; };
+
+
+};
+
 
 template <class Workload> 
 class LionDynamicPartitioner : public LionInitPartitioner {
@@ -898,6 +978,18 @@ public:
                                                 coordinator_num);
     } else if (part == "Lion") {
       return std::make_unique<LionInitPartitioner>(coordinator_id,
+                                                   coordinator_num);
+    } else if (part == "Lion1") {
+      return std::make_unique<LionInitReplicaPartitioner<1>>(coordinator_id,
+                                                   coordinator_num);
+    } else if (part == "Lion2") {
+      return std::make_unique<LionInitReplicaPartitioner<2>>(coordinator_id,
+                                                   coordinator_num);
+    } else if (part == "Lion3") {
+      return std::make_unique<LionInitReplicaPartitioner<3>>(coordinator_id,
+                                                   coordinator_num);
+    } else if (part == "Lion4") {
+      return std::make_unique<LionInitReplicaPartitioner<4>>(coordinator_id,
                                                    coordinator_num);
     } else {
       CHECK(false);

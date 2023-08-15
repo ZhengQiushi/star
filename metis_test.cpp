@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
   }
 
 
-  if(context.protocol == "Lion"){
+  if(context.protocol.find("Lion") != context.protocol.npos){
     dst_file = "resultss_partition_0_30.xls"; 
     int time_start = 0;
     int time_end   = time_start + context.workload_time;

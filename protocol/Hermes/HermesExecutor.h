@@ -324,16 +324,25 @@ public:
       n_network_size.fetch_add(simple_txn.size);
       // router_planning(&simple_txn);
       size_t txn_id = simple_txn.idx_;
-      auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+      txn_meta.s_transactions_queue[txn_id] = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
+      auto& p = txn_meta.s_transactions_queue[txn_id];
       p->set_id(txn_id);
       p->on_replica_id = simple_txn.on_replica_id;      
       p->router_coordinator_id = simple_txn.destination_coordinator;
-      p->is_real_distributed = simple_txn.is_real_distributed;
+      p->_distributed = simple_txn.is_real_distributed;
+
+      star::tpcc::NewOrderQuery test;
+      test.unpack_transaction(simple_txn);
+
+      // if(p->_distributed){
+      //   LOG(INFO) << test.print_str() << "     " 
+      //             << p->on_replica_id << " " 
+      //             << p->router_coordinator_id << " " 
+      //             << txn_id;
+      // }
       if(p->on_replica_id != -1){
         prepare_transaction(*p);
       }
-      // LOG(INFO) << txn_id;
-      txn_meta.s_transactions_queue[txn_id] = std::move(p);
     }
   }
 
@@ -403,7 +412,21 @@ public:
     }
   }
 
-
+  void show_key(const void* key, int table_id){
+    if(table_id == tpcc::warehouse::tableID){
+      tpcc::warehouse::key k = *(tpcc::warehouse::key*) key;
+      LOG(INFO) << k.W_ID;
+    } else if(table_id == tpcc::customer::tableID){
+      tpcc::customer::key k = *(tpcc::customer::key*) key;     
+      LOG(INFO) << k.C_W_ID << " " << k.C_D_ID << " " << k.C_ID;     
+    } else if(table_id == tpcc::district::tableID){
+      tpcc::district::key k = *(tpcc::district::key*) key;     
+      LOG(INFO) << k.D_W_ID << " " << k.D_ID;     
+    } else if(table_id == tpcc::stock::tableID){
+      tpcc::stock::key k = *(tpcc::stock::key*) key;     
+      LOG(INFO) << k.S_W_ID << " " << k.S_I_ID;            
+    } 
+  }
 
   void transfer_request_messages(TransactionType &txn){
 
@@ -439,7 +462,11 @@ public:
           // target
           txn.network_size += MessageFactoryType::new_async_search_message(
               *(this->messages[i]), *table, key, txn.id, key_offset, replica_id);
-          VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size() << " on replica " << replica_id;
+
+          VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
+                    << txn.readSet.size() << " on replica " << replica_id;            
+          show_key(key, table_id);
+
         } else {
           // others, only change the router
           txn.network_size += MessageFactoryType::transfer_request_router_only_message(
@@ -486,13 +513,23 @@ public:
       auto local_locks = std::chrono::steady_clock::now();
 
       auto& txn = transactions[i];
-      if(txn.get() == nullptr){
+      if(txn.get() == 0){
         continue;
       }
+    
+        // LOG(INFO) << i << " " 
+        //           << "schedule_transactions: "
+        //           << txn->print_raw_query_str() << " " 
+        //           << txn->id << " " 
+        //           << txn->on_replica_id << " " 
+        //           << txn->router_coordinator_id << " " 
+        //           << txn->_distributed;
+
       // LOG(INFO) << i << " : " << *(int*)txn->readSet[0].get_key() << " " << *(int*)txn->readSet[1].get_key() 
       //           << " " << txn->on_replica_id << " " << txn->router_coordinator_id;
       // target replica is not at local
-      if(txn->on_replica_id == -1){
+      int replica_id = txn->on_replica_id;
+      if(replica_id == -1){
         continue;
       }
       // router is not at local
@@ -504,7 +541,7 @@ public:
                         = std::chrono::steady_clock::now();
 
       auto now = std::chrono::steady_clock::now();
-      if(txn->is_real_distributed){
+      if(txn->_distributed){
         // do transactions remote
         // LOG(INFO) << *(int*)txn->readSet[0].get_key() << " " << *(int*)txn->readSet[1].get_key();
         do{
@@ -530,7 +567,6 @@ public:
         bool grant_lock = false;
         auto &readSet = txn->readSet;
         bool is_with_lock_manager = false;
-        int replica_id = txn->on_replica_id;
 
         for (auto k = 0u; k < readSet.size(); k++) {
           auto &readKey = readSet[k];
@@ -603,13 +639,13 @@ public:
           }
         }
         // only count once
-        if (i % n_lock_manager == id && txn->on_replica_id == 0) {
+        if (i % n_lock_manager == id && replica_id == 0) {
           n_commit.fetch_add(1);
           commit_num += 1;
         }
       } else {
         // only count once
-        if (i % n_lock_manager == id  && txn->on_replica_id == 0) {
+        if (i % n_lock_manager == id  && replica_id == 0) {
           n_abort_no_retry.fetch_add(1);
         }
       }
@@ -791,6 +827,8 @@ public:
       commit_time += commit;
       begin = std::chrono::steady_clock::now();
       cnt += 1;
+      
+      txn_meta.s_transactions_queue[transaction->id] = nullptr;
       // // LOG(INFO) << static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_RESPONSE) << " -> " << generator_id;
       // ControlMessageFactory::router_transaction_response_message(*(messages[generator_id]));
       // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();

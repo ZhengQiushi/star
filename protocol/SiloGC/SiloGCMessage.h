@@ -617,7 +617,10 @@ public:
     DCHECK(partition_id == table.partitionID());
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size());
     
-    txn->pendingResponses--;
+    // if(txn->pendingResponses > 0){
+    //   txn->pendingResponses--;
+    // }
+    
     txn->network_size += inputPiece.get_message_length();
 
     // auto stringPiece = inputPiece.toStringPiece();

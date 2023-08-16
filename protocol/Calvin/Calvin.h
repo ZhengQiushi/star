@@ -58,7 +58,7 @@ public:
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
+      if (!partitioner.has_master_partition(partitionId)) {
         continue;
       }
 
@@ -86,7 +86,7 @@ public:
       auto partitionId = readKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
+      if (!partitioner.has_master_partition(partitionId)) {
         continue;
       }
 
@@ -122,7 +122,7 @@ public:
       auto partitionId = writeKey.get_partition_id();
       auto table = db.find_table(tableId, partitionId);
 
-      if (!partitioner.is_partition_replicated_on(partitionId, context.coordinator_id)) {
+      if (!partitioner.has_master_partition(partitionId)) {
         continue;
       }
 

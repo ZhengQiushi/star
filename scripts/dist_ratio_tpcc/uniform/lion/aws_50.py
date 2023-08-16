@@ -29,7 +29,7 @@ for protocol in protocols:
   for i in range(len(ratios)):
     ratio = ratios[i]
     cmd = get_cmd(n, i)
-    print('/home/star/zqs_laji_tpcc --logtostderr=1 --id=%d --servers="%s" --protocol=%s --partition_num=24 --threads=4 --partitioner=Lion --batch_size=10000 --batch_flush=500 --lion_with_metis_init=0 --time_to_run=120 --workload_time=30 --sample_time_interval=3 --migration_only=0 --neworder_dist=50 --skew_factor=0  --read_on_replica=true  --random_router=0' % (id, cmd, protocol))
+    print('/home/star/zqs_laji_tpcc --logtostderr=1 --id=%d --servers="%s" --protocol=%s --partition_num=24 --threads=4 --partitioner=Lion --batch_size=10000 --batch_flush=500 --lion_with_metis_init=0 --time_to_run=120 --workload_time=30 --sample_time_interval=3 --migration_only=0 --neworder_dist=50 --skew_factor=0  --read_on_replica=true  --random_router=0  --n_nop=20000' % (id, cmd, protocol))
       
       
                 #       "",

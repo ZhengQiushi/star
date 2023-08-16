@@ -184,8 +184,7 @@ virtual std::vector<size_t> debug_record_keys_master() = 0;
                                    readKey.get_key(), readKey.get_value());
         } else {
 
-          if (partitioner.is_partition_replicated_on(readSet[i].get_partition_id(),
-                                                     coordinator_id)) {
+          if (partitioner.has_master_partition(readSet[i].get_partition_id())) {
             local_read.fetch_add(1);
           } else {
             remote_read.fetch_add(1);

@@ -144,9 +144,8 @@ public:
       // the home warehouse 90% of the time and as a remote warehouse 10% of the
       // time.
 
-      if (i != 1) {
+      if (i == 0) {
         // figure out buy from which warehouse
-        
         if (x <= context.newOrderCrossPartitionProbability &&
             context.partition_num > 1) {
           // is cross partition 
@@ -201,6 +200,13 @@ public:
       query.INFO[i].OL_SUPPLY_W_ID = w_id;
       query.INFO[i].OL_QUANTITY = 5;// random.uniform_dist(1, 10);
     }
+    query.record_keys = keys;
+    return query;
+  }
+
+
+  NewOrderQuery operator()(const std::vector<size_t>& keys, bool is_transmit) const {
+    NewOrderQuery query;
     query.record_keys = keys;
     return query;
   }

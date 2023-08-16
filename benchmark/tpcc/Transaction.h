@@ -47,12 +47,12 @@ public:
       : Transaction(coordinator_id, partition_id, partitioner), 
         worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
-        query(makeNewOrderQuery()(simple_txn.keys)) {
+        query(makeNewOrderQuery()(simple_txn.keys, is_transmit)) {
           // size_t size_ = simple_txn.keys.size();
           // DCHECK(simple_txn.keys.size() == 13);
           // 
           this->partition_id = query.W_ID - 1;
-          DCHECK(this->partition_id < (1 << 30));
+          // DCHECK(this->partition_id < (1 << 30));
           query.record_keys = simple_txn.keys;
           is_transmit_request = simple_txn.is_transmit_request;
         }

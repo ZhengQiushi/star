@@ -150,6 +150,8 @@ public:
 
       need_remote_read_num = 0;
       commit_num = 0;
+      sync_commit_num = 0;
+
       if(clear_status.load() == true){
         clear_time_status();
         clear_status.store(false);
@@ -226,7 +228,7 @@ public:
 
         execute_latency.add(execution_schedule_time);
 
-      LOG(INFO) << "done, send: " << router_recv_txn_num << " " << need_remote_read_num;
+      LOG(INFO) << "router_recv_txn_num: " << router_recv_txn_num << " need_remote_read_num: " << need_remote_read_num;
 
       n_complete_workers.fetch_add(1);
 
@@ -248,7 +250,7 @@ public:
 
       // time_total.add(batch_time * 1000.0 / commit_num);
       
-      LOG(INFO) << "done, send: " << batch_time  << "ms,  " << commit_num;
+      LOG(INFO) << "done, send: " << batch_time  << "ms,  " << commit_num << " " << sync_commit_num;
 
       if(id == 0){
         txn_meta.clear();
@@ -418,7 +420,7 @@ void unpack_route_transaction(){
           auto tableId = readKey.get_table_id();
           auto partitionId = readKey.get_partition_id();
 
-          if (!partitioner.is_partition_replicated_on(partitionId, coordinator_id)) {
+          if (!partitioner.has_master_partition(partitionId)) {
             continue;
           }
 
@@ -463,15 +465,18 @@ void unpack_route_transaction(){
           auto worker = get_available_worker(request_id++);
           all_executors[worker]->transaction_queue.push_no_wait(transactions[i].get());
           real_num += 1;
+          // only count once
+          if (i % n_lock_manager == id && 
+              transactions[i]->on_replica_id == (int)context.coordinator_id) {
+            n_commit.fetch_add(1);
+            commit_num += 1;
+          } else {
+            sync_commit_num += 1;
+          }
         } else {
           skip_num += 1;
         }
-        // only count once
-        if (i % n_lock_manager == id && 
-            transactions[i]->on_replica_id == (int)context.coordinator_id) {
-          n_commit.fetch_add(1);
-          commit_num += 1;
-        }
+
       } else {
         // only count once
         if (i % n_lock_manager == id && 
@@ -581,10 +586,10 @@ void unpack_route_transaction(){
 
       // auto result = transaction->execute(id);
 
-      // auto execution = std::chrono::duration_cast<std::chrono::microseconds>(
-      //                std::chrono::steady_clock::now() - begin)
-      //                .count();
-      // execution_time += execution;
+      auto execution = std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - begin)
+                     .count();
+      execution_time += execution;
       // begin = std::chrono::steady_clock::now();
 
 
@@ -630,8 +635,8 @@ void unpack_route_transaction(){
     if(cnt > 0){
       LOG(INFO) << "total: " << cnt << " " 
                 << idle_time / cnt  << " "
-                << execution_time / cnt << " "
-                << commit_time / cnt;
+                << execution_time   << " " << execution_time / cnt << " "
+                << commit_time      << " " << commit_time / cnt;
     }
   }
 
@@ -650,7 +655,7 @@ void unpack_route_transaction(){
        * 
        */
       auto *worker = this->all_executors[worker_id];
-      if (worker->partitioner.is_partition_replicated_on(partition_id, coordinator_id)) {
+      if (worker->partitioner.has_master_partition(partition_id)) {
         ITable *table = worker->db.find_table(table_id, partition_id);
         CalvinHelper::read(table->search(key), value, table->value_size());
 
@@ -658,15 +663,14 @@ void unpack_route_transaction(){
         for (auto i = 0u; i < active_coordinators.size(); i++) {
           // 发送到涉及到的且非本地coordinator
           // if (i == worker->coordinator_id || !active_coordinators[i])
-          if (i == worker->coordinator_id)
+          if (i == worker->coordinator_id || !active_coordinators[i])
             continue;
-          if(!worker->partitioner.is_partition_replicated_on(partition_id, i) && active_coordinators[i]){
+
             auto sz = MessageFactoryType::new_read_message(
                 *worker->messages[i], *table, id, key_offset, value);
             txn.network_size.fetch_add(sz);
             txn.distributed_transaction = true;
             need_remote_read_num += 1;
-          }
         }
         txn.local_read.fetch_add(-1);
       }
@@ -780,6 +784,7 @@ private:
   std::size_t lock_manager_id;
   bool init_transaction;
   int commit_num;
+  int sync_commit_num;
 
   RandomType random;
   ProtocolType protocol;

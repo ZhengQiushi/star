@@ -270,15 +270,9 @@ public:
             std::unordered_map<size_t, int> overload_node;
             std::unordered_map<size_t, int> idle_node;
 
-            for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
-              if((long long) (cur_busy[j] - aver_val) * (cur_busy[j] - aver_val) > threshold){
-                if((cur_busy[j] - aver_val) > 0){
-                  overload_node[j] = cur_busy[j] - aver_val;
-                } else {
-                  idle_node[j] = aver_val - cur_busy[j];
-                } 
-              }
-            }
+            find_imbalanced_node(overload_node, idle_node, 
+                                cur_busy, aver_val, threshold);
+
             if(overload_node.size() == 0 || idle_node.size() == 0){
               is_ok = false;
               break;
@@ -500,7 +494,12 @@ public:
     }
 
     long long threshold = 400 * 400; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
-    
+    if(WorkloadType::which_workload == myTestSet::YCSB){
+      threshold = 200 * 200;
+      if(cur_timestamp > 10){
+        threshold = 300 * 300;
+      }
+    }
     int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
     
 

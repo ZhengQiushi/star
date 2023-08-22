@@ -331,8 +331,8 @@ public:
       p->router_coordinator_id = simple_txn.destination_coordinator;
       p->_distributed = simple_txn.is_real_distributed;
 
-      star::tpcc::NewOrderQuery test;
-      test.unpack_transaction(simple_txn);
+      // star::tpcc::NewOrderQuery test;
+      // test.unpack_transaction(simple_txn);
 
       // if(p->_distributed){
       //   LOG(INFO) << test.print_str() << "     " 
@@ -436,6 +436,7 @@ public:
     int replica_id = txn.on_replica_id;
 
     auto *worker = this->all_executors[id]; // current-lock-manager
+    bool is_migrate = false;
 
     for (auto k = 0u; k < readSet.size(); k++) {
       auto& readKey = readSet[k];
@@ -464,8 +465,16 @@ public:
               *(this->messages[i]), *table, key, txn.id, key_offset, replica_id);
 
           VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
-                    << txn.readSet.size() << " on replica " << replica_id;            
-          show_key(key, table_id);
+                    << txn.readSet.size() << " on replica " << replica_id;      
+          if(WorkloadType::which_workload == myTestSet::YCSB){
+            LOG(INFO) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
+                    << txn.readSet.size() << " on replica " << replica_id << " " << *(int*)key;     
+            is_migrate = true;
+          } else {
+            show_key(key, table_id);
+          }
+          
+          n_migrate.fetch_add(1);
 
         } else {
           // others, only change the router
@@ -476,6 +485,16 @@ public:
         } 
         txn.pendingResponses++;
       }
+    }
+
+    if(is_migrate){
+      std::string strstr = "";
+      for (auto k = 0u; k < readSet.size(); k++) {
+        auto& readKey = readSet[k];
+        auto key = readKey.get_key();
+        strstr += std::to_string(*(int*)key) + " ";
+      }
+      LOG(INFO) << "ASYNC MIGRATE " << " on replica "   << replica_id << " " << strstr;        
     }
 
     txn.message_flusher(id);

@@ -76,10 +76,6 @@ public:
 
     LOG(INFO) << "Coordinator starts to run " << workers.size() << " workers.";
 
-    // if(context.protocol == "Lion" && context.coordinator_num != id){ // metis
-    //   ControlMessageFactory::pin_process_to_core(context, workers.size() - 2);
-    // }
-
     for (auto i = 0u; i < workers.size(); i++) {
       threads.emplace_back(&Worker::start, workers[i].get());
       if (context.cpu_affinity) {
@@ -259,7 +255,9 @@ public:
                         << workers[i]->total_latency.nth(95) << "\n" ;
                         ;
         }
-        if((context.protocol.find("Lion") != context.protocol.npos || context.protocol == "MyClay") && i == context.worker_num){
+        if((context.protocol.find("Lion") != context.protocol.npos || 
+            context.protocol.find("LION") != context.protocol.npos ||
+            context.protocol == "MyClay") && i == context.worker_num){
           metis_commit += workers[i]->n_commit.load();
           workers[i]->n_commit.store(0);
 

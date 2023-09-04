@@ -208,14 +208,14 @@ public:
       RouterValue router;
       router.set_dynamic_coordinator_id(last_replica);
       if(first_replica <= last_replica){
-        for(int k = first_replica; k <= last_replica; k += 1){
+        for(size_t k = first_replica; k <= last_replica; k += 1){
           router.set_secondary_coordinator_id(k);
         }
       } else {
-        for(int k = 0; k <= last_replica; k += 1){
+        for(size_t k = 0; k <= last_replica; k += 1){
           router.set_secondary_coordinator_id(k);
         }
-        for(int k = first_replica; k < context.coordinator_num; k += 1){
+        for(size_t k = first_replica; k < context.coordinator_num; k += 1){
           router.set_secondary_coordinator_id(k);
         }
       }
@@ -429,7 +429,7 @@ public:
     std::size_t totalKeys = keysPerPartition * partitionNum;
 
     std::vector<std::thread> v;
-    auto now = std::chrono::steady_clock::now();
+    // auto now = std::chrono::steady_clock::now();
 
     for (auto threadID = 0u; threadID < threadsNum; threadID++) {
       v.emplace_back([=]() {
@@ -839,7 +839,9 @@ public:
       initialize_database(context, partitioner.get());
       allocate_router_table(context);
 
-      if(context.protocol.find("Lion") != context.protocol.npos || context.protocol == "MyClay"){
+      if(context.protocol.find("Lion") != context.protocol.npos || 
+         context.protocol.find("LION") != context.protocol.npos ||
+         context.protocol == "MyClay"){
         init_router_table(context, partitioner);
       } else if (context.protocol == "Star"){
         init_star_router_table(context);

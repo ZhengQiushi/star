@@ -50,7 +50,7 @@ namespace star
     this->C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
     DCHECK(this->C_ID >= 1);
 
-    for(int i = 0 ; i < t.keys.size(); i ++ ){
+    for(size_t i = 0 ; i < t.keys.size(); i ++ ){
       auto record_key = t.keys[i];
       if(i >= 3){
         INFO[i - 3].OL_I_ID = (record_key & RECORD_COUNT_OL_ID_VALID);
@@ -122,7 +122,7 @@ namespace star
         int min_cost = INT_MAX;
         int idx = -1;
 
-        for(int i = 0 ; i < costs.size(); i ++ ){
+        for(size_t i = 0 ; i < costs.size(); i ++ ){
             move_cost[i] += costs[i];
             if(min_cost > move_cost[i]){
             min_cost = move_cost[i];
@@ -189,7 +189,7 @@ namespace star
     }
     void AddTxn(simpleTransaction* txn){
       bool need_new_clump = true;
-      for(int i = 0 ; i < clumps.size(); i ++ ){
+      for(size_t i = 0 ; i < clumps.size(); i ++ ){
         if(clumps[i].CountTxn(txn)){
           need_new_clump = false;
           clumps[i].AddTxn(txn);
@@ -209,7 +209,7 @@ namespace star
     std::vector<int> Sort(){
       std::vector<int> ret;
 
-      for(int i = 0 ; i < clumps.size(); i ++ ){
+      for(size_t i = 0 ; i < clumps.size(); i ++ ){
         ret.push_back(i);
       }
       std::sort(ret.begin(), ret.end(), [&](int a, int b){

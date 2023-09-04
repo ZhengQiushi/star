@@ -197,7 +197,7 @@ public:
       std::vector<int> query_keys;
       star::tpcc::NewOrderQuery keys;
       keys.unpack_transaction(*t);
-      for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ;i < t->keys.size() - 3 && t->keys.size() >= 3; i ++ ){
         size_t stock_coordinator_id = (keys.INFO[i].OL_SUPPLY_W_ID - 1) % context.coordinator_num;
         from_nodes_id[stock_coordinator_id] += 1;
         query_keys.push_back(stock_coordinator_id);

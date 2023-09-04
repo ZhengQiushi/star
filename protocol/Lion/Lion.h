@@ -239,7 +239,7 @@ private:
                            std::atomic<uint32_t> &async_message_num) {
 
     auto &readSet = txn.readSet;
-    int replica_num = partitioner.replica_num();
+    size_t replica_num = partitioner.replica_num();
 
     for (auto i = 0u; i < readSet.size(); i++) {
       auto &readKey = readSet[i];

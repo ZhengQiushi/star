@@ -5,7 +5,6 @@
 #pragma once
 
 #include "core/Partitioner.h"
-
 #include "common/Percentile.h"
 #include "core/Delay.h"
 #include "core/Worker.h"

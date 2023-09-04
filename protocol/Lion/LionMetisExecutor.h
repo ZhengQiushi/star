@@ -37,13 +37,12 @@ public:
 
 
   LionMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
-               const ContextType &context, uint32_t &batch_size,
+               const ContextType &context, 
                std::atomic<uint32_t> &worker_status,
                std::atomic<uint32_t> &n_complete_workers,
                std::atomic<uint32_t> &n_started_workers) // ,
                // HashMap<9916, std::string, int> &data_pack_map)
       : Worker(coordinator_id, id), db(db), context(context),
-        batch_size(batch_size),
         l_partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
         s_partitioner(std::make_unique<LionStaticPartitioner<Workload> >(
@@ -233,7 +232,7 @@ public:
     int times = 0;
     ExecutorStatus status;
 
-    while(status != ExecutorStatus::EXIT){
+    while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP ){
       status = static_cast<ExecutorStatus>(worker_status.load());
       // process_metis_request();
       process_request();
@@ -642,7 +641,6 @@ private:
 private:
   DatabaseType &db;
   const ContextType &context;
-  uint32_t &batch_size;
   std::unique_ptr<Partitioner> l_partitioner, s_partitioner;
   Partitioner* partitioner;
   // Partitioner* partitioner;

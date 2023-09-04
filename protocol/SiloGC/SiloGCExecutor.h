@@ -11,9 +11,13 @@
 #include "core/Partitioner.h"
 #include "core/Worker.h"
 #include "glog/logging.h"
-// #include "Manager.h"
+
 #include <chrono>
 
+#include "protocol/SiloGC/SiloGC.h"
+#include "protocol/Silo/SiloHelper.h"
+#include "protocol/SiloGC/SiloGCMessage.h"
+#include "protocol/SiloGC/SiloGCMeta.h"
 namespace star {
 // namespace group_commit {
 
@@ -35,7 +39,7 @@ public:
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers,
-           silo::TransactionMeta<WorkloadType>& txn_meta)
+           silogc::TransactionMeta<WorkloadType>& txn_meta)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -637,7 +641,7 @@ protected:
   const ContextType &context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
-  silo::TransactionMeta<WorkloadType>& txn_meta;
+  silogc::TransactionMeta<WorkloadType>& txn_meta;
 
   StorageType storage;
   std::unique_ptr<Partitioner> partitioner;
@@ -648,7 +652,7 @@ protected:
   Percentile<int64_t> commit_latency, write_latency;
   Percentile<int64_t> dist_latency, local_latency;
   std::unique_ptr<TransactionType> transaction;
-  std::vector<std::unique_ptr<Message>> sync_messages, async_messages, messages;
+  std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
   std::vector<
       std::function<void(MessagePiece, Message &, ITable &, TransactionType *)>>
       messageHandlers;

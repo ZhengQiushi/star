@@ -393,7 +393,7 @@ public:
       int weight_c = 1;
       int weight_s = 1;
 
-      int weight_sum = 0;
+      size_t weight_sum = 0;
 
       std::vector<int> query_keys;
       star::tpcc::NewOrderQuery keys;
@@ -417,7 +417,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
@@ -739,7 +739,7 @@ public:
       do {
         // start tradeoff for balancing
         bool useClump = false;
-        for(int i = 0 ; i < priority.size(); i ++ ){ 
+        for(size_t i = 0 ; i < priority.size(); i ++ ){ 
           int cur_idx = priority[i];
           if(used[cur_idx]) continue;
           auto& cur = clumps.At(cur_idx);

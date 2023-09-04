@@ -164,7 +164,7 @@ public:
               auto debug_master = transaction->debug_record_keys_master();
 
               LOG(INFO) << " new ";
-              for(int i = 0 ; i < debug.size(); i ++){
+              for(size_t i = 0 ; i < debug.size(); i ++){
                 LOG(INFO) << " !!!!! : " << debug[i] << " " << debug_master[i]; 
               }
             // }

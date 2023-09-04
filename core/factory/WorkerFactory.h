@@ -21,6 +21,10 @@
 // #include "core/group_commit/Manager.h"
 
 #include "protocol/Silo/Silo.h"
+#include "protocol/Silo/SiloManager.h"
+#include "protocol/Silo/SiloExecutor.h"
+#include "protocol/Silo/SiloGenerator.h"
+
 #include "protocol/SiloGC/SiloGC.h"
 #include "protocol/SiloGC/SiloGCManager.h"
 #include "protocol/SiloGC/SiloGCGenerator.h"
@@ -44,11 +48,16 @@
 
 
 #include "protocol/Lion/Lion.h"
-#include "protocol/Lion/LionExecutor.h"
-#include "protocol/Lion/LionManager.h"
 #include "protocol/Lion/LionTransaction.h"
 // #include "protocol/Lion/LionRecorder.h"
 #include "protocol/Lion/LionGenerator.h"
+#include "protocol/Lion/LionManager.h"
+#include "protocol/Lion/LionExecutor.h"
+
+#include "protocol/LionS/LionSGenerator.h"
+#include "protocol/LionS/LionSManager.h"
+#include "protocol/LionS/LionSExecutor.h"
+
 
 #include "protocol/Lion/LionMetisExecutor.h"
 #include "protocol/Lion/LionMetisGenerator.h"
@@ -127,7 +136,7 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion", "LionNS", "Hermes", "MyClay", "Aria"};
+                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria"};
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -136,21 +145,23 @@ public:
 
     if (context.protocol == "Silo") {
 
-      // using TransactionType = star::SiloTransaction;
-      // using WorkloadType =
-      //     typename InferType<Context>::template WorkloadType<TransactionType>;
+      using TransactionType = star::SiloTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
 
-      // auto manager = std::make_shared<Manager>(
-      //     coordinator_id, context.worker_num, context, stop_flag);
+      auto manager = std::make_shared<SiloManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag);
 
-      // for (auto i = 0u; i < context.worker_num; i++) {
-      //   workers.push_back(std::make_shared<SiloExecutor<WorkloadType>>(
-      //       coordinator_id, i, db, context, manager->worker_status,
-      //       manager->n_completed_workers, manager->n_started_workers,
-      //       manager->txn_meta));
-      // }
-
-      // workers.push_back(manager);
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<star::SiloExecutor<WorkloadType, SiloGC<DatabaseType>>>(
+            coordinator_id, i, db, 
+            context, manager->worker_status,
+            manager->n_completed_workers, 
+            manager->n_started_workers));
+      }
+      workers.push_back(manager);
 
     } else if (context.protocol == "SiloGC") {
 
@@ -160,7 +171,7 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
-      auto manager = std::make_shared<silo::SiloGCManager<WorkloadType>>(
+      auto manager = std::make_shared<star::SiloGCManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
@@ -211,6 +222,8 @@ public:
       using TransactionType = star::LionTransaction ;// TwoPLTransaction;
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
 
       int manager_thread_id = context.worker_num;
       // if(context.lion_with_metis_init){
@@ -239,7 +252,53 @@ public:
       // 
       // if(context.lion_with_metis_init){
         workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
-            coordinator_id, workers.size(), db, context, manager->batch_size,
+            coordinator_id, workers.size(), db, context,
+            manager->worker_status, manager->n_completed_workers,
+            manager->n_started_workers));
+      // }
+
+
+
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    }  else if (context.protocol.find("LIONS") != context.protocol.npos) {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::LionTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      int manager_thread_id = context.worker_num;
+      // if(context.lion_with_metis_init){
+        manager_thread_id += 1;
+      // }
+
+      auto manager = std::make_shared<LionSManager<WorkloadType>>(
+          coordinator_id, manager_thread_id, context, stop_flag);
+
+      // add recorder for data-transformation
+      // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
+      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
+      //     manager->recorder_status, manager->transmit_status, 
+      //     manager->n_completed_workers, manager->n_started_workers);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<LionSExecutor<WorkloadType, Lion<DatabaseType>>>(
+            coordinator_id, i, db, 
+            context, manager->worker_status,
+            manager->n_completed_workers, 
+            manager->n_started_workers));
+      }
+      // 
+      // if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
+            coordinator_id, workers.size(), db, context,
             manager->worker_status, manager->n_completed_workers,
             manager->n_started_workers));
       // }
@@ -249,64 +308,6 @@ public:
       workers.push_back(manager);
       // workers.push_back(recorder);  
     }
-    //  else if (context.protocol == "LionWithBrain") {
-
-    //   CHECK(context.partition_num %
-    //             (context.worker_num * context.coordinator_num) ==
-    //         0)
-    //       << "In Lion, each partition is managed by only one thread.";
-
-    //   using TransactionType = star::LionTransaction ;// TwoPLTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
-
-    //   auto manager = std::make_shared<lion::LionManager<WorkloadType>>(
-    //       coordinator_id, context.worker_num, context, stop_flag, db);
-
-    //   // add recorder for data-transformation
-    //   // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-    //   //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
-    //   //     manager->recorder_status, manager->transmit_status, 
-    //   //     manager->n_completed_workers, manager->n_started_workers);
-
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<LionExecutor<WorkloadType>>(
-    //         coordinator_id, i, db, context, manager->batch_size,
-    //         manager->worker_status, manager->n_completed_workers, 
-    //         manager->n_started_workers)); // , manager->recorder_status , recorder->data_pack_map
-    //   }
-    //   workers.push_back(manager);
-    //   // workers.push_back(recorder);  
-    // } 
-    // else if (context.protocol == "LionNS") {
-
-    //   CHECK(context.partition_num %
-    //             (context.worker_num * context.coordinator_num) ==
-    //         0)
-    //       << "In Lion, each partition is managed by only one thread.";
-
-    //   using TransactionType = star::LionTransaction ;// TwoPLTransaction;
-    //   using WorkloadType =
-    //       typename InferType<Context>::template WorkloadType<TransactionType>;
-
-    //   auto manager = std::make_shared<LionNSManager<WorkloadType>>(
-    //       coordinator_id, context.worker_num, context, stop_flag, db);
-
-    //   // add recorder for data-transformation
-    //   auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-    //       coordinator_id, context.worker_num + 1, context, stop_flag, db,
-    //       manager->recorder_status, manager->transmit_status, 
-    //       manager->n_completed_workers, manager->n_started_workers);
-
-    //   for (auto i = 0u; i < context.worker_num; i++) {
-    //     workers.push_back(std::make_shared<LionNSExecutor<WorkloadType>>(
-    //         coordinator_id, i, db, context, manager->batch_size,
-    //         manager->worker_status, manager->n_completed_workers,
-    //         manager->n_started_workers, recorder->data_pack_map)); // , manager->recorder_status
-    //   }
-    //   workers.push_back(manager);
-    //   // workers.push_back(recorder);  
-    // } 
     
     else if (context.protocol == "TwoPL") {
 
@@ -330,7 +331,7 @@ public:
       // using WorkloadType =
       //     typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      // auto manager = std::make_shared<silo::SiloGCManager<WorkloadType>>(
+      // auto manager = std::make_shared<star::SiloGCManager<WorkloadType>>(
       //     coordinator_id, context.worker_num, context, stop_flag);
 
       // for (auto i = 0u; i < context.worker_num; i++) {
@@ -486,7 +487,8 @@ public:
                  const Context &context, std::atomic<bool> &stop_flag){
 
     std::vector<std::shared_ptr<Worker>> workers;
-    if (context.protocol == "SiloGC") {
+
+    if (context.protocol == "Silo") {
 
       using TransactionType = star::SiloTransaction;
       using WorkloadType =
@@ -494,7 +496,27 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
-      auto manager = std::make_shared<silo::SiloGCManager<WorkloadType>>(
+      auto manager = std::make_shared<star::SiloManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<star::SiloGenerator<WorkloadType, Silo<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->schedule_meta));
+      }
+
+      workers.push_back(manager);
+
+    } else if (context.protocol == "SiloGC") {
+
+      using TransactionType = star::SiloTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      auto manager = std::make_shared<star::SiloGCManager<WorkloadType>>(
           coordinator_id, context.worker_num, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
@@ -555,6 +577,38 @@ public:
               coordinator_id, i, db, context, manager->worker_status,
               manager->n_completed_workers, manager->n_started_workers, 
               manager->skip_s_phase,
+              manager->schedule_meta));
+      }
+      // 
+      // if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
+              coordinator_id, workers.size(), db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      // }
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    }     else if (context.protocol.find("LIONS") != context.protocol.npos) {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::LionTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      int manager_thread_id = context.worker_num + 1;
+
+      auto manager = std::make_shared<LionSManager<WorkloadType>>(
+          coordinator_id, manager_thread_id, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<LionSGenerator<WorkloadType, Lion<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers,
               manager->schedule_meta));
       }
       // 
@@ -666,7 +720,7 @@ public:
     //   using WorkloadType =
     //       typename InferType<Context>::template WorkloadType<TransactionType>;
 
-    //   auto manager = std::make_shared<silo::SiloGCManager>(
+    //   auto manager = std::make_shared<star::SiloGCManager>(
     //       coordinator_id, context.worker_num, context, stop_flag);
 
     //   for (auto i = 0u; i < context.worker_num; i++) {

@@ -625,7 +625,7 @@ public:
       int weight_c = 1;
       int weight_s = 1;
 
-      int weight_sum = 0;
+      size_t weight_sum = 0;
 
       // check master num at this replica on each node
       size_t from_nodes_id[20] = {0};
@@ -664,7 +664,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(int i = 0 ;i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
         size_t stock_coordinator_id = db.get_dynamic_coordinator_id(
                                             context.coordinator_num, 
@@ -676,7 +676,7 @@ public:
         query_keys.push_back(stock_coordinator_id);
       }
 
-    for(int i = 0 ; i < context.coordinator_num; i ++ ){
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       if(from_nodes_id[i] > master_max_cnt){
         master_max_cnt = from_nodes_id[i];
         replica_destination = i;

@@ -30,7 +30,7 @@ struct NewOrderQuery {
     this->C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
     DCHECK(this->C_ID >= 1);
 
-    for(int i = 0 ; i < t.keys.size(); i ++ ){
+    for(size_t i = 0 ; i < t.keys.size(); i ++ ){
       auto record_key = t.keys[i];
       if(i >= 3){
         INFO[i - 3].OL_I_ID = (record_key & RECORD_COUNT_OL_ID_VALID);

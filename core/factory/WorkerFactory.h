@@ -59,6 +59,14 @@
 #include "protocol/LionS/LionSExecutor.h"
 
 
+#include "protocol/LionSS/LionSS.h"
+#include "protocol/LionSS/LionSSExecutor.h"
+#include "protocol/LionSS/LionSSTransaction.h"
+#include "protocol/LionSS/LionSSGenerator.h"
+#include "protocol/LionSS/LionSSMeitsExecutor.h"
+#include "protocol/LionSS/LionSSMetisGenerator.h"
+#include "protocol/LionSS/LionSSManager.h"
+
 #include "protocol/Lion/LionMetisExecutor.h"
 #include "protocol/Lion/LionMetisGenerator.h"
 
@@ -136,7 +144,7 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria"};
+                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria", "LION-S"};
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -275,18 +283,10 @@ public:
           typename WorkloadType::DatabaseType;
 
       int manager_thread_id = context.worker_num;
-      // if(context.lion_with_metis_init){
-        manager_thread_id += 1;
-      // }
+      manager_thread_id += 1;
 
       auto manager = std::make_shared<LionSManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
-
-      // add recorder for data-transformation
-      // auto recorder = std::make_shared<LionRecorder<WorkloadType> >(
-      //     coordinator_id, context.worker_num + 1, context, stop_flag, db,
-      //     manager->recorder_status, manager->transmit_status, 
-      //     manager->n_completed_workers, manager->n_started_workers);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<LionSExecutor<WorkloadType, Lion<DatabaseType>>>(
@@ -296,14 +296,46 @@ public:
             manager->n_started_workers));
       }
       // 
-      // if(context.lion_with_metis_init){
-        workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
+      workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
             coordinator_id, workers.size(), db, context,
             manager->worker_status, manager->n_completed_workers,
             manager->n_started_workers));
-      // }
 
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    } else if (context.protocol.find("LION-S") != context.protocol.npos) {
 
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::LionSSTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      int manager_thread_id = context.worker_num;
+      manager_thread_id += 1;
+
+      auto manager = std::make_shared<LionSSManager<WorkloadType>>(
+          coordinator_id, manager_thread_id, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<LionSSExecutor<WorkloadType>>(
+            coordinator_id, i, db, 
+            context, manager->worker_status,
+            manager->n_completed_workers, 
+            manager->n_started_workers));
+      }
+      // 
+      workers.push_back(std::make_shared<LionSSMetisExecutor<WorkloadType>>(
+            coordinator_id, workers.size(), db, 
+            context, manager->worker_status, 
+            manager->n_completed_workers,
+            manager->n_started_workers, 
+            manager->txn_meta));
 
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -587,7 +619,7 @@ public:
       // }
       workers.push_back(manager);
       // workers.push_back(recorder);  
-    }     else if (context.protocol.find("LIONS") != context.protocol.npos) {
+    } else if (context.protocol.find("LIONS") != context.protocol.npos) {
 
       CHECK(context.partition_num %
                 (context.worker_num * context.coordinator_num) ==
@@ -619,7 +651,40 @@ public:
       // }
       workers.push_back(manager);
       // workers.push_back(recorder);  
-    } else if (context.protocol == "MyClay") {
+    } else if (context.protocol.find("LION-S") != context.protocol.npos) {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::LionSSTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      int manager_thread_id = context.worker_num + 1;
+
+      auto manager = std::make_shared<LionSSManager<WorkloadType>>(
+          coordinator_id, manager_thread_id, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<star::group_commit::LionSSGenerator<WorkloadType, LionSS<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->schedule_meta));
+      }
+      // 
+      // if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<group_commit::LionSSMetisGenerator<WorkloadType, LionSS<DatabaseType>>>(
+              coordinator_id, workers.size(), db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
+      // }
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    }
+    else if (context.protocol == "MyClay") {
       CHECK(context.partition_num %
                 (context.worker_num * context.coordinator_num) ==
             0)

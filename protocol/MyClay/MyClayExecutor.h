@@ -382,6 +382,7 @@ public:
         //   if(transaction->distributed_transaction){
         //     cross_txn_num ++ ;
             // if(i < 5){
+            if(WorkloadType::which_workload == myTestSet::TPCC){
               auto debug = transaction->debug_record_keys();
               auto debug_master = transaction->debug_record_keys_master();
 
@@ -389,6 +390,7 @@ public:
               for(int i = 0 ; i < debug.size(); i ++){
                 LOG(INFO) << " #### : " << debug[i] << " " << debug_master[i]; 
               }
+            }
             // }
         //   } else {
         //     single_txn_num ++ ;

@@ -205,20 +205,6 @@ public:
     return cur_move_size;
   }
 
-
-  // void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
-  //   // router transaction to coordinators
-  //   uint64_t coordinator_id_dst = txn->destination_coordinator;
-  //   messages_mutex[coordinator_id_dst]->lock();
-  //   size_t router_size = LionMessageFactory::metis_migration_transaction_message(
-  //       *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
-  //       context.coordinator_id);
-  //   flush_message(metis_async_messages, coordinator_id_dst);
-  //   messages_mutex[coordinator_id_dst]->unlock();
-
-  //   n_network_size.fetch_add(router_size);
-  // };
-
   void migration(std::string file_name_){
      
 
@@ -338,22 +324,6 @@ public:
           last_timestamp_int += trigger_time_interval;
           begin = std::chrono::steady_clock::now();
 
-          
-          // latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-          //                         std::chrono::steady_clock::now() - last_timestamp_)
-          //                         .count();
-          // while (latency < start_offset / 2 && status != ExecutorStatus::EXIT){
-          //   status = static_cast<ExecutorStatus>(worker_status.load());
-          //   process_request();
-          //   std::this_thread::sleep_for(std::chrono::microseconds(5));
-          //   latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-          //                           std::chrono::steady_clock::now() - last_timestamp_)
-          //                           .count();
-          //   continue;
-          // }
-          // migration(map_2[cur_workload]);
-
-
           cur_workload = (cur_workload + 1) % workload_num;
           // break; // debug
         }
@@ -448,55 +418,6 @@ public:
     return message;
   }
 
-  // std::size_t process_request() {
-
-  //   std::size_t size = 0;
-
-  //   while (!in_queue.empty()) {
-  //     std::unique_ptr<Message> message(in_queue.front());
-  //     bool ok = in_queue.pop();
-  //     CHECK(ok);
-
-  //     for (auto it = message->begin(); it != message->end(); it++) {
-
-  //       MessagePiece messagePiece = *it;
-  //       auto type = messagePiece.get_message_type();
-  //       DCHECK(type < messageHandlers.size());
-  //       ITable *table = db.find_table(messagePiece.get_table_id(),
-  //                                     messagePiece.get_partition_id());
-
-  //       if(type < controlMessageHandlers.size()){
-  //         // transaction router from LionSSMetisGenerator
-  //         controlMessageHandlers[type](
-  //           messagePiece,
-  //           *sync_messages[message->get_source_node_id()], db,
-  //           &router_transactions_queue,
-  //           &router_stop_queue
-  //         );
-  //       } else if(type < messageHandlers.size()){
-  //         // transaction from LionExecutor
-  //         messageHandlers[type](messagePiece,
-  //                               *sync_messages[message->get_source_node_id()], 
-  //                               sync_messages,
-  //                               db, context, partitioner.get(),
-  //                               transaction.get(), 
-  //                               &router_transactions_queue,
-  //                               &migration_transactions_queue);
-  //       }
-  //       message_stats[type]++;
-  //       message_sizes[type] += messagePiece.get_message_length();
-  //     }
-
-  //     size += message->get_message_count();
-  //     flush_sync_messages();
-  //   }
-  //   return size;
-  // }
-
-  // void setupHandlers(TransactionType &txn){
-  //   txn.remote_request_handler = [this]() { return this->process_request(); };
-  //   txn.message_flusher = [this]() { this->flush_sync_messages(); };
-  // };
 
 
   std::size_t process_request() {
@@ -635,16 +556,6 @@ protected:
 
   std::deque<int> router_stop_queue;
 
-  // std::vector<std::function<void(MessagePiece, Message &, std::vector<std::unique_ptr<Message>>&, 
-  //                                DatabaseType &, const ContextType &, Partitioner *, // add partitioner
-  //                                TransactionType *, 
-  //                                std::deque<simpleTransaction>*,
-  //                                ShareQueue<simpleTransaction>*)>>
-  //     messageHandlers;
-
-  // std::vector<
-  //     std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
-  //     messageHandlers;
   std::vector<
       std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
       messageHandlers;      

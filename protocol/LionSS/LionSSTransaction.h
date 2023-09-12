@@ -241,7 +241,7 @@ public:
           }
         } else {
           abort_lock = true;
-          LOG(INFO) << i << " " << success;
+          // LOG(INFO) << i << " " << success;
         }
       }
 
@@ -256,7 +256,7 @@ public:
         std::this_thread::sleep_for(std::chrono::microseconds(5));
 
         status = get_worker_status();
-        if(status == ExecutorStatus::EXIT){
+        if(status == ExecutorStatus::EXIT || status == ExecutorStatus::CLEANUP){
           LOG(INFO) << "TRANSMITER SHOULD BE STOPPED";
           return true;
         }

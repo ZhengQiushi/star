@@ -417,7 +417,7 @@ public:
     if(coordinator_id_new != coordinator_id_old){
       // 数据更新到 发req的对面
       auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
+      // LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
       
       // update the router 
       router_val->set_dynamic_coordinator_id(coordinator_id_new);
@@ -497,9 +497,9 @@ public:
     auto key = readKey.get_key();
 
     auto test = my_debug_key(table_id, partition_id, key);
-    LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
-                                      << test << " "
-                                      << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
+    // LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
+    //                                   << test << " "
+    //                                   << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
 
     uint64_t last_tid = 0;
 

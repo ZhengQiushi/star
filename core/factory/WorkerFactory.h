@@ -65,6 +65,7 @@
 #include "protocol/LionSS/LionSSGenerator.h"
 #include "protocol/LionSS/LionSSMeitsExecutor.h"
 #include "protocol/LionSS/LionSSMetisGenerator.h"
+#include "protocol/LionSS/LionSSMetisGeneratorR.h"
 #include "protocol/LionSS/LionSSManager.h"
 
 #include "protocol/Lion/LionMetisExecutor.h"
@@ -334,8 +335,7 @@ public:
             coordinator_id, workers.size(), db, 
             context, manager->worker_status, 
             manager->n_completed_workers,
-            manager->n_started_workers, 
-            manager->txn_meta));
+            manager->n_started_workers));
 
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -677,9 +677,11 @@ public:
       }
       // 
       // if(context.lion_with_metis_init){
-        workers.push_back(std::make_shared<group_commit::LionSSMetisGenerator<WorkloadType, LionSS<DatabaseType>>>(
+        workers.push_back(std::make_shared<group_commit::LionSSMetisGeneratorR<WorkloadType, LionSS<DatabaseType>>>(
               coordinator_id, workers.size(), db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+              manager->n_completed_workers, 
+              manager->n_started_workers, 
+              manager->schedule_meta));
       // }
       workers.push_back(manager);
       // workers.push_back(recorder);  

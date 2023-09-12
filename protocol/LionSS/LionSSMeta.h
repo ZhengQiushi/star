@@ -10,6 +10,7 @@
 
 #include <thread>
 #include <vector>
+#include <memory>
 
 namespace star {
 
@@ -63,6 +64,9 @@ struct ScheduleMeta {
 
 
   std::atomic<uint32_t> router_transaction_done[20]; // for single-execution
+
+
+  ShareQueue<simpleTransaction* , 20960> transactions_queue_self;
 };
 
 

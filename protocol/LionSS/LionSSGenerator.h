@@ -137,7 +137,7 @@ public:
     }     
   }
 
-    void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn) {
+  void router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
     // router transaction to coordinators
     size_t coordinator_id_dst = txn->destination_coordinator;
 
@@ -214,11 +214,14 @@ public:
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
 
-  void txn_nodes_involved(simpleTransaction* t, 
-                          std::vector<std::vector<int>>& txns_coord_cost_,
-                          std::vector<int>& busy_local,
-                          std::vector<int>& replicate_busy_local) {
-    
+  void txn_nodes_involved(simpleTransaction* t) {
+      
+      auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
+
+      std::vector<int> busy_local(context.coordinator_num, 0);
+      std::vector<int> replicate_busy_local(context.coordinator_num, 0);
+
+
       std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
       std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
       // std::unordered_map<int, int> nodes_cost;              // cost on each node
@@ -327,11 +330,13 @@ public:
    }
 
 
-  void txn_nodes_involved_tpcc(simpleTransaction* t, 
-                          std::vector<std::vector<int>>& txns_coord_cost_,
-                          std::vector<int>& busy_local,
-                          std::vector<int>& replicate_busy_local) {
-    
+  void txn_nodes_involved_tpcc(simpleTransaction* t) {
+
+      auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
+
+      std::vector<int> busy_local(context.coordinator_num, 0);
+      std::vector<int> replicate_busy_local(context.coordinator_num, 0);
+
       int from_nodes_id[MAX_COORDINATOR_NUM] = {0};              // dynamic replica nums
       int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0};; // secondary replica nums
       // std::unordered_map<int, int> nodes_cost;              // cost on each node
@@ -493,27 +498,25 @@ public:
           // consumed one transaction and route one
           int dispatcher_id  = this->id * context.coordinator_num + i;
 
-          auto & busy_           = schedule_meta.node_busy;
-          auto & txns_coord_cost = schedule_meta.txns_coord_cost;
-          
-          std::vector<int> busy_local(context.coordinator_num, 0);
-          std::vector<int> replicate_busy_local(context.coordinator_num, 0);
-
           // get one transaction from queue
           bool success = false;
-          std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
+          simpleTransaction* new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
 
           DCHECK(success == true);
           // determine its ideal destination
           if(WorkloadType::which_workload == myTestSet::YCSB){
-            txn_nodes_involved(new_txn.get(), txns_coord_cost, 
-                              busy_local, replicate_busy_local);
+            txn_nodes_involved(new_txn);
           } else {
-            txn_nodes_involved_tpcc(new_txn.get(), txns_coord_cost, 
-                              busy_local, replicate_busy_local);
+            txn_nodes_involved_tpcc(new_txn);
           }
           // router the transaction
           router_request(router_send_txn_cnt, new_txn);   
+
+          // add to metis generator for schedule
+          bool ss = schedule_meta.transactions_queue_self.push_no_wait(new_txn);
+          // LOG(INFO) << ss << " " << new_txn->keys[0] << 
+          //                    " " << new_txn->keys[1] << 
+          //                    " " << schedule_meta.transactions_queue_self.size();
 
           // inform generator to create new transactions
           is_full_signal_self[dispatcher_id].store(false);

@@ -180,16 +180,50 @@ public:
     return static_cast<ExecutorStatus>(worker_status_.load());
   }
   std::vector<size_t> debug_record_keys() override {
-    return query.record_keys;
+    return query.Y_KEY;
   }
   std::vector<size_t> debug_record_keys_master() override {
     std::vector<size_t> query_master;
-    DCHECK(false);
+
+    for(int i = 0 ; i < query.Y_KEY.size(); i ++ ){
+
+      int w_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 0, 
+                                                  (void*)& query.Y_KEY[i]);
+
+      query_master.push_back(w_c_id);
+    }
+
     return query_master;
   }
   TransactionResult transmit_execute(std::size_t worker_id) override {
-    DCHECK(false);
-    return TransactionResult::READY_TO_COMMIT;
+    int ycsbTableID = ycsb::tableID;
+    size_t keys_num_ = query.Y_KEY.size();
+
+    for (auto i = 0u; i < keys_num_; i++) {
+      auto key = query.Y_KEY[i];
+      storage.ycsb_keys[i].Y_KEY = key;
+
+      // LOG(INFO) << sizeof(storage.ycsb_keys[i]) << "  " << sizeof(storage.ycsb_values[i]);
+
+      auto key_partition_id = key / context.keysPerPartition; // db.getPartitionID(context, ycsbTableID, key);
+      if(key_partition_id == context.partition_num){
+        // 
+        return TransactionResult::ABORT;
+      }
+      
+      if (query.UPDATE[i]) {
+        this->search_for_update(ycsbTableID, key_partition_id,
+                                storage.ycsb_keys[i], storage.ycsb_values[i]);
+      } else {
+        this->search_for_read(ycsbTableID, key_partition_id,
+                              storage.ycsb_keys[i], storage.ycsb_values[i]);
+      }
+    }
+
+    if (this->process_remaster_requests(worker_id)) {
+      return TransactionResult::ABORT;
+    } 
+    return TransactionResult::TRANSMIT_REQUEST;
   };
   TransactionResult prepare_read_execute(std::size_t worker_id) override {
     

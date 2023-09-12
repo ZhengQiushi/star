@@ -197,11 +197,11 @@ public:
               // MoveRecord<WorkloadType> rec;
               // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-              LOG(INFO) << "cross_txn_num ++ : " << k[0] << " " << kc[0] << "\n"
-                                             " " << k[1] << " " << kc[1] << "\n" 
-                                             " " << k[2] << " " << kc[2] << "\n" 
-                                             " " << k[3] << " " << kc[3] << "\n" 
-                                             " " << k[4] << " " << kc[4];
+              LOG(INFO) << "cross_txn_num ++ : " << k[0] << " | "
+                                             " " << k[1] << " | " 
+                                             " " << k[2] << " | " 
+                                             " " << k[3] << " | " 
+                                             " " << k[4];
             }
           } else {
             single_txn_num ++ ;

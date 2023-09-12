@@ -93,12 +93,20 @@ public:
     }
     dispatcher_num = context.worker_num * context.coordinator_num;
     cur_txn_num = context.batch_size / dispatcher_num ; // * context.coordinator_num
+    
+    is_inited.store(0);
+    start_inited.store(0);
 
     for (auto n = 0u; n < context.coordinator_num; n++) {
       // 处理
       dispatcher.emplace_back([&](int n, int worker_id) {
         ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
         int dispatcher_id  = worker_id * context.coordinator_num + n;
+        // 
+        do {
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        } while (start_inited.load() == 0);  
+        
         while(is_full_signal_self[dispatcher_id].load() == false){
             bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
                                   transactions_queue_self[dispatcher_id]);
@@ -107,6 +115,8 @@ public:
                 is_full_signal_self[dispatcher_id].store(true);
             } 
         }
+        // 
+        is_inited.fetch_add(1);
 
         do {
           status = static_cast<ExecutorStatus>(worker_status.load());
@@ -461,7 +471,8 @@ public:
 
     start_time = std::chrono::steady_clock::now();
     workload.start_time = start_time;
-
+    start_inited.fetch_add(1);
+    
     StorageType storage;
     uint64_t last_seed = 0;
 
@@ -471,6 +482,11 @@ public:
     std::size_t count = 0;
 
     int cur_workload_type = 0;
+
+    do {
+      int a = is_inited.load();
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+    } while (is_inited.load() < context.coordinator_num);  
 
     // main loop
     for (;;) {
@@ -746,6 +762,10 @@ protected:
   ShareQueue<simpleTransaction*, 40960> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
+
+  std::atomic<uint32_t> is_inited;
+  std::atomic<uint32_t> start_inited;
+
   std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];
 
   std::unique_ptr<Partitioner> partitioner;

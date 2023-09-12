@@ -328,14 +328,16 @@ public:
             coordinator_id, i, db, 
             context, manager->worker_status,
             manager->n_completed_workers, 
-            manager->n_started_workers));
+            manager->n_started_workers, 
+            manager->txn_meta));
       }
       // 
       workers.push_back(std::make_shared<LionSSMetisExecutor<WorkloadType>>(
             coordinator_id, workers.size(), db, 
             context, manager->worker_status, 
             manager->n_completed_workers,
-            manager->n_started_workers));
+            manager->n_started_workers, 
+            manager->txn_meta));
 
       workers.push_back(manager);
       // workers.push_back(recorder);  

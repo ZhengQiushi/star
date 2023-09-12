@@ -39,11 +39,13 @@ public:
   LionSSExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
-           std::atomic<uint32_t> &n_started_workers
+           std::atomic<uint32_t> &n_started_workers, 
+           lionss::TransactionMeta<WorkloadType> &migrate_txn_meta
            )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
+        migrate_txn_meta(migrate_txn_meta),
         txn_meta(context.coordinator_num, context.batch_size),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
@@ -98,6 +100,125 @@ public:
       txn_meta.c_transactions_queue[txn_id] = std::move(p);
     }
   }
+
+    void migrate_run_transaction(ShareQueue<int>& txn_id_queue,
+                         std::vector<std::unique_ptr<TransactionType>>& cur_trans) {
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    ProtocolType protocol(db, context, *partitioner.get());
+    WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner.get(), start_time);
+
+    uint64_t last_seed = 0;
+
+    int single_txn_num = 0;
+    int cross_txn_num = 0;
+    size_t cur_queue_size = cur_trans.size();
+    
+    size_t i = 0;
+    for(;;) {
+      bool success = false;
+      i = txn_id_queue.pop_no_wait(success);
+      if(!success){
+        break;
+      }
+      if(i >= cur_trans.size() || cur_trans[i].get() == nullptr){
+        // DCHECK(false) << i << " " << cur_trans.size();
+        continue;
+      }
+
+      bool retry_transaction = false;
+
+      transaction = std::move(cur_trans[i]);
+      
+      if(transaction.get() == nullptr) continue;
+
+      transaction->startTime = std::chrono::steady_clock::now();;
+
+      do {
+        process_request();
+        last_seed = random.get_seed();
+
+        if (retry_transaction) {
+          transaction->reset();
+        } else {
+          // std::size_t partition_id = transaction->get_partition_id();
+          setupHandlers(*transaction);
+        }
+
+        auto s = transaction->txn_nodes_involved(true);
+        if(s.size() == 1){
+          break;
+        }
+
+        // auto debug = transaction->debug_record_keys();
+        // auto debug_master = transaction->debug_record_keys_master();
+
+        // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
+        //                         << debug[1] << " " << debug_master[1]; 
+                                    
+        auto result = transaction->transmit_execute(id);
+        // if(!transaction->is_transmit_requests()){
+        //   if(transaction->distributed_transaction){
+        //     cross_txn_num ++ ;
+        // if(i < 5){
+        //   if(WorkloadType::which_workload == myTestSet::TPCC){
+
+        //   }
+        // }
+        // if(transaction->is_transmit_requests()){
+        //   LOG(INFO) << "transmit txn: " << i  << " " << transaction->get_query_printed() << " " << (result == TransactionResult::TRANSMIT_REQUEST);
+        // }
+        //   } else {
+        //     single_txn_num ++ ;
+
+        //     // debug
+        //     // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
+        //   }
+
+        if (result == TransactionResult::READY_TO_COMMIT) {
+          // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
+          DCHECK(false);
+        } else if(result == TransactionResult::TRANSMIT_REQUEST){
+          // pass
+          uint64_t commit_tid = protocol.generate_tid(*transaction);
+          protocol.release_lock(*transaction, commit_tid, sync_messages);
+          if(!transaction->abort_lock){
+            n_commit.fetch_add(1);
+            n_migrate.fetch_add(transaction->migrate_cnt);
+            n_remaster.fetch_add(transaction->remaster_cnt);
+            retry_transaction = false;
+          } else {
+            n_abort_lock.fetch_add(1);
+            // retry_transactions(t_simple_txn[i]);
+            // protocol.abort(*transaction, sync_messages);
+            retry_transaction = true;
+          }
+        } else {
+          protocol.abort(*transaction, sync_messages);
+          n_abort_no_retry.fetch_add(1);
+          retry_transaction = false;
+        }
+        n_network_size.fetch_add(transaction->network_size);
+        // LOG(INFO) << transaction->network_size;
+      } while (retry_transaction);
+
+      if (i % context.batch_flush == 0) {
+        flush_async_messages();
+        flush_sync_messages();
+      }
+    }
+    flush_async_messages();
+    flush_sync_messages();
+
+    if(cur_queue_size > 0){
+      LOG(INFO) << "cur_queue_size: " << cur_queue_size; //  << " " << " cross_txn_num: " << 
+    }
+
+  }
+
 
     void run_transaction(std::vector<std::unique_ptr<TransactionType>> & cur_txns, 
                          ShareQueue<int>& txn_id_queue) {
@@ -339,6 +460,9 @@ public:
 
       run_transaction(txn_meta.c_transactions_queue,
                       txn_meta.c_txn_id_queue);
+
+      // migrate_run_transaction(migrate_txn_meta.t_txn_id_queue,
+      //                         migrate_txn_meta.t_transactions_queue);
 
       auto total_sec = std::chrono::duration_cast<std::chrono::seconds>(
                         std::chrono::steady_clock::now() - begin)
@@ -672,6 +796,8 @@ protected:
   // std::vector<std::unique_ptr<TransactionType>>  &r_transactions_queue;
   // ShareQueue<int> &txn_id_queue;
   lionss::TransactionMeta<WorkloadType> txn_meta;
+
+  lionss::TransactionMeta<WorkloadType>& migrate_txn_meta;
   
 
   std::unique_ptr<Partitioner> partitioner;

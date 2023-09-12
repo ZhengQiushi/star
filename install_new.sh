@@ -1,9 +1,11 @@
-scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.249:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.249:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.249:/home/centos/
+scp -i ~/.ssh/zqs_key -r docker-18.03.0-ce.tgz zqs@10.77.70.90:/home/zqs/
+scp -i ~/.ssh/zqs_key -r docker.service zqs@10.77.70.90:/home/zqs/
+scp -i ~/.ssh/zqs_key -r zqs_image.tar zqs@10.77.70.90:/home/zqs/
 
+ssh zqs@10.77.70.90 -i ~/.ssh/zqs_key
 
-ssh centos@10.77.70.250 -i .ssh/zzh_cloud
+sudo sh -c "echo '$USER ALL = (ALL) NOPASSWD:ALL' > /etc/sudoers.d/$USER"
+
 
 tar zxf docker-18.03.0-ce.tgz && sudo mv docker/* /usr/bin/
 sudo mv docker.service /etc/systemd/system/
@@ -18,12 +20,15 @@ sudo docker volume create zqs-vol
 sudo chmod -R 777 /home/docker/volumes/
 # sudo chmod -R 777 /var/lib/docker/volumes/ 
 mkdir -p /home/docker/volumes/zqs-vol/_data/star
+mkdir -p /home/docker/volumes/zqs-vol/_data/star/data
 
 docker run -it --mount source=zqs-vol,target=/home  --network host --security-opt seccomp=unconfined   --name zqs_0 413366511/ubuntu  /bin/bash 
 
 
 docker run -it  --network host --security-opt seccomp=unconfined   --name zqs_0 413366511/ubuntu  /bin/bash 
+
 exit
+
 docker container start zqs_0
 docker exec -it zqs_0 bash
 

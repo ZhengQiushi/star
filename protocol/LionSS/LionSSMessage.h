@@ -388,7 +388,7 @@ public:
 
     if(!success){ // VLOG(DEBUG_V12) 
       auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << "  can't Lock " << test; // << " " << tid_int;
+      LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();

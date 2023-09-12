@@ -491,10 +491,10 @@ public:
 
 
   
-  bool scheduler_transactions(int dispatcher_num, int dispatcher_id){    
+  int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
     if(schedule_meta.transactions_queue_self.size() < context.batch_size){
-      return false;
+      return -1;
     }
     int idx_offset = dispatcher_id * cur_txn_num;
 
@@ -508,22 +508,22 @@ public:
     int real_distribute_num = 0;
     // which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<int> busy_local(context.coordinator_num, 0);
     std::vector<int> replicate_busy_local(context.coordinator_num, 0);
     
-    int num = 0;
+    int cnt = 0;
 
-    for(int i = 0; i < cur_txn_num; i ++ ){
+    while(cnt < context.batch_size){
       bool success = false;
       simpleTransaction* new_txn = schedule_meta.transactions_queue_self.pop_no_wait(success); 
       if(!success){
-        return false;
+        break;
       }
       new_txn->is_transmit_request = true;
 
-      int idx = i + idx_offset;
+      int idx = cnt + idx_offset;
 
       txns[idx] = std::make_shared<simpleTransaction>(*new_txn);
       // if(i < 2){
@@ -544,6 +544,7 @@ public:
         real_distribute_num += 1;
       }
       busy_local[txn->destination_coordinator] += 1;
+      cnt += 1;
     }
 
     schedule_meta.txn_id.fetch_add(1);
@@ -573,28 +574,30 @@ public:
     if(WorkloadType::which_workload == myTestSet::TPCC){
       threshold = 300 * 300;
     }
-    int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
+    int aver_val =  cnt * dispatcher_num / context.coordinator_num;
     long long cur_val = cal_load_distribute(aver_val, busy_);
 
 
     long long replica_threshold = 200 * 200 * context.keysPerPartition * context.keysPerPartition;
-    int replica_aver_val = context.keysPerPartition * cur_txn_num * dispatcher_num / context.coordinator_num;
+    int replica_aver_val = context.keysPerPartition * cnt * dispatcher_num / context.coordinator_num;
     // long long replica_cur_val = cal_load_distribute(replica_aver_val, node_replica_busy);
 
 
     if(dispatcher_id == 0){
 
-    LOG(INFO) << "busy: ";
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
-                << cur_val  << " " << aver_val << " "      << cur_val;
-    }
+
     // LOG(INFO) << "replicate_busy: ";
     // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
     //   LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
     // }
 
     if(cur_val > threshold && context.random_router == 0){ 
+      LOG(INFO) << "busy: ";
+      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+        LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
+                  << cur_val  << " " << aver_val << " "      << cur_val;
+      }
+
       if(WorkloadType::which_workload == myTestSet::YCSB){
         balance_master(aver_val, threshold);  
       } else {
@@ -607,7 +610,7 @@ public:
     } else if(real_distribute_num > 0) {
       // pass
     } else {
-      return false;
+      return -1;
     }
 
     // if(replica_cur_val > replica_threshold && context.random_router == 0){
@@ -628,7 +631,7 @@ public:
                  .count() * 1.0 / 1000 ;
     LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
 
-    return true;
+    return cnt;
   }
 
   void find_imbalanced_node(std::unordered_map<size_t, int>& overload_node,
@@ -892,11 +895,11 @@ public:
       auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
 
       std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-      bool ret = scheduler_transactions(dispatcher_num, dispatcher_id);
-      if(ret){
-        int idx_offset = dispatcher_id * cur_txn_num;
+      int ret_cnt = scheduler_transactions(dispatcher_num, dispatcher_id);
+      if(ret_cnt > 0){
+        int idx_offset = dispatcher_id * ret_cnt;
         int send_migrate_request = 0;
-        for(int j = 0; j < cur_txn_num; j ++ ){
+        for(int j = 0; j < ret_cnt; j ++ ){
           int idx = idx_offset + j;
           if(!txns[idx]->is_real_distributed) continue;
 

@@ -35,11 +35,12 @@ public:
   LionSSMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
-           std::atomic<uint32_t> &n_started_workers)
+           std::atomic<uint32_t> &n_started_workers, 
+           lionss::TransactionMeta<WorkloadType> &txn_meta)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        txn_meta(context.coordinator_num, context.batch_size),
+        txn_meta(txn_meta),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -112,17 +113,15 @@ public:
   //   txn_meta.t_transactions_queue[txn_id] = std::move(p);
   // }
 
-    void run_transaction(const ContextType& phase_context,
-                         Partitioner *partitioner,
-                         ShareQueue<int>& txn_id_queue,
+    void run_transaction(ShareQueue<int>& txn_id_queue,
                          std::vector<std::unique_ptr<TransactionType>>& cur_trans) {
     /**
      * @brief 
      * @note modified by truth 22-01-24
      *       
     */
-    ProtocolType protocol(db, phase_context, *partitioner);
-    WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner, start_time);
+    ProtocolType protocol(db, context, *partitioner.get());
+    WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner.get(), start_time);
 
     uint64_t last_seed = 0;
 
@@ -216,7 +215,7 @@ public:
         // LOG(INFO) << transaction->network_size;
       } while (retry_transaction);
 
-      if (i % phase_context.batch_flush == 0) {
+      if (i % context.batch_flush == 0) {
         flush_async_messages();
         flush_sync_messages();
       }
@@ -282,9 +281,8 @@ public:
       
 
       // run_metis_transaction(ExecutorStatus::C_PHASE);
-      run_transaction(context, partitioner.get(), 
-                      txn_meta.t_txn_id_queue,
-                      txn_meta.t_transactions_queue); // 
+      run_transaction(txn_meta.t_txn_id_queue,
+                      txn_meta.t_transactions_queue);
 
       txn_meta.clear();
     }
@@ -593,7 +591,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;
   // Partitioner* partitioner_ptr;
-  lionss::TransactionMeta<WorkloadType> txn_meta;
+  lionss::TransactionMeta<WorkloadType> &txn_meta;
 
   RandomType random;
   ProtocolType protocol;

@@ -91,6 +91,7 @@ public:
         txn_meta.t_txn_id_queue.push_no_wait(txn_id);
       }
       auto p = workload.unpack_transaction(context, 0, txn_meta.t_storages[txn_id], simple_txn, true);
+      p->global_id_ = simple_txn.global_id_;
       // LOG(INFO) << "unpack_route_transaction: " << simple_txn.keys[0] << " | " << simple_txn.keys[1];
 
       txn_meta.t_transactions_queue[txn_id] = std::move(p);
@@ -129,6 +130,7 @@ public:
     int cross_txn_num = 0;
     size_t cur_queue_size = cur_trans.size();
     
+    int total_span = 0;
     size_t i = 0;
     for(;;) {
       bool success = false;
@@ -145,6 +147,8 @@ public:
 
       transaction = std::move(cur_trans[i]);
 
+
+       
       transaction->startTime = std::chrono::steady_clock::now();;
 
       do {
@@ -170,6 +174,11 @@ public:
         //                         << debug[1] << " " << debug_master[1]; 
                                     
         auto result = transaction->transmit_execute(id);
+
+        auto status = static_cast<ExecutorStatus>(worker_status.load());
+        if(status == ExecutorStatus::EXIT || status == ExecutorStatus::CLEANUP){
+          return;
+        }
         // if(!transaction->is_transmit_requests()){
         //   if(transaction->distributed_transaction){
         //     cross_txn_num ++ ;
@@ -214,6 +223,26 @@ public:
         n_network_size.fetch_add(transaction->network_size);
         // LOG(INFO) << transaction->network_size;
       } while (retry_transaction);
+
+
+      auto k = transaction->get_query();
+      auto kc = transaction->get_query_master();
+      // MoveRecord<WorkloadType> rec;
+      // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+      
+      LOG(INFO) << i << " " << transaction->global_id_ << " migration " << total_span / (i + 1) << "  : " << 
+                                     " " << k[0] << " " << kc[0] << " | "
+                                     " " << k[1] << " " << kc[1] << " | " 
+                                     " " << k[2] << " " << kc[2] << " | " 
+                                     " " << k[3] << " " << kc[3] << " | " 
+                                     " " << k[4] << " " << kc[4] << " ( "
+                                         << transaction->migrate_cnt << " | " 
+                                         << transaction->remaster_cnt << " ) ";
+                                      
+
+      total_span += std::chrono::duration_cast<std::chrono::microseconds>(
+                     std::chrono::steady_clock::now() - transaction->startTime)
+                     .count();
 
       if (i % context.batch_flush == 0) {
         flush_async_messages();
@@ -398,79 +427,6 @@ public:
   }
 
   void setupHandlers(TransactionType &txn) {
-    txn.lock_request_handler =
-        [this, &txn](std::size_t table_id, std::size_t partition_id,
-                     uint32_t key_offset, const void *key, void *value,
-                     bool local_index_read, bool write_lock, bool &success,
-                     bool &remote) -> uint64_t {
-      if (local_index_read) {
-        success = true;
-        remote = false;
-        return this->protocol.search(table_id, partition_id, key, value);
-      }
-
-      bool local_read = false;
-      auto &readKey = txn.readSet[key_offset];
-      ITable *table = this->db.find_table(table_id, partition_id);
-      size_t coordinatorID = readKey.get_dynamic_coordinator_id();
-      // master-replica
-      // size_t coordinatorID = this->partitioner->master_coordinator(table_id, partition_id, key);
-      // uint64_t coordinator_secondaryIDs = 0; // = context.coordinator_num + 1;
-      // if(readKey.get_write_lock_request_bit()){
-      //   // write key, the find all its replica
-      //   LionInitPartitioner* tmp = (LionInitPartitioner*)(this->partitioner.get());
-      //   coordinator_secondaryIDs = tmp->secondary_coordinator(table_id, partition_id, key);
-      // }
-      // // sec keys replicas
-      // readKey.set_dynamic_coordinator_id(coordinatorID);
-      // readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
-
-      bool remaster = false;
-
-      if (coordinatorID == context.coordinator_id) {
-        
-        remote = false;
-
-        std::atomic<uint64_t> &tid = table->search_metadata(key);
-
-        if (write_lock) {
-          TwoPLHelper::write_lock(tid, success);
-        } else {
-          TwoPLHelper::read_lock(tid, success);
-        }
-
-        if (success) {
-          return this->protocol.search(table_id, partition_id, key, value);
-        } else {
-          return 0;
-        }
-
-      } else {
-        remote = true;
-
-        for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
-          // also send to generator to update the router-table
-          if(i == coordinator_id){
-            continue; // local
-          }
-          if(i == coordinatorID){
-            // target
-              VLOG(DEBUG_V14) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
-              txn.network_size += MessageFactoryType::new_transmit_message(
-                  *(this->sync_messages[coordinatorID]), *table, key, key_offset, remaster);
-              //  txn.pendingResponses++; already added at myclayTransactions
-          } else {
-              // others, only change the router
-              txn.network_size += MessageFactoryType::new_transmit_router_only_message(
-                  *(this->sync_messages[i]), *table, key, key_offset);
-              txn.pendingResponses++;
-          }            
-        }
-
-        txn.distributed_transaction = true;
-      }
-      return 0;
-    };
     txn.migrate_request_handler =
         [this, &txn](std::size_t table_id, std::size_t partition_id,
                      uint32_t key_offset, const void *key, void *value,
@@ -520,6 +476,15 @@ public:
 
       } else {
         remote = true;
+
+        remaster = table->contains(key); // current coordniator
+
+        if(remaster && !context.migration_only){
+          txn.remaster_cnt ++ ;
+          VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
+        } else {
+          txn.migrate_cnt ++ ;
+        }
 
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
           // also send to generator to update the router-table

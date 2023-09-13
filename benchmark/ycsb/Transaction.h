@@ -365,7 +365,10 @@ public:
     size_t keys_num_ = query.Y_KEY.size();
     for (auto i = 0u; i < keys_num_; i++) {
       auto key = static_cast<T>(query.Y_KEY[i]);
-      record_keys.push_back(key);
+      auto c_id = db.get_dynamic_coordinator_id(context.coordinator_num, 
+                                                ycsb::tableID, 
+                                                (void*)& key);
+      record_keys.push_back(c_id);
     }
     return record_keys;
   }

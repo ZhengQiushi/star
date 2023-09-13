@@ -308,6 +308,8 @@ public:
 
   int remaster_cnt, migrate_cnt; // statistic
 
+  uint64_t global_id_;
+
   // table id, partition id, key, value, local_index_read?, write_lock?,
   // success?, remote?
   std::function<uint64_t(std::size_t, std::size_t, uint32_t, const void *,

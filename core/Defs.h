@@ -83,6 +83,8 @@ struct simpleTransaction {
   size_t idx_;
   size_t metis_idx_;
 
+  int global_id_; // for migration
+
   std::vector<uint64_t> keys;
   std::vector<bool> update; // only for YCSB
   RouterTxnOps op;

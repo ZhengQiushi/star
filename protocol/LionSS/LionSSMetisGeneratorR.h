@@ -516,6 +516,9 @@ public:
     int cnt = 0;
 
     while(cnt < context.batch_size){
+      
+      process_request();
+
       bool success = false;
       simpleTransaction* new_txn = schedule_meta.transactions_queue_self.pop_no_wait(success); 
       if(!success){
@@ -562,9 +565,6 @@ public:
 
     LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
               
-    
-    LOG(INFO) << "real_distribute_num = " << real_distribute_num;
-
     while((int)schedule_meta.txn_id.load() < dispatcher_num){
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
@@ -900,14 +900,20 @@ public:
         int idx_offset = dispatcher_id * ret_cnt;
         int send_migrate_request = 0;
         for(int j = 0; j < ret_cnt; j ++ ){
+
+          process_request();
+          
           int idx = idx_offset + j;
           if(!txns[idx]->is_real_distributed) continue;
 
           send_migrate_request += 1;
-            auto debug_master = debug_record_keys_master(txns[idx]->keys);
+          txns[idx]->global_id_ = ++global_id;
 
-            // LOG(INFO) << j << " : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
-            //                         << txns[idx]->keys[1] << " " << debug_master[1]; 
+          auto debug_master = debug_record_keys_master(txns[idx]->keys);
+
+          LOG(INFO) << j << " " << txns[idx]->global_id_ 
+                    << " : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
+                             << txns[idx]->keys[1] << " " << debug_master[1]; 
 
 
           
@@ -921,6 +927,8 @@ public:
           //              txns[idx]->destination_coordinator; 
 
           // coordinator_send[txns[idx]->destination_coordinator] ++ ;
+          
+
           router_request(router_send_txn_cnt, txns[idx].get());   
 
           if(j % context.batch_flush == 0){
@@ -936,7 +944,7 @@ public:
           flush_message(async_messages, i);
           messages_mutex[i]->unlock();
         }
-        LOG(INFO) << "send_migrate_request: " << send_migrate_request;
+        LOG(INFO) << "send_migrate_request: " << send_migrate_request << " global_id: " << global_id;
       }
         for(int i = 0 ; i < context.coordinator_num; i ++ ){
           schedule_meta.node_busy[i] = 0;
@@ -1289,7 +1297,7 @@ protected:
   int dispatcher_num;// = 1;
   int dispatcher_id;// = 0;
   int cur_txn_num;//  = context.batch_size / dispatcher_num; 
-
+  uint64_t global_id = 0;
 };
 } // namespace group_commit
 

@@ -242,7 +242,8 @@ public:
     size_t cur_queue_size = cur_txns.size(); 
     int count = 0;   
     int router_txn_num = 0;
-
+    // 
+    int total_span = 0;
     // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
     for(;;) {
       bool success = false;
@@ -318,7 +319,8 @@ public:
               // MoveRecord<WorkloadType> rec;
               // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-              LOG(INFO) << "cross_txn_num ++ : " << k[0] << " | "
+              LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
+                                             " " << k[0] << " | "
                                              " " << k[1] << " | " 
                                              " " << k[2] << " | " 
                                              " " << k[3] << " | " 
@@ -343,6 +345,10 @@ public:
             n_commit.fetch_add(1);
             retry_transaction = false;
 
+            total_span += std::chrono::duration_cast<std::chrono::microseconds>(
+                          std::chrono::steady_clock::now() - transaction->startTime)
+                          .count();
+                          
             q.push(std::move(transaction));
           } else {
             if (transaction->abort_lock) {

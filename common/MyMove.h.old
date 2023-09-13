@@ -184,27 +184,21 @@ namespace star
   public:
     std::vector<Clump> clumps;
     std::vector<std::vector<int>>& cost;
-
-    std::unordered_map<int, int> key_clumps_idx;
-
     Clumps(std::vector<std::vector<int>>& cost):cost(cost){
 
     }
     void AddTxn(simpleTransaction* txn){
-        bool need_new_clump = true;
-
-        for(int i = 0; i < txn->keys.size(); i ++ ){
-            if(!key_clumps_idx.count(txn->keys[i])) continue;
-            need_new_clump = false;
-            clumps[key_clumps_idx[txn->keys[i]]].AddTxn(txn);
-            break;
+      bool need_new_clump = true;
+      for(size_t i = 0 ; i < clumps.size(); i ++ ){
+        if(clumps[i].CountTxn(txn)){
+          need_new_clump = false;
+          clumps[i].AddTxn(txn);
+          break;
         }
-        if(need_new_clump){
-            for(int i = 0; i < txn->keys.size(); i ++ ){
-                key_clumps_idx[txn->keys[i]] = clumps.size();
-            }
-            clumps.push_back(Clump(txn, cost));
-        }
+      }
+      if(need_new_clump){
+        clumps.push_back(Clump(txn, cost));
+      }
     }
     size_t Size(){
       return clumps.size();

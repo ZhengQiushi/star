@@ -91,18 +91,6 @@ public:
     outfile_excel.open(context.data_src_path_dir + "metis_router.xls", std::ios::trunc); // ios::trunc
   }
 
-  void router_fence(){
-
-    while(router_transaction_done.load() != router_transactions_send.load()){
-      int a = router_transaction_done.load();
-      int b = router_transactions_send.load();
-      process_request(); 
-    }
-    router_transaction_done.store(0);//router_transaction_done.fetch_sub(router_transactions_send.load());
-    router_transactions_send.store(0);
-  }
-
-
   int router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
@@ -196,7 +184,7 @@ public:
 
       router_send_txn_cnt[coordinator_id_dst]++;
       n_network_size.fetch_add(router_size);
-      router_transactions_send.fetch_add(1);
+      // router_transactions_send.fetch_add(1);
     };
 
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
@@ -496,6 +484,16 @@ public:
     if(schedule_meta.transactions_queue_self.size() < context.batch_size){
       return -1;
     }
+
+    if(router_transaction_done.load() != router_transactions_send.load()){
+      int a = router_transaction_done.load();
+      int b = router_transactions_send.load();
+      return -1;
+    }
+
+    router_transaction_done.store(0);
+    router_transactions_send.store(0);
+
     int idx_offset = dispatcher_id * cur_txn_num;
 
     auto & txns              = schedule_meta.node_txns;
@@ -598,11 +596,11 @@ public:
                   << cur_val  << " " << aver_val << " "      << cur_val;
       }
 
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-        balance_master(aver_val, threshold);  
-      } else {
+      // if(WorkloadType::which_workload == myTestSet::YCSB){
+      //   balance_master(aver_val, threshold);  
+      // } else {
         balance_master_tpcc(aver_val, threshold);  
-      }
+      // }
       LOG(INFO) << " after: ";
       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
@@ -872,7 +870,7 @@ public:
 
     // router_send_txn_cnt[coordinator_id_dst]++;
     n_network_size.fetch_add(router_size);
-    // router_transactions_send.fetch_add(1);
+    router_transactions_send.fetch_add(1);
   };
 
 
@@ -902,7 +900,7 @@ public:
         for(int j = 0; j < ret_cnt; j ++ ){
 
           process_request();
-          
+
           int idx = idx_offset + j;
           if(!txns[idx]->is_real_distributed) continue;
 
@@ -912,7 +910,8 @@ public:
           auto debug_master = debug_record_keys_master(txns[idx]->keys);
 
           LOG(INFO) << j << " " << txns[idx]->global_id_ 
-                    << " : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
+                    << " router to [" << txns[idx]->destination_coordinator
+                    << "] : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
                              << txns[idx]->keys[1] << " " << debug_master[1]; 
 
 
@@ -946,9 +945,9 @@ public:
         }
         LOG(INFO) << "send_migrate_request: " << send_migrate_request << " global_id: " << global_id;
       }
-        for(int i = 0 ; i < context.coordinator_num; i ++ ){
-          schedule_meta.node_busy[i] = 0;
-        }
+      for(int i = 0 ; i < context.coordinator_num; i ++ ){
+        schedule_meta.node_busy[i] = 0;
+      }
       
   }
   void start() override {

@@ -55,6 +55,9 @@ public:
 
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
+
+      messages.emplace_back(std::make_unique<Message>());
+      init_message(messages[i].get(), i);
     }
 
     // partitioner_ptr = partitioner.get();
@@ -92,6 +95,8 @@ public:
       }
       auto p = workload.unpack_transaction(context, 0, txn_meta.t_storages[txn_id], simple_txn, true);
       p->global_id_ = simple_txn.global_id_;
+      p->distributed_transaction = simple_txn.is_real_distributed;
+
       // LOG(INFO) << "unpack_route_transaction: " << simple_txn.keys[0] << " | " << simple_txn.keys[1];
 
       txn_meta.t_transactions_queue[txn_id] = std::move(p);
@@ -138,6 +143,10 @@ public:
       if(!success){
         break;
       }
+
+      ControlMessageFactory::router_transaction_response_message(*(messages[context.coordinator_num]));
+      flush_messages(messages);
+
       if(i >= cur_trans.size() || cur_trans[i].get() == nullptr){
         // DCHECK(false) << i << " " << cur_trans.size();
         continue;
@@ -163,10 +172,11 @@ public:
         }
 
         auto s = transaction->txn_nodes_involved(true);
-        if(s.size() == 1){
+        if(!transaction->distributed_transaction && s.size() == 1){
           break;
         }
 
+        
         // auto debug = transaction->debug_record_keys();
         // auto debug_master = transaction->debug_record_keys_master();
 
@@ -243,6 +253,7 @@ public:
       total_span += std::chrono::duration_cast<std::chrono::microseconds>(
                      std::chrono::steady_clock::now() - transaction->startTime)
                      .count();
+
 
       if (i % context.batch_flush == 0) {
         flush_async_messages();

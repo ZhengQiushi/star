@@ -52,7 +52,7 @@ struct ScheduleMeta {
   
   std::mutex l;
   std::vector<std::shared_ptr<simpleTransaction>> node_txns;
-  std::unordered_map<size_t, int> node_busy;
+  std::unordered_map<size_t, long long> node_busy;
   std::vector<std::vector<int>> txns_coord_cost;
 
   std::atomic<uint32_t> txn_id;

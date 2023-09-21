@@ -116,7 +116,7 @@ public:
   }
 
 
-    static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
+  static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
                                                     simpleTransaction& txn, uint64_t op){
     // 
     // op = src_coordinator_id
@@ -231,7 +231,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
     new_router_txn.is_transmit_request = is_transmit_request;
     new_router_txn.idx_ = index;
 
-    VLOG(DEBUG_V6) << " METIS GET ROUTER " << is_transmit_request << " " << is_distributed << " " << index << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
+    // LOG(INFO) << " METIS GET ROUTER " << is_transmit_request << " " << is_distributed << " " << index << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
     metis_router_transactions_queue->push_no_wait(new_router_txn);
   }
   

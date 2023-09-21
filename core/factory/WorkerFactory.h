@@ -64,7 +64,6 @@
 #include "protocol/LionSS/LionSSTransaction.h"
 #include "protocol/LionSS/LionSSGenerator.h"
 #include "protocol/LionSS/LionSSMeitsExecutor.h"
-#include "protocol/LionSS/LionSSMetisGenerator.h"
 #include "protocol/LionSS/LionSSMetisGeneratorR.h"
 #include "protocol/LionSS/LionSSManager.h"
 

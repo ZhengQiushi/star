@@ -98,11 +98,11 @@ namespace star
 
         Clump(simpleTransaction* txn, std::vector<std::vector<int>>& cost)
         : cost(cost){
-        hot = 0;
-        dest = -1;
-        memset(move_cost, 0, sizeof(move_cost));
-        
-        AddTxn(txn);
+            hot = 0;
+            dest = -1;
+            memset(move_cost, 0, sizeof(move_cost));
+            
+            AddTxn(txn);
         }
         // 
         bool CountTxn(simpleTransaction* txn){
@@ -114,116 +114,145 @@ namespace star
             return false;
         }
         void AddTxn(simpleTransaction* txn){
-        for(auto& i : txn->keys){
-            keys[i] += 1;
-        }
-        auto& costs = cost[txn->idx_];
-
-        int min_cost = INT_MAX;
-        int idx = -1;
-
-        for(size_t i = 0 ; i < costs.size(); i ++ ){
-            move_cost[i] += costs[i];
-            if(min_cost > move_cost[i]){
-            min_cost = move_cost[i];
-            idx = i;
+            for(auto& i : txn->keys){
+                keys[i] += 1;
             }
-        }
+            auto& costs = cost[txn->idx_];
 
-        this->dest = idx;
-        txns.push_back(txn);
-        hot += 1;
+            int min_cost = INT_MAX;
+            int idx = -1;
+
+            for(size_t i = 0 ; i < costs.size(); i ++ ){
+                move_cost[i] += costs[i];
+                if(min_cost > move_cost[i]){
+                    min_cost = move_cost[i];
+                    idx = i;
+                }
+            }
+
+            this->dest = idx;
+            txns.push_back(txn);
+            hot += 1;
         }
 
         std::pair<int, int> CalIdleNode(const std::unordered_map<size_t, int>& idle_node,
                                         bool is_init){
-        int idle_coord_id = -1;                        
-        int min_cost = INT_MAX;
-        // int idle_coord_id = -1;
-        for(auto& idle: idle_node){
-            // 
-            if(is_init){
-            if(min_cost > move_cost[idle.first]){
-                min_cost = move_cost[idle.first];
-                idle_coord_id = idle.first;
+            int idle_coord_id = -1;                        
+            int min_cost = INT_MAX;
+            // int idle_coord_id = -1;
+            for(auto& idle: idle_node){
+                // 
+                if(is_init){
+                    if(min_cost > move_cost[idle.first]){
+                        min_cost = move_cost[idle.first];
+                        idle_coord_id = idle.first;
+                    }
+                } else {
+                    if(move_cost[idle.first] <= -150){
+                        idle_coord_id = idle.first;
+                    }
+                }
             }
-            } else {
-            if(move_cost[idle.first] <= -150){
-                idle_coord_id = idle.first;
-            }
-            }
+            return std::make_pair(idle_coord_id, min_cost);
         }
-        return std::make_pair(idle_coord_id, min_cost);
+
+        std::pair<int, int> CalIdleNodes(const std::unordered_map<size_t, int>& idle_node){
+            int idle_coord_id = -1;                        
+            int min_cost = INT_MAX;
+            // int idle_coord_id = -1;
+            for(auto& idle: idle_node){
+                if(min_cost > move_cost[idle.first]){
+                    min_cost = move_cost[idle.first];
+                    idle_coord_id = idle.first;
+                }
+            }
+            return std::make_pair(idle_coord_id, min_cost);
         }
 
         void UpdateDest(int new_dest){
-        dest = new_dest;
+            move_cost[dest] -= this->hot;
+            move_cost[new_dest] += this->hot;
+            dest = new_dest;
 
-        std::string print = "";
-        for(auto& t : txns){
-            t->is_distributed = true;
-            // add dest busy
-            t->is_real_distributed = true;
-            // t->keys
+            // std::string print = "";
+            for(auto& t : txns){
+                t->is_distributed = true;
+                // add dest busy
+                t->is_real_distributed = true;
+                // t->keys
 
-            // TPCCdebug debug;
-            // debug.unpack_transaction(*t);
-            // print += debug.print_str();
-            // print += " -> " + std::to_string(t->destination_coordinator) + " " 
-            //                 + std::to_string(new_dest) + "     ";
+                // TPCCdebug debug;
+                // debug.unpack_transaction(*t);
+                // print += debug.print_str();
+                // print += " -> " + std::to_string(t->destination_coordinator) + " " 
+                //                 + std::to_string(new_dest) + "     ";
+
+                t->destination_coordinator = new_dest;
+                t->access_frequency = this->hot;
+            }
 
             
-            t->destination_coordinator = new_dest;
-        }
-        LOG(INFO) << print;
+            // LOG(INFO) << print;
         }
 
     };
 
-      struct Clumps {
-  public:
-    std::vector<Clump> clumps;
-    std::vector<std::vector<int>>& cost;
+    struct Clumps {
+    public:
+        std::vector<Clump> clumps;
+        std::vector<std::vector<int>>& cost;
 
-    std::unordered_map<int, int> key_clumps_idx;
+        std::unordered_map<int, int> key_clumps_idx;
 
-    Clumps(std::vector<std::vector<int>>& cost):cost(cost){
+        Clumps(std::vector<std::vector<int>>& cost):cost(cost){
 
-    }
-    void AddTxn(simpleTransaction* txn){
-        bool need_new_clump = true;
-
-        for(int i = 0; i < txn->keys.size(); i ++ ){
-            if(!key_clumps_idx.count(txn->keys[i])) continue;
-            need_new_clump = false;
-            clumps[key_clumps_idx[txn->keys[i]]].AddTxn(txn);
-            break;
         }
-        if(need_new_clump){
+        void AddTxn(simpleTransaction* txn){
+            bool need_new_clump = true;
+
             for(int i = 0; i < txn->keys.size(); i ++ ){
-                key_clumps_idx[txn->keys[i]] = clumps.size();
+                if(!key_clumps_idx.count(txn->keys[i])) continue;
+                need_new_clump = false;
+                clumps[key_clumps_idx[txn->keys[i]]].AddTxn(txn);
+                break;
             }
-            clumps.push_back(Clump(txn, cost));
+            if(need_new_clump){
+                for(int i = 0; i < txn->keys.size(); i ++ ){
+                    key_clumps_idx[txn->keys[i]] = clumps.size();
+                }
+                clumps.push_back(Clump(txn, cost));
+            }
         }
-    }
-    size_t Size(){
-      return clumps.size();
-    }
-    Clump& At(int i){
-      return clumps[i];
-    }
-    std::vector<int> Sort(){
-      std::vector<int> ret;
+        size_t Size(){
+        return clumps.size();
+        }
+        Clump& At(int i){
+        return clumps[i];
+        }
+        std::vector<int> Sort(){
+            std::vector<int> ret;
 
-      for(size_t i = 0 ; i < clumps.size(); i ++ ){
-        ret.push_back(i);
-      }
-      std::sort(ret.begin(), ret.end(), [&](int a, int b){
-        return clumps[a].hot < clumps[b].hot;
-      });
-      return ret;
-    }
-  };
+            for(size_t i = 0 ; i < clumps.size(); i ++ ){
+                ret.push_back(i);
+            }
+            std::sort(ret.begin(), ret.end(), [&](int a, int b){
+                return clumps[a].hot < clumps[b].hot;
+            });
+            
+            updateTxnHot();
+
+            return ret;
+        }
+        void updateTxnHot(){
+            for(auto& c : clumps){
+                // std::string print = "";
+                for(auto& t : c.txns){
+                    t->access_frequency = c.hot;
+                }
+                // LOG(INFO) << print;
+            }
+        }
+    };
 
 
     template <class Workload>

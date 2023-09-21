@@ -31,7 +31,7 @@ public:
 
   using ProtocolType = Lion<DatabaseType>;
 
-  using MessageType = LionMessage;
+
   using MessageFactoryType = LionMetisMessageFactory;
   using MessageHandlerType = LionMetisMessageHandler<DatabaseType>;
 
@@ -212,7 +212,7 @@ public:
     while(size > 0){
       bool success = metis_router_transactions_queue.pop_no_wait(t);
       if(success){
-        VLOG(DEBUG_V16) << "Get Metis migration transaction ID(" << t.idx_ << ").";
+        // LOG(INFO) << "Get Metis migration transaction ID(" << t.idx_ << ").";
         size_t txn_id = m_transactions_queue.size();
         if(txn_id >= metis_storages.size()){
           DCHECK(false);
@@ -232,7 +232,7 @@ public:
     int times = 0;
     ExecutorStatus status;
 
-    while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP ){
+    while(status != ExecutorStatus::EXIT){
       status = static_cast<ExecutorStatus>(worker_status.load());
       // process_metis_request();
       process_request();
@@ -351,7 +351,7 @@ public:
             if (commit) {
               size_t ycsbTableID = ycsb::ycsb::tableID;
               if(transaction->readSet.size() > 1)
-                VLOG(DEBUG_V9) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
+                LOG(INFO) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
                          << "   " << *(int*)transaction->readSet[1].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
@@ -417,27 +417,21 @@ public:
       auto messagePiece = *it;
       auto message_type = messagePiece.get_message_type();
       //!TODO replica 
-      if(message_type == static_cast<int>(LionMessage::REPLICATION_RESPONSE)){
+      if(message_type == static_cast<int>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_REQUEST)){
         auto message_length = messagePiece.get_message_length();
         
         ////  // LOG(INFO) << "recv : " << ++total_async;
         // async_message_num.fetch_sub(1);
-        int debug_key;
-        auto stringPiece = messagePiece.toStringPiece();
-        Decoder dec(stringPiece);
-        dec >> debug_key;
+        // int debug_key;
+        // auto stringPiece = messagePiece.toStringPiece();
+        // Decoder dec(stringPiece);
+        // dec >> debug_key;
 
         // async_message_respond_num.fetch_add(1);
-        VLOG(DEBUG_V11) << "async_message_respond_num : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id() << " " << debug_key;
+        // LOG(INFO) << "LionMetisMessage : " << async_message_respond_num.load() << "from " << message->get_source_node_id() << " to " << message->get_dest_node_id(); //  << " " << debug_key;
       }
     }
-    // if(static_cast<int>(LionMessage::METIS_MIGRATION_TRANSACTION_REQUEST) <= message_type && 
-    //    message_type <= static_cast<int>(LionMessage::METIS_IGNORE)){
-    //   in_queue_metis.push(message);
-    // } else {
-      in_queue.push(message);
-    // }
-    
+    in_queue.push(message);
   }
   Message *pop_message() override {
     if (out_queue.empty())

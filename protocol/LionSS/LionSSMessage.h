@@ -311,6 +311,52 @@ public:
     message.flush();
     return message_size;
   }
+
+  static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
+                                                    simpleTransaction& txn, uint64_t op){
+    // 
+    // op = src_coordinator_id
+    auto& update_ = txn.update; // txn->get_query_update();
+    auto& key_ = txn.keys; // txn->get_query();
+    uint64_t txn_size = (uint64_t)key_.size();
+    auto key_size = sizeof(uint64_t);
+    uint64_t is_distributed = txn.is_distributed;
+    uint64_t is_transmit_request = txn.is_transmit_request;
+    size_t index = txn.idx_;
+
+    auto message_size =
+        MessagePiece::get_header_size() + sizeof(op) + sizeof(is_distributed) + sizeof(index) + sizeof(is_transmit_request) + 
+                      sizeof(txn_size) + (key_size + sizeof(bool)) * txn_size;
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_REQUEST), message_size,
+        table_id, 0);
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder << op << is_distributed << index << is_transmit_request << txn_size;
+    for(size_t i = 0 ; i < txn_size; i ++ ){
+      uint64_t key = key_[i];
+      bool update = update_[i];
+      encoder.write_n_bytes((void*) &key, key_size);
+      encoder.write_n_bytes((void*) &update, sizeof(bool));
+//      LOG(INFO) <<  key_[i] << " " << update_[i];
+    }
+    message.flush();
+    VLOG(DEBUG_V16) << " METIS SEND ROUTER " << message.get_source_node_id() << " " << message.get_dest_node_id() << " " << message.get_worker_id() << " " << is_distributed << "  " << is_transmit_request << " " << txn.keys[0] << " " << txn.keys[1];
+    return message_size;
+  }
+
+  static std::size_t metis_migration_transaction_response_message(Message &message){
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size();
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionMetisMessage::METIS_MIGRATION_TRANSACTION_RESPONSE), message_size,
+        0, 0);
+    star::Encoder encoder(message.data);
+    encoder << message_piece_header;
+    message.flush();
+    return message_size;
+  }
 };
 
 template <class Database> class LionSSMessageHandler {

@@ -110,15 +110,16 @@ public:
     std::vector<std::shared_ptr<myMove<WorkloadType>>> cur_moves;
 
 
-    static int transmit_idx = 0; // split into sub-transactions
-    static int metis_transmit_idx = 0;
+
 
     const int transmit_block_size = 10;
 
     int cur_move_size = my_clay->move_plans.size();
+    long long access_freq_aver = 0;
+
     // pack up move-steps to transmit request
     double thresh_ratio = 1;
-    for(int i = 0 ; i < thresh_ratio * cur_move_size ; i ++ ){ // 
+    for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
       bool success = false;
       std::shared_ptr<myMove<WorkloadType>> cur_move;
       
@@ -128,20 +129,24 @@ public:
       
       auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
       metis_new_txn->access_frequency = cur_move->access_frequency;
-      metis_new_txn->destination_coordinator = cur_move->dest_coordinator_id;
+
+      access_freq_aver += cur_move->access_frequency;
 
       for(auto move_record: cur_move->records){
           metis_new_txn->keys.push_back(move_record.record_key_);
           metis_new_txn->update.push_back(true);
       }
       //
-
       metis_txns.push_back(metis_new_txn);
       cur_moves.push_back(cur_move);
-      
     }
+    if(cur_move_size == 0){
+      return cur_move_size;
+    }
+    access_freq_aver /= cur_move_size;
 
-    // scheduler_transactions(metis_txns, router_send_txn_cnt);
+    scheduler_transactions_(metis_txns, router_send_txn_cnt, access_freq_aver);
+
 
     // pull request
     std::vector<simpleTransaction*> transmit_requests;
@@ -152,7 +157,7 @@ public:
 
       for(auto move_record: cur_moves[i]->records){
           new_txn->keys.push_back(move_record.record_key_);
-          new_txn->update.push_back(true);
+          new_txn->update.push_back(false);
           new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
           new_txn->metis_idx_ = metis_txns[i]->idx_;
 
@@ -170,44 +175,46 @@ public:
 
 
     my_clay->move_plans.clear();
+
     
-    // 
-    auto router_request = [&](simpleTransaction* txn) {
-      size_t coordinator_id_dst = txn->destination_coordinator;
-      // router transaction to coordinators
-      messages_mutex[coordinator_id_dst]->lock();
-      size_t router_size = ControlMessageFactory::new_router_transaction_message(
-          *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
-          context.coordinator_id);
-      flush_message(metis_async_messages, coordinator_id_dst);
-      messages_mutex[coordinator_id_dst]->unlock();
-
-      router_send_txn_cnt[coordinator_id_dst]++;
-      n_network_size.fetch_add(router_size);
-      // router_transactions_send.fetch_add(1);
-    };
-
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
-      // transmit_request_queue.push_no_wait(transmit_requests[i]);
-      // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
-      outfile_excel << "Send LionSS Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      outfile_excel << "Send MyClay Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
-      router_request(transmit_requests[i]);
+      router_request(router_send_txn_cnt, transmit_requests[i]);
       // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
       // }
     }
+
+    outfile_excel << "Done. \n";
+
+    transmit_idx = 0; // split into sub-transactions
+    metis_transmit_idx = 0;
+
     LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
 
     return cur_move_size;
   }
 
+  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
+    // router transaction to coordinators
+    uint64_t coordinator_id_dst = txn->destination_coordinator;
+    messages_mutex[coordinator_id_dst]->lock();
+    size_t router_size = LionMetisMessageFactory::metis_migration_transaction_message(
+        *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
+        context.coordinator_id);
+    flush_message(metis_async_messages, coordinator_id_dst);
+    messages_mutex[coordinator_id_dst]->unlock();
+
+    n_network_size.fetch_add(router_size);
+  };
+
   void migration(std::string file_name_){
      
 
     LOG(INFO) << "start read from file";
-    my_clay->clay_partiion_read_from_file(file_name_.c_str());
+    my_clay->metis_partiion_read_from_file(file_name_.c_str());
     LOG(INFO) << "read from file done";
 
     auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -331,6 +338,8 @@ public:
       // LOG(INFO) << str;
 
       t->destination_coordinator = max_node;
+      t->old_dest = t->destination_coordinator;
+
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
       t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
 
@@ -456,6 +465,8 @@ public:
 
 
       t->destination_coordinator = max_node;
+      t->old_dest = t->destination_coordinator;
+
       t->execution_cost = 10 * weight_sum - max_cnt;
       t->is_real_distributed = (max_cnt == 100 * weight_sum) ? false : true;
 
@@ -476,8 +487,172 @@ public:
 
      return;
    }
+  
+  long long cal_load_average(std::unordered_map<size_t, long long>& busy_){
+    long long cur_val = 0;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      // 
+      cur_val += busy_[i];
+    }
+    cur_val /= context.coordinator_num;
+
+    return cur_val;
+  }
+  
+  struct cmp{
+    bool operator()(simpleTransaction* a, 
+                    simpleTransaction* b){
+      return a->execution_cost < b->execution_cost;
+    }
+  };
+
+  void distributed_transactions(std::priority_queue<simpleTransaction*, 
+                        std::vector<simpleTransaction*>, 
+                        cmp>& q_, 
+                        std::unordered_map<size_t, long long>& busy_){
+    
+    long long aver_val = cal_load_average(busy_);//; cur_thread_transaction_num / context.coordinator_num;
+    int weight = 300;
+    long long threshold = weight / (context.coordinator_num / 2) * weight / (context.coordinator_num / 2); // 2200 - 2800
+
+    long long cur_val = cal_load_distribute(aver_val, busy_);
+
+    if(cur_val > threshold){
+      // start tradeoff for balancing
+      int batch_num = 50; // 
+
+      bool is_ok = true;
+      do {
+        
+        for(int i = 0 ; i < batch_num && q_.size() > 0; i ++ ){
+
+          std::unordered_map<int, int> overload_node;
+          std::unordered_map<int, int> idle_node;
+          aver_val = cal_load_average(busy_);
+          for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
+            if((long long) (busy_[j] - aver_val) * (busy_[j] - aver_val) > threshold){
+              if((busy_[j] - aver_val) > 0){
+                overload_node[j] = busy_[j] - aver_val;
+              } else {
+                idle_node[j] = aver_val - busy_[j];
+              } 
+            }
+          }
+          if(overload_node.size() == 0 || idle_node.size() == 0){
+            is_ok = false;
+            break;
+          }
+          simpleTransaction* t = q_.top();
+          q_.pop();
+
+          if(overload_node.count(t->destination_coordinator)){
+            for(auto& idle: idle_node){
+              // 
+              busy_[t->destination_coordinator] -= t->access_frequency;
+              overload_node[t->destination_coordinator] -= t->access_frequency;
+              if(overload_node[t->destination_coordinator] <= 0){
+                overload_node.erase(t->destination_coordinator);
+              }
+
+              t->destination_coordinator = idle.first;
+              busy_[t->destination_coordinator] += t->access_frequency;
+              idle.second -= t->access_frequency;
+              if(idle.second <= 0){
+                idle_node.erase(idle.first);
+              }
+              break;
+            }
+          }
+
+          if(overload_node.size() == 0 || idle_node.size() == 0){
+            break;
+          }
+
+        }
+        if(q_.empty()){
+          is_ok = false;
+        }
+        
+      } while(cal_load_distribute(aver_val, busy_) > threshold && is_ok);
+    }
+  }
 
 
+  void scheduler_transactions_(
+      std::vector<simpleTransaction*>& metis_txns,
+      std::vector<int>& router_send_txn_cnt,
+      long long access_freq_aver){    
+        
+    std::vector<simpleTransaction*> txns;
+    std::priority_queue<simpleTransaction*, 
+                        std::vector<simpleTransaction*>, 
+                        cmp> heavy_queue;
+
+    std::priority_queue<simpleTransaction*, 
+                        std::vector<simpleTransaction*>, 
+                        cmp> light_queue;
+
+    std::unordered_map<size_t, long long> heavy_busy_;
+    std::unordered_map<size_t, long long> light_busy_;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      heavy_busy_[i] = 0;
+      light_busy_[i] = 0;
+    }
+    
+
+    // find minimal cost routing 
+    for(size_t i = 0; i < metis_txns.size(); i ++ ){
+      simpleTransaction* txn = metis_txns[i];
+      txn_nodes_involved(txn);
+      txns.push_back(txn);
+
+      if((long long)txn->access_frequency > access_freq_aver){
+        heavy_queue.push(txn);
+        heavy_busy_[txn->destination_coordinator] += txn->access_frequency;
+      } else {
+        light_queue.push(txn);
+        light_busy_[txn->destination_coordinator] += txn->access_frequency;
+      }
+    }
+
+    LOG(INFO) << " before scheduler_transactions_ generate : " ;
+    long long aver_val = cal_load_average(heavy_busy_);//; cur_thread_transaction_num / context.coordinator_num;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      // 
+      LOG(INFO) << i << " : " << heavy_busy_[i] << " " << (heavy_busy_[i] - aver_val) * (heavy_busy_[i] - aver_val) << " > ";
+    }
+
+    distributed_transactions(heavy_queue, heavy_busy_);
+    // int cur_thread_transaction_num = metis_txns.size();
+    // LOG(INFO) << "BEFORE";
+    // for(int i = 0; i < txns.size(); i ++ ){
+    //   LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
+    // }
+    // 100 * 110 workload * average 
+
+
+    LOG(INFO) << " scheduler_transactions_ generate : " ;
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      heavy_busy_[i] += light_busy_[i];
+    }
+    aver_val = cal_load_average(heavy_busy_);
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) << i << " : " << heavy_busy_[i] << " " << (heavy_busy_[i] - aver_val) * (heavy_busy_[i] - aver_val);
+    }
+
+    distributed_transactions(light_queue, heavy_busy_);
+
+    aver_val = cal_load_average(heavy_busy_);
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) << i << " : " << heavy_busy_[i] << " " << (heavy_busy_[i] - aver_val) * (heavy_busy_[i] - aver_val);
+    }
+    
+    LOG(INFO) << "NEW";
+    for(size_t i = 0; i < txns.size(); i ++ ){
+      // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
+      outfile_excel << txns[i]->idx_ << "\t" << txns[i]->destination_coordinator << "\t" << txns[i]->access_frequency << "\n";
+    }
+  }
   
   int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
@@ -634,30 +809,42 @@ public:
 
   void find_imbalanced_node(std::unordered_map<size_t, int>& overload_node,
                             std::unordered_map<size_t, int>& idle_node,
-                            std::unordered_map<size_t, int>& busy,
+                            std::unordered_map<size_t, long long>& busy,
                             long long aver_val,
                             long long threshold
                             ){
+    int overloaded_id = -1;
+    int overloaded_num = 0;
+
+    int idle_id = -1;
+    int idle_num = 0;
+
     for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
       // if((long long) (busy[j] - aver_val) * (busy[j] - aver_val) > threshold){
         if((busy[j] - aver_val) > 0){
-          overload_node[j] = busy[j] - aver_val;
+          if(busy[j] - aver_val > overloaded_num){
+            overloaded_num = busy[j] - aver_val;
+            overloaded_id = j;
+          }
+          // overload_node[j] = busy[j] - aver_val;
         } else {
-          idle_node[j] = aver_val - busy[j];
+          if(aver_val - busy[j]  > idle_num){
+            idle_num = aver_val - busy[j];
+            idle_id = j;
+          }
         } 
       // }
     }    
+    if(overloaded_id != -1){
+      overload_node[overloaded_id] = overloaded_num;
+    }
+    if(idle_id != -1){
+      idle_node[idle_id] = idle_num;
+    }
   }
 
-  struct cmp{
-    bool operator()(const simpleTransaction* a, 
-                    const simpleTransaction* b){
-      return a->execution_cost < b->execution_cost;
-    }
-  };
-
   long long cal_load_distribute(int aver_val, 
-                          std::unordered_map<size_t, int>& busy_){
+                          std::unordered_map<size_t, long long>& busy_){
     long long cur_val = 0;
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       // 
@@ -737,8 +924,7 @@ public:
 
           if(overload_node.count(cur.dest)){
             // find minial cost in idle_node
-            auto [idle_coord_id, min_cost] = cur.CalIdleNode(idle_node, 
-                                              (workload_type == 1 || context.lion_with_metis_init == 0));
+            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node);
             if(idle_coord_id == -1){
               continue;
             }
@@ -758,10 +944,10 @@ public:
             if(idle_node[idle_coord_id] <= 0){
               idle_node.erase(idle_coord_id);
             }
-            LOG(INFO) << " after move : " << cur.hot;
-            for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
-              LOG(INFO) <<" busy[" << j << "] = " << busy[j];
-            }
+            // LOG(INFO) << " after move : " << cur.hot;
+            // for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
+            //   LOG(INFO) <<" busy[" << j << "] = " << busy[j];
+            // }
           }
           if(cal_load_distribute(aver_val, busy) <= threshold) {
             break;
@@ -909,10 +1095,13 @@ public:
 
           auto debug_master = debug_record_keys_master(txns[idx]->keys);
 
-          LOG(INFO) << j << " " << txns[idx]->global_id_ 
-                    << " router to [" << txns[idx]->destination_coordinator
-                    << "] : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
-                             << txns[idx]->keys[1] << " " << debug_master[1]; 
+          // LOG(INFO) << j << " " << txns[idx]->global_id_ 
+          //           << " router to [" << txns[idx]->destination_coordinator
+          //           << "] : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
+          //           << txns[idx]->keys[1] << " " << debug_master[1] << " w="
+          //           << txns[idx]->access_frequency << " change=" 
+          //           << (txns[idx]->destination_coordinator != txns[idx]->old_dest) << " "
+          //           << txns[idx]->old_dest << "->" << txns[idx]->destination_coordinator; 
 
 
           
@@ -968,13 +1157,23 @@ public:
     // auto trace_log = std::chrono::steady_clock::now();
 
     std::unordered_map<int, std::string> map_;
-
-    map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls_0";
-    map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls_0";
-    map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_0";
-    map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_0";
-
-
+    
+    if(context.repartition_strategy == "lion"){
+      map_[0] = context.data_src_path_dir + "resultss_partition_30_60.xls";
+      map_[1] = context.data_src_path_dir + "resultss_partition_60_90.xls";
+      map_[2] = context.data_src_path_dir + "resultss_partition_90_120.xls";
+      map_[3] = context.data_src_path_dir + "resultss_partition_0_30.xls";
+    } else if(context.repartition_strategy == "clay"){
+      map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls";
+      map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls";
+      map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls";
+      map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls";
+    } else if(context.repartition_strategy == "metis"){
+      map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
+      map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
+      map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
+      map_[3] = context.data_src_path_dir + "metis_resultss_partition_90_120.xls";
+    }
 
     std::unordered_map<int, std::string> map_2;
 
@@ -995,7 +1194,7 @@ public:
     auto last_timestamp_ = start_time;
     int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-    int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
+    int start_offset = 10 * 1000; // 10 * 1000 * 2; // debug
     // 
     int cur_workload = 0;
 
@@ -1005,7 +1204,7 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-      func();
+      // func();
       if(latency > start_offset){
         break;
       }
@@ -1024,7 +1223,7 @@ public:
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
 
-      func();
+      // func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -1253,6 +1452,9 @@ protected:
   std::vector<int> generator_core_id;
   std::mutex mm;
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
+
+  int transmit_idx = 0; // split into sub-transactions
+  int metis_transmit_idx = 0;
 
   DatabaseType &db;
   const ContextType &context;

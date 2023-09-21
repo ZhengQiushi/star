@@ -552,7 +552,21 @@ public:
           transaction->b.time_local_locks += prepare_read;
           //#####
 
-
+          if(transaction->distributed_transaction){
+            if(i < 5){
+              auto k = transaction->get_query();
+              auto kc = transaction->get_query_master();
+              // MoveRecord<WorkloadType> rec;
+              // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+              
+              LOG(INFO) << "cross_txn_num ++ : " << " " << 
+                                             " " << k[0] << " | "
+                                             " " << k[1] << " | " 
+                                             " " << k[2] << " | " 
+                                             " " << k[3] << " | " 
+                                             " " << k[4];
+            }
+          }
           
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           // ####

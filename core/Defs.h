@@ -94,7 +94,10 @@ struct simpleTransaction {
   bool is_real_distributed; // for executor
   bool is_transmit_request; // only for clay
   int on_replica_id;
+  
   uint64_t destination_coordinator;
+  int old_dest;
+
   int execution_cost;
   uint64_t access_frequency;
 

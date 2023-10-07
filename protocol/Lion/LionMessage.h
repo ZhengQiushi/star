@@ -359,9 +359,9 @@ public:
             VLOG(DEBUG_V12) << txn_id << " " 
                             << table_id << " " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
             
-            if(!is_metis){
+            // if(!is_metis){
               router_val->set_dynamic_coordinator_id(coordinator_id_new);
-            }
+            // }
             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
             encoder << latest_tid 
@@ -553,10 +553,10 @@ public:
         if(coordinator_id_new != coordinator_id_old){
           VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
 
-          if(!is_metis){
+          // if(!is_metis){
             // update router
             router_val->set_dynamic_coordinator_id(coordinator_id_new);
-          }
+          // }
           router_val->set_secondary_coordinator_id(coordinator_id_new);
           readKey.set_dynamic_coordinator_id(coordinator_id_new);
           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
@@ -776,9 +776,9 @@ public:
         auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
         auto router_val = (RouterValue*)router_table->search_value(key);
 
-        if(!is_metis){
+        // if(!is_metis){
           router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
-        }
+        // }
         router_val->set_secondary_coordinator_id(coordinator_id_new);
 
         // if(context.coordinator_id == context.coordinator_num){
@@ -952,9 +952,9 @@ public:
             // 数据更新到 发req的对面
             VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid  << " remaster: " << remaster; // << " static: " << static_coordinator_id
             
-            if(!is_metis){
+            // if(!is_metis){
               router_val->set_dynamic_coordinator_id(coordinator_id_new);
-            }
+            // }
             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
             encoder << latest_tid << key_offset << txn_id << success << remaster << is_metis;
@@ -1141,10 +1141,10 @@ public:
         if(coordinator_id_new != coordinator_id_old){
           VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " async reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
 
-          if(!is_metis){
+          // if(!is_metis){
             // update router
             router_val->set_dynamic_coordinator_id(coordinator_id_new);
-          }
+          // }
           router_val->set_secondary_coordinator_id(coordinator_id_new);
           // readKey.set_dynamic_coordinator_id(coordinator_id_new);
           // readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
@@ -1259,9 +1259,9 @@ public:
         auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
         auto router_val = (RouterValue*)router_table->search_value(key);
 
-        if(!is_metis){
+        // if(!is_metis){
           router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
-        }
+        // }
         router_val->set_secondary_coordinator_id(coordinator_id_new);
 
         if(context.coordinator_id == context.coordinator_num){

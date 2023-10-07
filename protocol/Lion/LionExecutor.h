@@ -699,7 +699,10 @@ public:
               
               n_migrate.fetch_add(transaction->migrate_cnt);
               n_remaster.fetch_add(transaction->remaster_cnt);
-
+              // if(transaction->migrate_cnt > 0){
+              //   LOG(INFO) << "migrate : " << *(int*)transaction->readSet[0].get_key() << " "
+              //             << *(int*)transaction->readSet[1].get_key();
+              // }
               // ####
               int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
                                                                     std::chrono::steady_clock::now() - transaction->b.startTime)
@@ -782,6 +785,9 @@ public:
       << " : "        << why[13] / count; // << "  router : " << time1 / cur_queue_size; 
       // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
       // remaster_delay_transactions = 0;
+
+      // int test = 2601515;
+      // LOG(INFO) << "w2601515 " << db.get_dynamic_coordinator_id(context.coordinator_num, 0, (void*) &test);
     }
       
 
@@ -1109,6 +1115,13 @@ private:
             txn.network_size += MessageFactoryType::new_search_message(
                 *(this->sync_messages[i]), *table, key, 
                 key_offset, txn.id, remaster, false);
+
+                
+            // LOG(INFO) << "SYNC !! " << txn.id << " " 
+            //           << table_id   << " ASK " 
+            //           << i << " " << *(int*)key << " " << txn.readSet.size() << " " 
+            //           << txn.pendingResponses 
+            //           << db.get_dynamic_coordinator_id(context.coordinator_num, 0, key);
           } else {
             // others, only change the router
             txn.network_size += MessageFactoryType::new_search_router_only_message(
@@ -1117,9 +1130,7 @@ private:
           }            
           txn.pendingResponses++;
             
-          VLOG(DEBUG_V8) << "SYNC !! " << txn.id << " " 
-                         << table_id   << " ASK " 
-                         << i << " " << *(int*)key << " " << txn.readSet.size() << " " << txn.pendingResponses;
+
           // LOG(INFO) << "txn.pendingResponses: " << txn.pendingResponses << " " << readKey.get_write_lock_bit();
         }
         txn.distributed_transaction = true;

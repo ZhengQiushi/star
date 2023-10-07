@@ -355,7 +355,9 @@ public:
                 VLOG(DEBUG_V9) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
                          << "   " << *(int*)transaction->readSet[1].get_key() 
-                         << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
+                         << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()) 
+                         << "   " << transaction->migrate_cnt 
+                         << "   " << transaction->remaster_cnt ; 
 
               n_commit.fetch_add(1);
               
@@ -390,6 +392,9 @@ public:
       VLOG(DEBUG_V6) << "METIS TRANSACTION: " << transaction->get_query_printed();
       VLOG(DEBUG_V6) << "METIS cur_queue_size:" << cur_queue_size << " metis_txn_num: " << metis_txn_num << " prepare: " << time_prepare_read / cur_queue_size << "  execute: " << time_read_remote / cur_queue_size << "  commit: " << time3 / cur_queue_size << "  router : " << time1 / cur_queue_size; 
     }
+
+    // int test = 2601515;
+    // LOG(INFO) << "w2601515 " << db.get_dynamic_coordinator_id(context.coordinator_num, 0, (void*) &test);
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 

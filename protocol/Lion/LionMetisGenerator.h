@@ -426,7 +426,7 @@ public:
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // transmit_request_queue.push_no_wait(transmit_requests[i]);
       // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
-      // outfile_excel << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      // LOG(INFO) << "Send Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
       metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
@@ -521,7 +521,7 @@ public:
         auto last_timestamp_ = start_time;
         int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-        int start_offset = 30 * 1000;
+        int start_offset = 10 * 1000;
         // 
         int cur_workload = 0;
 

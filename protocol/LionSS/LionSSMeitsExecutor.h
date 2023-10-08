@@ -240,14 +240,14 @@ public:
       // MoveRecord<WorkloadType> rec;
       // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
       
-      LOG(INFO) << i << " " << transaction->global_id_ << " migration " << total_span / (i + 1) << "  : " << 
-                                     " " << k[0] << " " << kc[0] << " | "
-                                     " " << k[1] << " " << kc[1] << " | " 
-                                     " " << k[2] << " " << kc[2] << " | " 
-                                     " " << k[3] << " " << kc[3] << " | " 
-                                     " " << k[4] << " " << kc[4] << " ( "
-                                         << transaction->migrate_cnt << " | " 
-                                         << transaction->remaster_cnt << " ) ";
+      // LOG(INFO) << i << " " << transaction->global_id_ << " migration " << total_span / (i + 1) << "  : " << 
+      //                                " " << k[0] << " " << kc[0] << " | "
+      //                                " " << k[1] << " " << kc[1] << " | " 
+      //                                " " << k[2] << " " << kc[2] << " | " 
+      //                                " " << k[3] << " " << kc[3] << " | " 
+      //                                " " << k[4] << " " << kc[4] << " ( "
+      //                                    << transaction->migrate_cnt << " | " 
+      //                                    << transaction->remaster_cnt << " ) ";
                                       
 
       total_span += std::chrono::duration_cast<std::chrono::microseconds>(

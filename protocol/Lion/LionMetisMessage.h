@@ -116,7 +116,7 @@ public:
   }
 
 
-  static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
+    static std::size_t metis_migration_transaction_message(Message &message, int table_id, 
                                                     simpleTransaction& txn, uint64_t op){
     // 
     // op = src_coordinator_id
@@ -231,7 +231,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
     new_router_txn.is_transmit_request = is_transmit_request;
     new_router_txn.idx_ = index;
 
-    // LOG(INFO) << " METIS GET ROUTER " << is_transmit_request << " " << is_distributed << " " << index << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
+    VLOG(DEBUG_V6) << " METIS GET ROUTER " << is_transmit_request << " " << is_distributed << " " << index << " " << new_router_txn.keys[0] << " " << new_router_txn.keys[1];
     metis_router_transactions_queue->push_no_wait(new_router_txn);
   }
   
@@ -384,11 +384,11 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
           if(coordinator_id_new != coordinator_id_old){
             // 数据更新到 发req的对面
-            VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
+            // LOG(INFO) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
             
-            if(!is_metis){
+            // if(!is_metis){
               router_val->set_dynamic_coordinator_id(coordinator_id_new);
-            }
+            // }
             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
             encoder << latest_tid 
@@ -580,13 +580,14 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
         auto coordinator_id_new = responseMessage.get_source_node_id(); 
         // DCHECK(coordinator_id_new != coordinator_id_old);
-        if(coordinator_id_new != coordinator_id_old){
-          VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
 
-          if(!is_metis){
+        if(coordinator_id_new != coordinator_id_old){
+
+
+          // if(!is_metis){
             // update router
             router_val->set_dynamic_coordinator_id(coordinator_id_new);
-          }
+          // }
           router_val->set_secondary_coordinator_id(coordinator_id_new);
           readKey.set_dynamic_coordinator_id(coordinator_id_new);
           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
@@ -606,6 +607,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
           // }
         }
 
+          // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster << " " << success;
 
       }
 
@@ -692,13 +694,13 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
         auto router_val = (RouterValue*)router_table->search_value(key);
 
-        if(!is_metis){
+        // if(!is_metis){
           router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
-        }
+        // }
         router_val->set_secondary_coordinator_id(coordinator_id_new);
 
         // if(context.coordinator_id == context.coordinator_num){
-        VLOG(DEBUG_V9) << "METIS ROUTER UPDATE. " << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;
+        // LOG(INFO) << "METIS ROUTER UPDATE. " << *(int*)key << " " << coordinator_id_old << "-->" << coordinator_id_new;
         // }
       }
 

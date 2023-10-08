@@ -197,18 +197,6 @@ public:
     return cur_move_size;
   }
 
-  void metis_migration_router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
-    // router transaction to coordinators
-    uint64_t coordinator_id_dst = txn->destination_coordinator;
-    messages_mutex[coordinator_id_dst]->lock();
-    size_t router_size = LionMetisMessageFactory::metis_migration_transaction_message(
-        *metis_async_messages[coordinator_id_dst].get(), 0, *txn, 
-        context.coordinator_id);
-    flush_message(metis_async_messages, coordinator_id_dst);
-    messages_mutex[coordinator_id_dst]->unlock();
-
-    n_network_size.fetch_add(router_size);
-  };
 
   void migration(std::string file_name_){
      
@@ -553,7 +541,9 @@ public:
               if(overload_node[t->destination_coordinator] <= 0){
                 overload_node.erase(t->destination_coordinator);
               }
-
+              
+              // LOG(INFO) << "rebalanced " << t->idx_ << " " << t->keys[0] << " " << t->keys[1] << " " << t->destination_coordinator << "->" << idle.first;
+              
               t->destination_coordinator = idle.first;
               busy_[t->destination_coordinator] += t->access_frequency;
               idle.second -= t->access_frequency;
@@ -583,7 +573,7 @@ public:
       std::vector<int>& router_send_txn_cnt,
       long long access_freq_aver){    
         
-    std::vector<simpleTransaction*> txns;
+    // std::vector<simpleTransaction*> txns;
     std::priority_queue<simpleTransaction*, 
                         std::vector<simpleTransaction*>, 
                         cmp> heavy_queue;
@@ -604,7 +594,6 @@ public:
     for(size_t i = 0; i < metis_txns.size(); i ++ ){
       simpleTransaction* txn = metis_txns[i];
       txn_nodes_involved(txn);
-      txns.push_back(txn);
 
       if((long long)txn->access_frequency > access_freq_aver){
         heavy_queue.push(txn);
@@ -648,9 +637,9 @@ public:
     }
     
     LOG(INFO) << "NEW";
-    for(size_t i = 0; i < txns.size(); i ++ ){
-      // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << txns[i]->destination_coordinator;  
-      outfile_excel << txns[i]->idx_ << "\t" << txns[i]->destination_coordinator << "\t" << txns[i]->access_frequency << "\n";
+    for(size_t i = 0; i < metis_txns.size(); i ++ ){
+      // LOG(INFO) << "txns[i]->destination_coordinator : " << i << " " << metis_txns[i]->destination_coordinator;  
+      // LOG(INFO) << txns[i]->idx_ << "\t" << txns[i]->destination_coordinator << "\t" << txns[i]->access_frequency << "\n";
     }
   }
   
@@ -1194,7 +1183,7 @@ public:
     auto last_timestamp_ = start_time;
     int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-    int start_offset = 10 * 1000; // 10 * 1000 * 2; // debug
+    int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
     // 
     int cur_workload = 0;
 
@@ -1204,7 +1193,7 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-      // func();
+      func();
       if(latency > start_offset){
         break;
       }
@@ -1223,7 +1212,7 @@ public:
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
 
-      // func();
+      func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));

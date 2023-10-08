@@ -351,7 +351,7 @@ public:
             if (commit) {
               size_t ycsbTableID = ycsb::ycsb::tableID;
               if(transaction->readSet.size() > 1)
-                LOG(INFO) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
+                VLOG(DEBUG_V9) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
                          << "   " << *(int*)transaction->readSet[1].get_key() 
                          << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 

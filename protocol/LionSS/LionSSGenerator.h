@@ -164,7 +164,7 @@ public:
   };
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_){
+      ShareQueue<simpleTransaction*, 1000>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
@@ -265,7 +265,7 @@ public:
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
-            if(secondary_c_ids & 1 && i != cur_c_id){
+            if((secondary_c_ids & 1) && i != cur_c_id){
                 from_nodes_id_secondary[i] += 1;
             }
             secondary_c_ids = secondary_c_ids >> 1;
@@ -532,7 +532,7 @@ public:
           bool ss = schedule_meta.transactions_queue_self.push_no_wait(new_txn);
           // LOG(INFO) << ss << " " << new_txn->keys[0] << 
           //                    " " << new_txn->keys[1] << 
-          //                    " " << schedule_meta.transactions_queue_self.size();
+          //                    " " << new_txn->destination_coordinator;
 
           // inform generator to create new transactions
           is_full_signal_self[dispatcher_id].store(false);
@@ -759,7 +759,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   lionss::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 40960> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, 1000> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
 

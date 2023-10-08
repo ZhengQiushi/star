@@ -39,14 +39,12 @@ public:
   LionSSExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
-           std::atomic<uint32_t> &n_started_workers, 
-           lionss::TransactionMeta<WorkloadType> &migrate_txn_meta
+           std::atomic<uint32_t> &n_started_workers
            )
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
-        migrate_txn_meta(migrate_txn_meta),
-        txn_meta(context.coordinator_num, context.batch_size),
+        txn_meta(1, context.batch_size),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -91,6 +89,7 @@ public:
         std::lock_guard<std::mutex> l(txn_meta.c_l);
         txn_id = txn_meta.c_transactions_queue.size();
         if(txn_id >= txn_meta.storages.size()){
+          break;
           DCHECK(false) << txn_id << " " << txn_meta.storages.size();
         }
         txn_meta.c_transactions_queue.push_back(std::move(null_txn));
@@ -240,7 +239,6 @@ public:
 
     auto i = 0u;
     size_t cur_queue_size = cur_txns.size(); 
-    int count = 0;   
     int router_txn_num = 0;
     // 
     int total_span = 0;
@@ -330,7 +328,8 @@ public:
             single_txn_num ++ ;
 
             // debug
-            // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
+            // LOG(INFO) << "single_txn_num: " << single_txn_num << " " 
+            //           << transaction->get_query_printed();
           }
         } else {
           LOG(INFO) << "transmit txn: " << transaction->get_query_printed();
@@ -391,28 +390,6 @@ public:
     }
     flush_async_messages();
     flush_sync_messages();
-
-
-    // auto total_sec = std::chrono::duration_cast<std::chrono::microseconds>(
-    //                  std::chrono::steady_clock::now() - begin)
-    //                  .count() * 1.0;
-    // LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / count << " per/micros.";
-
-
-    // if(count > 0){
-    //   VLOG(DEBUG_V4) << time_read_remote << " "<< count
-    //   << " set: " << time_before_prepare_set / count 
-    //   << " prepare: " << time_prepare_read / count 
-    //   << " execute: " << time_read_remote / count 
-    //   << " commit: " << time3 / count
-    //   << "\n" 
-    //   << " : "        << why[21] / count << " " << why[21]
-    //   << " : "        << why[22] / count << " " << why[22]
-    //   // << " : "        << why[19] / cur_queue_size << " " << why[19]
-    //   ;// << "  router : " << time1 / cur_queue_size; 
-    //   // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
-    //   // remaster_delay_transactions = 0;
-    // }
   }
   
   
@@ -474,9 +451,12 @@ public:
                         std::chrono::steady_clock::now() - begin)
                         .count();
       
-      if(total_sec % print_per_second == 0 && count > 0 && cur_time_second != total_sec){
+      if((total_sec - cur_time_second > print_per_second || total_sec % print_per_second == 0) && 
+          count > 0 && 
+          cur_time_second != total_sec){
 
-        LOG(INFO) << "  nums: "    << count 
+        LOG(INFO) << "  nums: "    << count << " " 
+                  << single_txn_num << " " << cross_txn_num << " "
                   << " pre: "     << time_before_prepare_request / count
                   << " set: "     << time_before_prepare_set / count 
                   << " gap: "     << time_before_prepare_read / count
@@ -487,6 +467,8 @@ public:
                   << "  router : " << time1 / count              << " " << time1
                   << print_per_second * 1000 * 1000 / count << " per/micros.";
 
+        single_txn_num = 0;
+        cross_txn_num = 0;
         time_prepare_read = 0;
         time_before_prepare_set = 0;
         time_before_prepare_read = 0;
@@ -681,6 +663,8 @@ public:
               *(this->sync_messages[coordinatorID]), *table, key, key_offset);
         }
         txn.distributed_transaction = true;
+
+        txn.remote_cnt += 1;
         return 0;
       }
     };
@@ -803,8 +787,6 @@ protected:
   // ShareQueue<int> &txn_id_queue;
   lionss::TransactionMeta<WorkloadType> txn_meta;
 
-  lionss::TransactionMeta<WorkloadType>& migrate_txn_meta;
-  
 
   std::unique_ptr<Partitioner> partitioner;
   // Partitioner* partitioner_ptr;

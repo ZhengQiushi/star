@@ -138,6 +138,9 @@ public:
       } while (retry);
 
     } // end for
+
+    // LOG(INFO) << "cur_timestamp: " << cur_timestamp << " " << workload_type << " " << query.Y_KEY[0] << " " << query.Y_KEY[1];
+
     return query;
   }
 

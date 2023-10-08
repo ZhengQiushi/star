@@ -306,7 +306,7 @@ public:
   bool execution_phase;
   // bool is_transmit_request;
 
-  int remaster_cnt, migrate_cnt; // statistic
+  int remaster_cnt, migrate_cnt, remote_cnt; // statistic
 
   uint64_t global_id_;
 

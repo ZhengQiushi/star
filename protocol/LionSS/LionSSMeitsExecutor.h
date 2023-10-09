@@ -96,6 +96,7 @@ public:
       auto p = workload.unpack_transaction(context, 0, txn_meta.t_storages[txn_id], simple_txn, true);
       p->global_id_ = simple_txn.global_id_;
       p->distributed_transaction = simple_txn.is_real_distributed;
+      p->op_ = simple_txn.op;
 
       // LOG(INFO) << "unpack_route_transaction: " << simple_txn.keys[0] << " | " << simple_txn.keys[1];
 
@@ -216,8 +217,6 @@ public:
           protocol.release_lock(*transaction, commit_tid, sync_messages);
           if(!transaction->abort_lock){
             n_commit.fetch_add(1);
-            n_migrate.fetch_add(transaction->migrate_cnt);
-            n_remaster.fetch_add(transaction->remaster_cnt);
             retry_transaction = false;
           } else {
             n_abort_lock.fetch_add(1);
@@ -230,6 +229,13 @@ public:
           n_abort_no_retry.fetch_add(1);
           retry_transaction = false;
         }
+
+        n_migrate.fetch_add(transaction->migrate_cnt);
+        n_remaster.fetch_add(transaction->remaster_cnt);
+        // if(transaction->migrate_cnt + transaction->remaster_cnt > 0){
+        //   LOG(INFO) << "n_migrate: " << n_migrate.load() << " " 
+        //             << "n_remaster: " << n_remaster.load();
+        // }
         n_network_size.fetch_add(transaction->network_size);
         // LOG(INFO) << transaction->network_size;
       } while (retry_transaction);
@@ -506,7 +512,8 @@ public:
             // target
               // LOG(INFO) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
               txn.network_size += MessageFactoryType::new_transmit_message(
-                  *(this->sync_messages[coordinatorID]), *table, key, key_offset, remaster);
+                  *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
+                  remaster, txn.op_);
               //  txn.pendingResponses++; already added at myclayTransactions
           } else {
               // others, only change the router
@@ -514,7 +521,7 @@ public:
               //   LOG(INFO) << "new_transmit_router_only_message: " <<  *(int*)key;
               // }
               txn.network_size += MessageFactoryType::new_transmit_router_only_message(
-                  *(this->sync_messages[i]), *table, key, key_offset);
+                  *(this->sync_messages[i]), *table, key, key_offset, txn.op_);
               txn.pendingResponses++;
           }            
         }

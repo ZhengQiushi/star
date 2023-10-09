@@ -387,7 +387,7 @@ public:
     messages_mutex[coordinator_id_dst]->lock();
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
         *async_messages[coordinator_id_dst], 0, *txn, 
-        context.coordinator_id);
+        RouterTxnOps::TRANSFER);
     // flush_message(async_messages, coordinator_id_dst);
     messages_mutex[coordinator_id_dst]->unlock();
 

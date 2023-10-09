@@ -180,7 +180,7 @@ public:
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       outfile_excel << "Send MyClay Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
-      router_request(router_send_txn_cnt, transmit_requests[i]);
+      router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::ADD_REPLICA);
       // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
@@ -1032,14 +1032,16 @@ public:
       } while(cal_load_distribute(aver_val, busy) > threshold && is_ok);
   }
 
-  void router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
+  void router_request(std::vector<int>& router_send_txn_cnt, 
+                      simpleTransaction* txn, 
+                      RouterTxnOps op) {
     // router transaction to coordinators
     size_t coordinator_id_dst = txn->destination_coordinator;
 
     // messages_mutex[coordinator_id_dst]->lock();
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
         *async_messages[coordinator_id_dst].get(), 0, *txn, 
-        context.coordinator_id);
+        op);
     flush_message(async_messages, coordinator_id_dst);
     // messages_mutex[coordinator_id_dst]->unlock();
 
@@ -1106,7 +1108,7 @@ public:
           // coordinator_send[txns[idx]->destination_coordinator] ++ ;
           
 
-          router_request(router_send_txn_cnt, txns[idx].get());   
+          router_request(router_send_txn_cnt, txns[idx].get(), RouterTxnOps::TRANSFER);   
 
           if(j % context.batch_flush == 0){
             for(size_t i = 0 ; i < context.coordinator_num; i ++ ){

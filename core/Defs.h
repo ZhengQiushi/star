@@ -60,7 +60,8 @@ enum class ReadMethods {
 enum class RouterTxnOps {
   LOCAL,
   REMASTER,
-  TRANSFER
+  TRANSFER,
+  ADD_REPLICA
 };
 
 // 64bit

@@ -60,7 +60,8 @@ public:
 #endif
   }
   static std::size_t new_router_transaction_message(Message &message, int table_id, 
-                                                    simpleTransaction& txn, uint64_t op){
+                                                    simpleTransaction& txn, 
+                                                    RouterTxnOps op){
     // 
     // op = src_coordinator_id
     auto& update_ = txn.update; // txn->get_query_update();
@@ -312,7 +313,8 @@ public:
            static_cast<uint32_t>(ControlMessage::ROUTER_TRANSACTION_REQUEST));
 
     auto stringPiece = inputPiece.toStringPiece();
-    uint64_t txn_size, op, is_distributed, is_real_distributed, is_transmit_request;
+    uint64_t txn_size, is_distributed, is_real_distributed, is_transmit_request;
+    RouterTxnOps op;
     uint64_t txn_id, global_txn_id;
     
     int on_replica_id;
@@ -320,7 +322,7 @@ public:
     simpleTransaction new_router_txn;
 
     // get op
-    op = *(uint64_t*)stringPiece.data();
+    op = *(RouterTxnOps*)stringPiece.data();
     stringPiece.remove_prefix(sizeof(op));
 
     // 

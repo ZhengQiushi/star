@@ -204,7 +204,7 @@ public:
 
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
         *async_messages[coordinator_id_dst], 0, *txn, 
-        context.coordinator_id);
+        RouterTxnOps::TRANSFER);
     flush_message(async_messages, coordinator_id_dst);
 
     router_send_txn_cnt[coordinator_id_dst]++;

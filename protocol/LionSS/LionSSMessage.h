@@ -238,7 +238,9 @@ public:
   }
 
   static std::size_t new_transmit_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset, bool remaster) {
+                                        const void *key, uint32_t key_offset, 
+                                        bool remaster, RouterTxnOps op
+                                        ) {
 
     /*
      * The structure of a search request: (primary key, read key offset)
@@ -247,7 +249,9 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster);
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + 
+        sizeof(remaster) + 
+        sizeof(op);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::TRANSMIT_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -255,14 +259,18 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << remaster;
+    encoder << key_offset 
+            << remaster 
+            << op;
     message.flush();
     return message_size;
   }
 
   // 
   static std::size_t new_transmit_router_only_message(Message &message, ITable &table,
-                                        const void *key, uint32_t key_offset) {
+                                        const void *key, uint32_t key_offset,
+                                        RouterTxnOps op
+                                        ) {
 
     /*
      * The structure of a search request: (primary key, read key offset)
@@ -271,7 +279,8 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+        MessagePiece::get_header_size() + key_size + 
+        sizeof(key_offset) + sizeof(op);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -279,7 +288,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
+    encoder << key_offset << op;
     message.flush();
     return message_size;
   }
@@ -340,15 +349,19 @@ public:
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
     bool remaster, success; // add by truth 22-04-22
+    RouterTxnOps op;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset) + sizeof(remaster));
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(remaster) + 
+           sizeof(op));
 
     // get row and offset
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> remaster; // index offset in the readSet from source request node
+    dec >> key_offset >> remaster >> op; // index offset in the readSet from source request node
 
 
 
@@ -361,7 +374,8 @@ public:
 
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
-                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + 
+                        sizeof(remaster) + sizeof(op) +
                         value_size;
     
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -376,7 +390,7 @@ public:
     success = table.contains(key);
     if(!success){
       LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster;
+      encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -389,7 +403,7 @@ public:
     if(!success){ // VLOG(DEBUG_V12) 
       auto test = my_debug_key(table_id, partition_id, key);
       LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster;
+      encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -420,7 +434,9 @@ public:
       // LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
       
       // update the router 
-      router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      if(op == RouterTxnOps::TRANSFER){
+        router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      }
       router_val->set_secondary_coordinator_id(coordinator_id_new);
 
 
@@ -436,7 +452,7 @@ public:
     } else {
       DCHECK(false);
     }
-    encoder << latest_tid << key_offset << success << remaster;
+    encoder << latest_tid << key_offset << success << remaster << op;
     // reserve size for read
     responseMessage.data.append(value_size, 0);
     
@@ -476,10 +492,11 @@ public:
     uint64_t tid;
     uint32_t key_offset;
     bool success, remaster;
+    RouterTxnOps op;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset >> success >> remaster;
+    dec >> tid >> key_offset >> success >> remaster >> op;
 
     if(remaster == true){
       value_size = 0;
@@ -488,6 +505,7 @@ public:
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   sizeof(tid) +
                                                   sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                                                  sizeof(op) +
                                                   value_size);
 
     txn->pendingResponses--;
@@ -519,7 +537,9 @@ public:
       if(!remaster){
         // read value message piece
         stringPiece = inputPiece.toStringPiece();
-        stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) + sizeof(remaster));
+        stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) +
+                                  sizeof(remaster) + 
+                                  sizeof(op));
         // insert into local node
         dec = Decoder(stringPiece);
         dec.read_n_bytes(readKey.get_value(), value_size);
@@ -554,7 +574,10 @@ public:
 
       // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " transmit reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
       // update router
-      router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      if(op == RouterTxnOps::TRANSFER){
+        router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      }
+      
       router_val->set_secondary_coordinator_id(coordinator_id_new);
 
       readKey.set_dynamic_coordinator_id(coordinator_id_new);
@@ -595,9 +618,12 @@ public:
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
+    RouterTxnOps op;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(op));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -605,7 +631,7 @@ public:
      // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset; // index offset in the readSet from source request node
+    dec >> key_offset >> op; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
@@ -632,8 +658,9 @@ public:
       auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
       auto router_val = (RouterValue*)router_table->search_value(key);
       // // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
-
-      router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
+      if(op == RouterTxnOps::TRANSFER){
+        router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
+      }
       router_val->set_secondary_coordinator_id(coordinator_id_new);
     }
 

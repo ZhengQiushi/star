@@ -309,6 +309,7 @@ public:
   int remaster_cnt, migrate_cnt, remote_cnt; // statistic
 
   uint64_t global_id_;
+  RouterTxnOps op_;
 
   // table id, partition id, key, value, local_index_read?, write_lock?,
   // success?, remote?

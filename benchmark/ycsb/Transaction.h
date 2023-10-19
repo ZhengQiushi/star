@@ -220,7 +220,7 @@ public:
       }
     }
 
-    if (this->process_remaster_requests(worker_id)) {
+    if (this->process_migrate_requests(worker_id)) {
       return TransactionResult::ABORT;
     } 
     return TransactionResult::TRANSMIT_REQUEST;
@@ -264,7 +264,7 @@ public:
       }
       break;
     case ReadMethods::LOCAL_READ:
-      if (this->process_local_requests(worker_id)) {
+      if (this->process_migrate_requests(worker_id)) {
         ret = TransactionResult::NOT_LOCAL_NORETRY;
       }
       break;

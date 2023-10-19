@@ -20,6 +20,13 @@ enum class LionSSMessage {
   TRANSMIT_RESPONSE,
   TRANSMIT_ROUTER_ONLY_REQUEST,
   TRANSMIT_ROUTER_ONLY_RESPONSE,
+
+  //
+  ASYNC_SEARCH_REQUEST,
+  ASYNC_SEARCH_RESPONSE,
+  ASYNC_SEARCH_REQUEST_ROUTER_ONLY,
+  ASYNC_SEARCH_RESPONSE_ROUTER_ONLY,
+
   // 
   READ_LOCK_REQUEST,
   READ_LOCK_RESPONSE,
@@ -33,9 +40,7 @@ enum class LionSSMessage {
   REPLICATION_RESPONSE,
   // 
   RELEASE_READ_LOCK_REQUEST,
-  // RELEASE_READ_LOCK_RESPONSE,
   RELEASE_WRITE_LOCK_REQUEST,
-  // RELEASE_WRITE_LOCK_RESPONSE,
 
   NFIELDS
 };
@@ -266,6 +271,34 @@ public:
     return message_size;
   }
 
+  static std::size_t new_async_search_message(Message &message, ITable &table,
+                                        const void *key, uint32_t key_offset, 
+                                        bool remaster, RouterTxnOps op
+                                        ) {
+
+    /*
+     * The structure of a search request: (primary key, read key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + sizeof(key_offset) + 
+        sizeof(remaster) + 
+        sizeof(op);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset 
+            << remaster 
+            << op;
+    message.flush();
+    return message_size;
+  }
   // 
   static std::size_t new_transmit_router_only_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
@@ -283,6 +316,32 @@ public:
         sizeof(key_offset) + sizeof(op);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_REQUEST), message_size,
+        table.tableID(), table.partitionID());
+
+    Encoder encoder(message.data);
+    encoder << message_piece_header;
+    encoder.write_n_bytes(key, key_size);
+    encoder << key_offset << op;
+    message.flush();
+    return message_size;
+  }
+
+  static std::size_t new_async_search_router_only_message(Message &message, ITable &table,
+                                        const void *key, uint32_t key_offset,
+                                        RouterTxnOps op
+                                        ) {
+
+    /*
+     * The structure of a search request: (primary key, read key offset)
+     */
+
+    auto key_size = table.key_size();
+
+    auto message_size =
+        MessagePiece::get_header_size() + key_size + 
+        sizeof(key_offset) + sizeof(op);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -557,7 +616,7 @@ public:
         VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
 
       if(!success){
-        VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+        LOG(INFO) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
         txn->abort_lock = true;
         return;
       } 
@@ -588,7 +647,7 @@ public:
       
       // txn->tids[key_offset] = &tid_;
     } else {
-      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
       txn->abort_lock = true;
     }
 
@@ -679,6 +738,339 @@ public:
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
   }
+
+  // 
+  static void async_search_request_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                      Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);    
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read request: (primary key, read key offset)
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+    bool remaster, success; // add by truth 22-04-22
+    RouterTxnOps op;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(remaster) + 
+           sizeof(op));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset >> remaster >> op; // index offset in the readSet from source request node
+
+
+
+    DCHECK(dec.size() == 0);
+
+    if(remaster == true){
+      // remaster, not transfer
+      value_size = 0;
+    }
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + 
+                        sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + 
+                        sizeof(remaster) + sizeof(op) +
+                        value_size;
+    
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+
+    uint64_t latest_tid;
+
+    success = table.contains(key);
+    if(!success){
+      LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+      encoder << latest_tid << key_offset << success << remaster << op;
+      responseMessage.data.append(value_size, 0);
+      responseMessage.flush();
+      return;
+    }
+
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
+    // try to lock tuple. Ensure not locked by current node
+    latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
+
+    if(!success){ // VLOG(DEBUG_V12) 
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid << key_offset << success << remaster << op;
+      responseMessage.data.append(value_size, 0);
+      responseMessage.flush();
+      return;
+    } else {
+      VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
+    }
+
+    // lock the router_table 
+    auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+    auto router_val = (RouterValue*)router_table->search_value(key);
+    
+    // 数据所在节点
+    auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+    uint64_t static_coordinator_id = partition_id % context.coordinator_num;
+    // create the new tuple in global router of source request node
+    auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+
+    if(coordinator_id_new != coordinator_id_old){
+      // 数据更新到 发req的对面
+      auto test = my_debug_key(table_id, partition_id, key);
+      // LOG(INFO) << table_id <<" " << *(int*) key << " REMASTER request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
+      
+      // update the router 
+      router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      router_val->set_secondary_coordinator_id(coordinator_id_new);
+
+    } else if(coordinator_id_new == coordinator_id_old) {
+      success = true;
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << test << " " << tid;
+      // encoder << latest_tid << key_offset << success << remaster;
+      // responseMessage.data.append(value_size, 0);
+      // responseMessage.flush();
+    
+    } else {
+      DCHECK(false);
+    }
+    encoder << latest_tid << key_offset << success << remaster << op;
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+    
+    // auto value = table.search_value(key);
+    // LOG(INFO) << *(int*)key << " " <<  " success: " << success << "" << " remaster: " << remaster;//  << " " << new_secondary_coordinator_id; (char*)value <<
+    
+    if(success == true && remaster == false){
+      // transfer: read from db and load data into message buffer
+      void *dest =
+          &responseMessage.data[0] + responseMessage.data.size() - value_size;
+      auto row = table.search(key);
+      TwoPLHelper::read(row, dest, value_size);
+    }
+    responseMessage.flush();
+    // wait for the commit / abort to unlock
+    TwoPLHelper::write_lock_release(tid);
+  }
+
+
+  static void async_search_response_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                      Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    uint64_t tid;
+    uint32_t key_offset;
+    bool success, remaster;
+    RouterTxnOps op;
+
+    StringPiece stringPiece = inputPiece.toStringPiece();
+    Decoder dec(stringPiece);
+    dec >> tid >> key_offset >> success >> remaster >> op;
+
+    if(remaster == true){
+      value_size = 0;
+    }
+
+    DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
+                                                  sizeof(tid) +
+                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                                                  sizeof(op) +
+                                                  value_size);
+
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+
+    LionSSRWKey &readKey = txn->readSet[key_offset];
+    auto key = readKey.get_key();
+
+    auto test = my_debug_key(table_id, partition_id, key);
+    // LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
+    //                                   << test << " " << *(int*)key << " "
+    //                                   << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
+
+    uint64_t last_tid = 0;
+
+
+    if(success == true){
+      // update router 
+      auto key = readKey.get_key();
+      auto value = readKey.get_value();
+
+      if(!remaster){
+        // read value message piece
+        stringPiece = inputPiece.toStringPiece();
+        stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) +
+                                  sizeof(remaster) + 
+                                  sizeof(op));
+        // insert into local node
+        dec = Decoder(stringPiece);
+        dec.read_n_bytes(readKey.get_value(), value_size);
+        DCHECK(strlen((char*)readKey.get_value()) > 0);
+
+        VLOG(DEBUG_V12) << *(int*) key << " " << (char*) value << " insert ";
+        table.insert(key, value, (void*)& tid);
+      }
+
+      // lock the respond tid and key
+      std::atomic<uint64_t> &tid_ = table.search_metadata(key);
+      // bool success = false;
+
+      // last_tid = TwoPLHelper::write_lock(tid_, success);
+      //   VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+
+      // if(!success){
+      //   VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      //   txn->abort_lock = true;
+      //   return;
+      // } 
+
+      // LOG(INFO) << "REMASTER: " << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
+
+      auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+      auto router_val = (RouterValue*)router_table->search_value(key);
+
+      // create the new tuple in global router of source request node
+      auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+      uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
+      auto coordinator_id_new = responseMessage.get_source_node_id(); 
+
+      // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " transmit reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+      // update router
+      router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      router_val->set_secondary_coordinator_id(coordinator_id_new);
+
+      readKey.set_dynamic_coordinator_id(coordinator_id_new);
+      readKey.set_router_value(router_val->get_dynamic_coordinator_id(),router_val->get_secondary_coordinator_id());
+      // readKey.set_Read();
+      readKey.set_tid(tid); // original tid for lock release
+      readKey.set_write_lock_bit();
+      
+      // txn->tids[key_offset] = &tid_;
+    } else {
+      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      txn->abort_lock = true;
+    }
+
+  }
+  static void async_search_request_router_only_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                      Transaction *txn) {
+    /**
+     * @brief directly move the data to the request node!
+     * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
+     * Transaction *txn unused
+     */
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY));
+    auto table_id = inputPiece.get_table_id();
+    auto partition_id = inputPiece.get_partition_id();
+    ITable &table = *db.find_table(table_id, partition_id);    
+    DCHECK(table_id == table.tableID());
+    DCHECK(partition_id == table.partitionID());
+    auto key_size = table.key_size();
+    auto value_size = table.value_size();
+
+    /*
+     * The structure of a read request: (primary key, read key offset)
+     * The structure of a read response: (value, tid, read key offset)
+     */
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+    RouterTxnOps op;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(op));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    // auto row = table.search(key);
+     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
+    stringPiece.remove_prefix(key_size);
+    star::Decoder dec(stringPiece);
+    dec >> key_offset >> op; // index offset in the readSet from source request node
+
+    DCHECK(dec.size() == 0);
+
+    // prepare response message header
+    auto message_size = MessagePiece::get_header_size() + value_size +
+                        sizeof(uint64_t) + sizeof(key_offset);
+    auto message_piece_header = MessagePiece::construct_message_piece_header(
+        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
+        table_id, partition_id);
+
+    star::Encoder encoder(responseMessage.data);
+    encoder << message_piece_header;
+
+    // reserve size for read
+    responseMessage.data.append(value_size, 0);
+    uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
+    encoder << tid << key_offset;
+
+    // lock the router_table 
+    auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
+    // create the new tuple in global router of source request node
+    auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+    if(coordinator_id_new != coordinator_id_old){
+      auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
+      auto router_val = (RouterValue*)router_table->search_value(key);
+      // // LOG(INFO) << *(int*) key << " delete " << coordinator_id_old << " --> " << coordinator_id_new;
+      router_val->set_dynamic_coordinator_id(coordinator_id_new);
+      router_val->set_secondary_coordinator_id(coordinator_id_new);
+    }
+
+    // if(context.coordinator_id == context.coordinator_num){
+    //   LOG(INFO) << "transmit_router_only_request_handler : " << *(int*)key << " " << coordinator_id_old << " -> " << coordinator_id_new;
+    // }
+    responseMessage.flush();
+  }
+
+  static void async_search_response_router_only_handler(MessagePiece inputPiece,
+                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
+                                      Transaction *txn) {
+    DCHECK(inputPiece.get_message_type() ==
+           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY));
+    // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_RESPONSE";
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
+  }
+
+
+
 
   static void read_lock_request_handler(MessagePiece inputPiece,
                                         Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
@@ -801,7 +1193,7 @@ public:
       DCHECK(inputPiece.get_message_length() ==
              MessagePiece::get_header_size() + sizeof(success) +
                  sizeof(key_offset));
-
+      LOG(INFO) << "failed READ_LOCK_RESPONSE";
       txn->abort_lock = true;
     }
 
@@ -935,7 +1327,7 @@ public:
       DCHECK(inputPiece.get_message_length() ==
              MessagePiece::get_header_size() + sizeof(success) +
                  sizeof(key_offset));
-
+      LOG(INFO) << "failed READ_LOCK_RESPONSE";
       txn->abort_lock = true;
     }
 
@@ -1307,6 +1699,12 @@ public:
     v.push_back(LionSSMessageHandler::transmit_router_only_request_handler);
     v.push_back(LionSSMessageHandler::transmit_router_only_response_handler);
     // 
+
+    v.push_back(LionSSMessageHandler::async_search_request_handler); // SEARCH_REQUEST
+    v.push_back(LionSSMessageHandler::async_search_response_handler); // SEARCH_RESPONSE
+    v.push_back(LionSSMessageHandler::async_search_request_router_only_handler); // SEARCH_REQUEST_ROUTER_ONLY
+    v.push_back(LionSSMessageHandler::async_search_response_router_only_handler); // SEARCH_RESPONSE_ROUTER_ONLY
+
     v.push_back(LionSSMessageHandler::read_lock_request_handler);
     v.push_back(LionSSMessageHandler::read_lock_response_handler);
     v.push_back(LionSSMessageHandler::write_lock_request_handler);

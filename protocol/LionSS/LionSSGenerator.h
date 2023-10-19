@@ -469,6 +469,7 @@ public:
 
     LOG(INFO) << "LionSSGenerator " << id << " starts.";
 
+    
     start_time = std::chrono::steady_clock::now();
     workload.start_time = start_time;
     start_inited.fetch_add(1);
@@ -505,6 +506,10 @@ public:
 
       n_started_workers.fetch_add(1);
       
+      auto t = std::chrono::steady_clock::now();
+
+      std::vector<int> send_num(context.coordinator_num, 0);
+
       do {
         process_request();
         for(int i = 0 ; i < context.coordinator_num; i ++ ){
@@ -527,6 +532,7 @@ public:
           }
           // router the transaction
           router_request(router_send_txn_cnt, new_txn);   
+          send_num[new_txn->destination_coordinator] += 1;
 
           // add to metis generator for schedule
           bool ss = schedule_meta.transactions_queue_self.push_no_wait(new_txn);
@@ -537,6 +543,15 @@ public:
           // inform generator to create new transactions
           is_full_signal_self[dispatcher_id].store(false);
           schedule_meta.router_transaction_done[i].fetch_add(1);
+        }
+        auto now = std::chrono::steady_clock::now();
+        if(std::chrono::duration_cast<std::chrono::seconds>(now - t).count() > 3){
+          t = now;
+          LOG(INFO) << "SEND OUT";
+          for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) << " coord[" << i << "]" << send_num[i];
+            send_num[i] = 0;
+          }
         }
         status = static_cast<ExecutorStatus>(worker_status.load());
       } while (status != ExecutorStatus::STOP);

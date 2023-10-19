@@ -309,7 +309,7 @@ public:
   }
 
 
-  bool process_local_requests(std::size_t worker_id) {
+  bool process_migrate_requests(std::size_t worker_id) {
     /**
      * @brief 
      * 

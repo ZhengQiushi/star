@@ -268,7 +268,7 @@ virtual std::vector<size_t> debug_record_keys_master() = 0;
     return true;
   }
   
-  bool process_local_requests(std::size_t worker_id){
+  bool process_migrate_requests(std::size_t worker_id){
     // 
     DCHECK(false);
     return false;

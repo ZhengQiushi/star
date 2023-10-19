@@ -101,6 +101,7 @@ public:
           auto value = readKey.get_value();
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           TwoPLHelper::read_lock_release(tid);
+          // LOG(INFO) << "unLock " << *(int*) key;
         } else {
           // auto coordinatorID = partitioner.master_coordinator(partitionId);
           // LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << false;
@@ -115,6 +116,7 @@ public:
           auto value = readKey.get_value();
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           TwoPLHelper::write_lock_release(tid);
+          // LOG(INFO) << "unLock " << *(int*) key;
         } else {
           // auto coordinatorID = partitioner.master_coordinator(partitionId);
           // LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << true;

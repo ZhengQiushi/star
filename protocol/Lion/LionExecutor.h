@@ -144,20 +144,6 @@ public:
     async_respond_num.store(0);
   }
 
-  void replication_fence(ExecutorStatus status){
-    while(async_message_num.load() != async_message_respond_num.load()){
-      int a = async_message_num.load();
-      int b = async_message_respond_num.load();
-
-      process_request();
-      std::this_thread::yield();
-    }
-    LOG(INFO) << "replication_fence : " << async_message_num.load() << " " << async_message_respond_num.load();
-
-    async_message_num.store(0);
-    async_message_respond_num.store(0);
-  }
-
   void router_fence(){
 
     while(router_transaction_done.load() != router_transactions_send.load()){
@@ -330,7 +316,7 @@ public:
       n_started_workers.fetch_add(1);
 
       if(cur_real_distributed_cnt > 0){
-      LOG(INFO) << "[C-PHASE] do remaster "
+        LOG(INFO) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()

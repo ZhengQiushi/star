@@ -516,8 +516,8 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
-      auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      // auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << "  can't Lock " << *(int*)key;// << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op << txn_id;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -545,7 +545,7 @@ public:
 
     if(coordinator_id_new != coordinator_id_old){
       // 数据更新到 发req的对面
-      auto test = my_debug_key(table_id, partition_id, key);
+      // auto test = my_debug_key(table_id, partition_id, key);
       // LOG(INFO) << table_id <<" " << *(int*) key << " transmit request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
       
       // update the router 
@@ -558,8 +558,8 @@ public:
 
     } else if(coordinator_id_new == coordinator_id_old) {
       success = true;
-      auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << test << " " << tid;
+      // auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key;//  << " " << test << " " << tid;
       // encoder << latest_tid << key_offset << success << remaster;
       // responseMessage.data.append(value_size, 0);
       // responseMessage.flush();
@@ -636,7 +636,7 @@ public:
     LionSSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    auto test = my_debug_key(table_id, partition_id, key);
+    // auto test = my_debug_key(table_id, partition_id, key);
     // LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
     //                                   << test << " " << *(int*)key << " "
     //                                   << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
@@ -673,7 +673,7 @@ public:
 
       // lock the respond tid and key
       std::atomic<uint64_t> &tid_ = table.search_metadata(key);
-      bool success = false;
+      success = false;
 
       last_tid = TwoPLHelper::write_lock(tid_, success);
         VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
@@ -903,8 +903,8 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
-      auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      // auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << "  can't Lock " << *(int*)key;//  << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op << txn_id;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -925,7 +925,7 @@ public:
 
     if(coordinator_id_new != coordinator_id_old){
       // 数据更新到 发req的对面
-      auto test = my_debug_key(table_id, partition_id, key);
+      // auto test = my_debug_key(table_id, partition_id, key);
       // LOG(INFO) << table_id <<" " << *(int*) key << " REMASTER request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
       
       // update the router 
@@ -934,8 +934,8 @@ public:
 
     } else if(coordinator_id_new == coordinator_id_old) {
       success = true;
-      auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << test << " " << tid;
+      // auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key;//  << " " << test << " " << tid;
       // encoder << latest_tid << key_offset << success << remaster;
       // responseMessage.data.append(value_size, 0);
       // responseMessage.flush();
@@ -1004,13 +1004,13 @@ public:
                                                   value_size);
     auto txn = txns[txn_id].get();
     assert(txn != nullptr);
-    txn->pendingResponses--;
+    // txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
 
     LionSSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    auto test = my_debug_key(table_id, partition_id, key);
+    // auto test = my_debug_key(table_id, partition_id, key);
     // LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
     //                                   << test << " " << *(int*)key << " "
     //                                   << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
@@ -1062,7 +1062,7 @@ public:
       uint64_t static_coordinator_id = partition_id % context.coordinator_num; // static replica never moves only remastered
       auto coordinator_id_new = responseMessage.get_source_node_id(); 
 
-      // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " transmit reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+      // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)value << " async-remaster reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
       // update router
       router_val->set_dynamic_coordinator_id(coordinator_id_new);
       router_val->set_secondary_coordinator_id(coordinator_id_new);
@@ -1184,7 +1184,7 @@ public:
 
     auto txn = txns[txn_id].get();
     assert(txn != nullptr);
-    txn->pendingResponses--;
+    // txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
   }
 
@@ -1327,7 +1327,8 @@ public:
     } else {
       DCHECK(inputPiece.get_message_length() ==
              MessagePiece::get_header_size() + sizeof(success) +
-                 sizeof(key_offset));
+             sizeof(key_offset) + 
+             sizeof(txn_id));
       LOG(INFO) << "failed READ_LOCK_RESPONSE";
       txn->abort_lock = true;
     }

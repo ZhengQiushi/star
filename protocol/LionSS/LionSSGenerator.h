@@ -19,6 +19,7 @@
 #include <mutex>          // std::mutex, std::lock_guard
 #include "protocol/LionSS/LionSSMeta.h"
 
+#define LAGGING_NUM 10000
 namespace star {
 namespace group_commit {
 
@@ -164,7 +165,7 @@ public:
   };
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 1000>& transactions_queue_self_){
+      ShareQueue<simpleTransaction*, LAGGING_NUM>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
@@ -774,7 +775,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   lionss::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 1000> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, LAGGING_NUM> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
 

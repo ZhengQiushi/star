@@ -95,6 +95,7 @@ public:
       }
       auto p = workload.unpack_transaction(context, 0, txn_meta.t_storages[txn_id], simple_txn, true);
       p->global_id_ = simple_txn.global_id_;
+      p->id = txn_id;
       p->distributed_transaction = simple_txn.is_real_distributed;
       p->op_ = simple_txn.op;
 
@@ -155,7 +156,7 @@ public:
 
       bool retry_transaction = false;
 
-      transaction = std::move(cur_trans[i]);
+      transaction = cur_trans[i].get();
 
 
        
@@ -431,7 +432,7 @@ public:
           messageHandlers[type](messagePiece,
                               *async_messages[message->get_source_node_id()], 
                               db, context, partitioner.get(),
-                              transaction.get());
+                              txn_meta.t_transactions_queue);
         }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
@@ -513,15 +514,17 @@ public:
               // LOG(INFO) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
               txn.network_size += MessageFactoryType::new_transmit_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
-                  remaster, txn.op_);
-              //  txn.pendingResponses++; already added at myclayTransactions
+                  remaster, 
+                  txn.op_, txn.id);
+               txn.pendingResponses++;// already added at myclayTransactions
           } else {
               // others, only change the router
               // if(i == context.coordinator_num){
               //   LOG(INFO) << "new_transmit_router_only_message: " <<  *(int*)key;
               // }
               txn.network_size += MessageFactoryType::new_transmit_router_only_message(
-                  *(this->sync_messages[i]), *table, key, key_offset, txn.op_);
+                  *(this->sync_messages[i]), *table, key, key_offset, 
+                  txn.op_, txn.id);
               txn.pendingResponses++;
           }            
         }
@@ -582,10 +585,11 @@ protected:
   std::unique_ptr<Delay> delay;
   Percentile<int64_t> commit_latency, write_latency;
   Percentile<int64_t> dist_latency, local_latency;
-  std::unique_ptr<TransactionType> transaction;
+  TransactionType* transaction;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, messages;
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, 
+      std::vector<std::unique_ptr<TransactionType>>&)>>
       messageHandlers;
 
   std::vector<

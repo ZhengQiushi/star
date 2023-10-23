@@ -689,7 +689,7 @@ public:
           messageHandlers[type](messagePiece,
                               *sync_messages[message->get_source_node_id()], 
                               db, context, partitioner.get(),
-                              transaction.get());
+                              no_use);
         }
 
         message_stats[type]++;
@@ -802,7 +802,8 @@ protected:
   std::vector<std::unique_ptr<TransactionType>> no_use;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, 
+      std::vector<std::unique_ptr<TransactionType>>&)>>
       messageHandlers;
 
   std::vector<

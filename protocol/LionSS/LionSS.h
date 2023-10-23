@@ -107,7 +107,7 @@ public:
           // LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << false;
 
           txn.network_size += MessageFactoryType::new_abort_message(
-              *syncMessages[coordinatorID], *table, readKey.get_key(), false);
+              *syncMessages[coordinatorID], *table, readKey.get_key(), false, txn.id);
         }
       }
 
@@ -121,7 +121,7 @@ public:
           // auto coordinatorID = partitioner.master_coordinator(partitionId);
           // LOG(INFO) << " ABORT_REQUEST " << *(int*)key << " " << true;
           txn.network_size += MessageFactoryType::new_abort_message(
-              *syncMessages[coordinatorID], *table, readKey.get_key(), true);
+              *syncMessages[coordinatorID], *table, readKey.get_key(), true, txn.id);
         }
       }
     }
@@ -176,7 +176,7 @@ public:
         } else {
           // auto coordinatorID = partitioner.master_coordinator(partitionId);
           txn.network_size += MessageFactoryType::new_release_read_lock_message(
-              *messages[coordinatorID], *table, readKey.get_key());
+              *messages[coordinatorID], *table, readKey.get_key(), txn.id);
         }
       }
 
@@ -189,7 +189,7 @@ public:
         } else {
           // auto coordinatorID = partitioner.master_coordinator(partitionId);
           txn.network_size += MessageFactoryType::new_release_write_lock_message(
-              *messages[coordinatorID], *table, readKey.get_key(), commit_tid);
+              *messages[coordinatorID], *table, readKey.get_key(), commit_tid, txn.id);
         }
       }
     }
@@ -224,7 +224,7 @@ private:
         txn.pendingResponses++;
         txn.network_size += MessageFactoryType::new_write_message(
             *messages[coordinatorID], *table, readKey.get_key(),
-            readKey.get_value());
+            readKey.get_value(), txn.id);
       }
     }
 
@@ -278,7 +278,7 @@ private:
           auto coordinatorID = k;
           txn.network_size += MessageFactoryType::new_replication_message(
               *messages[coordinatorID], *table, readKey.get_key(),
-              readKey.get_value(), commit_tid);
+              readKey.get_value(), commit_tid, txn.id);
         }
       }
 

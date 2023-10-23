@@ -105,7 +105,8 @@ class LionSSMessageFactory {
 public:
   static std::size_t new_read_lock_message(Message &message, ITable &table,
                                            const void *key,
-                                           uint32_t key_offset) {
+                                           uint32_t key_offset,
+                                           uint32_t txn_id) {
 
     /*
      * The structure of a read lock request: (primary key, key offset)
@@ -114,7 +115,10 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+        MessagePiece::get_header_size() + key_size + 
+        sizeof(key_offset) + 
+        sizeof(txn_id);
+
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::READ_LOCK_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -122,14 +126,16 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
+    encoder << key_offset
+            << txn_id;
     message.flush();
     return message_size;
   }
 
   static std::size_t new_write_lock_message(Message &message, ITable &table,
                                             const void *key,
-                                            uint32_t key_offset) {
+                                            uint32_t key_offset,
+                                           uint32_t txn_id) {
 
     /*
      * The structure of a write lock request: (primary key, key offset)
@@ -138,7 +144,10 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(key_offset);
+        MessagePiece::get_header_size() + key_size + 
+        sizeof(key_offset) + 
+        sizeof(txn_id);
+
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -146,13 +155,15 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset;
+    encoder << key_offset
+            << txn_id;
     message.flush();
     return message_size;
   }
 
   static std::size_t new_abort_message(Message &message, ITable &table,
-                                       const void *key, bool write_lock) {
+                                       const void *key, bool write_lock,
+                                           uint32_t txn_id) {
     /*
      * The structure of an abort request: (primary key, wrtie lock)
      */
@@ -160,7 +171,11 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(bool);
+        MessagePiece::get_header_size() + 
+        key_size + 
+        sizeof(bool) + 
+        sizeof(txn_id);
+
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::ABORT_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -168,13 +183,15 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << write_lock;
+    encoder << write_lock
+            << txn_id;
     message.flush();
     return message_size;
   }
 
   static std::size_t new_write_message(Message &message, ITable &table,
-                                       const void *key, const void *value) {
+                                       const void *key, const void *value,
+                                           uint32_t txn_id) {
 
     /*
      * The structure of a write request: (primary key, field value)
@@ -183,29 +200,40 @@ public:
     auto key_size = table.key_size();
     auto field_size = table.field_size();
 
-    auto message_size = MessagePiece::get_header_size() + key_size + field_size;
+    auto message_size = MessagePiece::get_header_size() + 
+                        sizeof(txn_id) + 
+                        key_size + 
+                        field_size;
+
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::WRITE_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
     encoder << message_piece_header;
+    encoder << txn_id;
     encoder.write_n_bytes(key, key_size);
     table.serialize_value(encoder, value);
+
+    
     message.flush();
     return message_size;
   }
 
   static std::size_t new_release_read_lock_message(Message &message,
                                                    ITable &table,
-                                                   const void *key) {
+                                                   const void *key,
+                                           uint32_t txn_id) {
     /*
      * The structure of a release read lock request: (primary key)
      */
 
     auto key_size = table.key_size();
 
-    auto message_size = MessagePiece::get_header_size() + key_size;
+    auto message_size = MessagePiece::get_header_size() + 
+      key_size + 
+      sizeof(txn_id);
+    
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_REQUEST),
         message_size, table.tableID(), table.partitionID());
@@ -213,6 +241,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
+    encoder << txn_id;
     message.flush();
     return message_size;
   }
@@ -220,7 +249,8 @@ public:
   static std::size_t new_release_write_lock_message(Message &message,
                                                     ITable &table,
                                                     const void *key,
-                                                    uint64_t commit_tid) {
+                                                    uint64_t commit_tid,
+                                           uint32_t txn_id) {
 
     /*
      * The structure of a release write lock request: (primary key, commit tid)
@@ -229,7 +259,10 @@ public:
     auto key_size = table.key_size();
 
     auto message_size =
-        MessagePiece::get_header_size() + key_size + sizeof(commit_tid);
+        MessagePiece::get_header_size() + 
+        key_size + 
+        sizeof(commit_tid) + 
+        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_REQUEST),
         message_size, table.tableID(), table.partitionID());
@@ -237,14 +270,16 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << commit_tid;
+    encoder << commit_tid
+            << txn_id;
     message.flush();
     return message_size;
   }
 
   static std::size_t new_transmit_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset, 
-                                        bool remaster, RouterTxnOps op
+                                        bool remaster, RouterTxnOps op,
+                                           uint32_t txn_id
                                         ) {
 
     /*
@@ -256,7 +291,8 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(key_offset) + 
         sizeof(remaster) + 
-        sizeof(op);
+        sizeof(op) + 
+        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::TRANSMIT_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -266,14 +302,16 @@ public:
     encoder.write_n_bytes(key, key_size);
     encoder << key_offset 
             << remaster 
-            << op;
+            << op 
+            << txn_id;
     message.flush();
     return message_size;
   }
 
   static std::size_t new_async_search_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset, 
-                                        bool remaster, RouterTxnOps op
+                                        bool remaster, RouterTxnOps op,
+                                           uint32_t txn_id
                                         ) {
 
     /*
@@ -285,7 +323,8 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(key_offset) + 
         sizeof(remaster) + 
-        sizeof(op);
+        sizeof(op) + 
+        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -295,14 +334,16 @@ public:
     encoder.write_n_bytes(key, key_size);
     encoder << key_offset 
             << remaster 
-            << op;
+            << op
+            << txn_id;
     message.flush();
     return message_size;
   }
   // 
   static std::size_t new_transmit_router_only_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
-                                        RouterTxnOps op
+                                        RouterTxnOps op,
+                                           uint32_t txn_id
                                         ) {
 
     /*
@@ -313,7 +354,9 @@ public:
 
     auto message_size =
         MessagePiece::get_header_size() + key_size + 
-        sizeof(key_offset) + sizeof(op);
+        sizeof(key_offset) + 
+        sizeof(op) + 
+        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -321,14 +364,17 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << op;
+    encoder << key_offset 
+            << op
+            << txn_id;
     message.flush();
     return message_size;
   }
 
   static std::size_t new_async_search_router_only_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
-                                        RouterTxnOps op
+                                        RouterTxnOps op,
+                                        uint32_t txn_id
                                         ) {
 
     /*
@@ -339,7 +385,9 @@ public:
 
     auto message_size =
         MessagePiece::get_header_size() + key_size + 
-        sizeof(key_offset) + sizeof(op);
+        sizeof(key_offset) + 
+        sizeof(op) + 
+        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY), message_size,
         table.tableID(), table.partitionID());
@@ -347,7 +395,9 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << op;
+    encoder << key_offset 
+            << op
+            << txn_id;
     message.flush();
     return message_size;
   }
@@ -355,7 +405,8 @@ public:
 
   static std::size_t new_replication_message(Message &message, ITable &table,
                                              const void *key, const void *value,
-                                             uint64_t commit_tid) {
+                                             uint64_t commit_tid,
+                                             uint32_t txn_id) {
 
     /*
      * The structure of a replication request: (primary key, field value,
@@ -366,7 +417,9 @@ public:
     auto field_size = table.field_size();
 
     auto message_size = MessagePiece::get_header_size() + key_size +
-                        field_size + sizeof(commit_tid);
+                        field_size + 
+                        sizeof(commit_tid) + 
+                        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::REPLICATION_REQUEST), message_size,
         table.tableID(), table.partitionID());
@@ -375,7 +428,8 @@ public:
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
     table.serialize_value(encoder, value);
-    encoder << commit_tid;
+    encoder << commit_tid
+            << txn_id;
     message.flush();
     return message_size;
   }
@@ -389,7 +443,7 @@ public:
   // 
   static void transmit_request_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>&txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::TRANSMIT_REQUEST));
     auto table_id = inputPiece.get_table_id();
@@ -409,18 +463,20 @@ public:
     uint32_t key_offset;
     bool remaster, success; // add by truth 22-04-22
     RouterTxnOps op;
+    uint32_t txn_id;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + 
            sizeof(key_offset) + 
            sizeof(remaster) + 
-           sizeof(op));
+           sizeof(op) + 
+           sizeof(txn_id));
 
     // get row and offset
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> remaster >> op; // index offset in the readSet from source request node
+    dec >> key_offset >> remaster >> op >> txn_id; // index offset in the readSet from source request node
 
 
 
@@ -434,7 +490,7 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
                         sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + 
-                        sizeof(remaster) + sizeof(op) +
+                        sizeof(remaster) + sizeof(op) + sizeof(txn_id) + 
                         value_size;
     
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -449,7 +505,7 @@ public:
     success = table.contains(key);
     if(!success){
       LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << op;
+      encoder << latest_tid << key_offset << success << remaster << op << txn_id;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -462,7 +518,7 @@ public:
     if(!success){ // VLOG(DEBUG_V12) 
       auto test = my_debug_key(table_id, partition_id, key);
       LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << op;
+      encoder << latest_tid << key_offset << success << remaster << op << txn_id;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -511,7 +567,7 @@ public:
     } else {
       DCHECK(false);
     }
-    encoder << latest_tid << key_offset << success << remaster << op;
+    encoder << latest_tid << key_offset << success << remaster << op << txn_id;
     // reserve size for read
     responseMessage.data.append(value_size, 0);
     
@@ -533,7 +589,7 @@ public:
 
   static void transmit_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>&txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::TRANSMIT_RESPONSE));
     auto table_id = inputPiece.get_table_id();
@@ -552,10 +608,11 @@ public:
     uint32_t key_offset;
     bool success, remaster;
     RouterTxnOps op;
+    uint32_t txn_id;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset >> success >> remaster >> op;
+    dec >> tid >> key_offset >> success >> remaster >> op >> txn_id;
 
     if(remaster == true){
       value_size = 0;
@@ -563,9 +620,15 @@ public:
 
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   sizeof(tid) +
-                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                                                  sizeof(key_offset) + 
+                                                  sizeof(success) + 
+                                                  sizeof(remaster) + 
                                                   sizeof(op) +
+                                                  sizeof(txn_id) + 
                                                   value_size);
+
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
 
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
@@ -654,11 +717,11 @@ public:
   }
   static void transmit_router_only_request_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>&txns) {
     /**
      * @brief directly move the data to the request node!
      * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
-     * Transaction *txn unused
+     * std::vector<std::unique_ptr<Transaction>>&txns unused
      */
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_REQUEST));
@@ -668,7 +731,7 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-    auto value_size = table.value_size();
+    // auto value_size = table.value_size();
 
     /*
      * The structure of a read request: (primary key, read key offset)
@@ -678,11 +741,13 @@ public:
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
     RouterTxnOps op;
+    uint32_t txn_id;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + 
            sizeof(key_offset) + 
-           sizeof(op));
+           sizeof(op) + 
+           sizeof(txn_id));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -690,13 +755,15 @@ public:
      // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> op; // index offset in the readSet from source request node
+    dec >> key_offset >> op >> txn_id; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + value_size +
-                        sizeof(uint64_t) + sizeof(key_offset);
+    auto message_size = MessagePiece::get_header_size() + // value_size +
+                        // sizeof(uint64_t) + 
+                        sizeof(key_offset) + 
+                        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_RESPONSE), message_size,
         table_id, partition_id);
@@ -705,9 +772,10 @@ public:
     encoder << message_piece_header;
 
     // reserve size for read
-    responseMessage.data.append(value_size, 0);
-    uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
-    encoder << tid << key_offset;
+    // responseMessage.data.append(value_size, 0);
+    // uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
+    // << tid 
+    encoder << key_offset << txn_id;
 
     // lock the router_table 
     auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
@@ -731,10 +799,28 @@ public:
 
   static void transmit_router_only_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_RESPONSE));
     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_RESPONSE";
+
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+    uint32_t txn_id;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() +  
+           sizeof(key_offset) + 
+           sizeof(txn_id));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    star::Decoder dec(stringPiece);
+    dec >> key_offset >> txn_id; // index offset in the readSet from source request node
+    DCHECK(dec.size() == 0);
+
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
   }
@@ -742,7 +828,7 @@ public:
   // 
   static void async_search_request_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST));
     auto table_id = inputPiece.get_table_id();
@@ -762,18 +848,20 @@ public:
     uint32_t key_offset;
     bool remaster, success; // add by truth 22-04-22
     RouterTxnOps op;
+    uint32_t txn_id;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + 
            sizeof(key_offset) + 
            sizeof(remaster) + 
-           sizeof(op));
+           sizeof(op) + 
+           sizeof(txn_id));
 
     // get row and offset
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> remaster >> op; // index offset in the readSet from source request node
+    dec >> key_offset >> remaster >> op >> txn_id; // index offset in the readSet from source request node
 
 
 
@@ -787,7 +875,9 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
                         sizeof(uint64_t) + sizeof(key_offset) + sizeof(success) + 
-                        sizeof(remaster) + sizeof(op) +
+                        sizeof(remaster) + 
+                        sizeof(op) + 
+                        sizeof(txn_id) + 
                         value_size;
     
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -802,7 +892,7 @@ public:
     success = table.contains(key);
     if(!success){
       LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << op;
+      encoder << latest_tid << key_offset << success << remaster << op << txn_id;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -815,7 +905,7 @@ public:
     if(!success){ // VLOG(DEBUG_V12) 
       auto test = my_debug_key(table_id, partition_id, key);
       LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
-      encoder << latest_tid << key_offset << success << remaster << op;
+      encoder << latest_tid << key_offset << success << remaster << op << txn_id;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
       return;
@@ -853,7 +943,7 @@ public:
     } else {
       DCHECK(false);
     }
-    encoder << latest_tid << key_offset << success << remaster << op;
+    encoder << latest_tid << key_offset << success << remaster << op << txn_id;
     // reserve size for read
     responseMessage.data.append(value_size, 0);
     
@@ -875,7 +965,7 @@ public:
 
   static void async_search_response_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE));
     auto table_id = inputPiece.get_table_id();
@@ -894,10 +984,11 @@ public:
     uint32_t key_offset;
     bool success, remaster;
     RouterTxnOps op;
+    uint32_t txn_id;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> tid >> key_offset >> success >> remaster >> op;
+    dec >> tid >> key_offset >> success >> remaster >> op >> txn_id;
 
     if(remaster == true){
       value_size = 0;
@@ -905,10 +996,14 @@ public:
 
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   sizeof(tid) +
-                                                  sizeof(key_offset) + sizeof(success) + sizeof(remaster) + 
+                                                  sizeof(key_offset) + 
+                                                  sizeof(success) + 
+                                                  sizeof(remaster) + 
                                                   sizeof(op) +
+                                                  sizeof(txn_id) +
                                                   value_size);
-
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
 
@@ -933,7 +1028,8 @@ public:
         stringPiece = inputPiece.toStringPiece();
         stringPiece.remove_prefix(sizeof(tid) + sizeof(key_offset) + sizeof(success) +
                                   sizeof(remaster) + 
-                                  sizeof(op));
+                                  sizeof(op) + 
+                                  sizeof(txn_id));
         // insert into local node
         dec = Decoder(stringPiece);
         dec.read_n_bytes(readKey.get_value(), value_size);
@@ -986,11 +1082,11 @@ public:
   }
   static void async_search_request_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>&txns) {
     /**
      * @brief directly move the data to the request node!
      * 修改其他机器上的路由情况， 当前机器不涉及该事务的处理，可以认为事务涉及的数据主节点都不在此，直接处理就可以
-     * Transaction *txn unused
+     * std::vector<std::unique_ptr<Transaction>>&txns unused
      */
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY));
@@ -1000,7 +1096,7 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-    auto value_size = table.value_size();
+    // auto value_size = table.value_size();
 
     /*
      * The structure of a read request: (primary key, read key offset)
@@ -1010,11 +1106,13 @@ public:
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
     RouterTxnOps op;
+    uint32_t txn_id;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + 
            sizeof(key_offset) + 
-           sizeof(op));
+           sizeof(op) + 
+           sizeof(txn_id));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -1022,13 +1120,16 @@ public:
      // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> op; // index offset in the readSet from source request node
+    dec >> key_offset >> op >> txn_id; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size() + value_size +
-                        sizeof(uint64_t) + sizeof(key_offset);
+    auto message_size = MessagePiece::get_header_size() + 
+                        // value_size +
+                        // sizeof(uint64_t) + 
+                        sizeof(key_offset) + 
+                        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
         table_id, partition_id);
@@ -1037,9 +1138,9 @@ public:
     encoder << message_piece_header;
 
     // reserve size for read
-    responseMessage.data.append(value_size, 0);
-    uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size);
-    encoder << tid << key_offset;
+    // responseMessage.data.append(value_size, 0);
+    // uint64_t tid = 0; // auto tid = TwoPLHelper::read(row, dest, value_size); << tid
+    encoder << key_offset << txn_id;
 
     // lock the router_table 
     auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
@@ -1061,10 +1162,28 @@ public:
 
   static void async_search_response_router_only_handler(MessagePiece inputPiece,
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                      Transaction *txn) {
+                                      std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY));
     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_RESPONSE";
+    auto stringPiece = inputPiece.toStringPiece();
+    uint32_t key_offset;
+    uint32_t txn_id;
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + 
+           sizeof(key_offset) + 
+           sizeof(txn_id));
+
+    // get row and offset
+    const void *key = stringPiece.data();
+    // auto row = table.search(key);
+     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
+    star::Decoder dec(stringPiece);
+    dec >> key_offset >> txn_id; // index offset in the readSet from source request node
+
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
   }
@@ -1074,7 +1193,7 @@ public:
 
   static void read_lock_request_handler(MessagePiece inputPiece,
                                         Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                        Transaction *txn) {
+                                        std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::READ_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
@@ -1093,9 +1212,12 @@ public:
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
+    uint32_t txn_id;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+           MessagePiece::get_header_size() + key_size + 
+           sizeof(key_offset) + 
+           sizeof(txn_id));
 
     const void *key = stringPiece.data();
 
@@ -1106,7 +1228,7 @@ public:
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset;
+    dec >> key_offset >> txn_id;
 
     DCHECK(dec.size() == 0);
 
@@ -1120,10 +1242,13 @@ public:
 
     // prepare response message header
     auto message_size =
-        MessagePiece::get_header_size() + sizeof(bool) + sizeof(key_offset);
+        MessagePiece::get_header_size() + 
+        sizeof(success) + 
+        sizeof(key_offset) + 
+        sizeof(txn_id);
 
     if (success) {
-      message_size += value_size + sizeof(uint64_t);
+      message_size += value_size + sizeof(latest_tid);
     }
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -1132,7 +1257,7 @@ public:
 
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;
-    encoder << success << key_offset;
+    encoder << success << key_offset << txn_id;
 
     if (success) {
       // reserve size for read
@@ -1150,7 +1275,10 @@ public:
 
   static void read_lock_response_handler(MessagePiece inputPiece,
                                          Message &responseMessage,
-                                         Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
+                                         Database &db, 
+                                         const Context &context,  
+                                         Partitioner *partitioner, 
+                                         std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::READ_LOCK_RESPONSE));
     auto table_id = inputPiece.get_table_id();
@@ -1170,10 +1298,16 @@ public:
 
     bool success;
     uint32_t key_offset;
+    uint32_t txn_id;
+
+    uint64_t tid;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> success >> key_offset;
+    dec >> success >> key_offset >> txn_id;
+    
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
     LionSSRWKey &readKey = txn->readSet[key_offset];
 
     VLOG(DEBUG_V16) << " READ_LOCK_RESPONSE  " << *(int*)readKey.get_key() << " " << success;
@@ -1181,11 +1315,12 @@ public:
     if (success) {
       DCHECK(inputPiece.get_message_length() ==
              MessagePiece::get_header_size() + sizeof(success) +
-                 sizeof(key_offset) + value_size + sizeof(uint64_t));
+                 sizeof(key_offset) + 
+                 sizeof(txn_id) + 
+                 value_size + 
+                 sizeof(tid));
 
-      
-      dec.read_n_bytes(readKey.get_value(), value_size);
-      uint64_t tid;
+      dec.read_n_bytes(readKey.get_value(), value_size);      
       dec >> tid;
       readKey.set_read_lock_bit();
       readKey.set_tid(tid);
@@ -1203,7 +1338,9 @@ public:
 
   static void write_lock_request_handler(MessagePiece inputPiece,
                                          Message &responseMessage,
-                                         Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
+                                         Database &db, 
+                                         const Context &context,  
+                                         Partitioner *partitioner, std::vector<std::unique_ptr<Transaction>>& txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_REQUEST));
@@ -1225,9 +1362,13 @@ public:
 
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
+    uint32_t txn_id;
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(key_offset));
+           MessagePiece::get_header_size() + 
+           key_size + 
+           sizeof(key_offset) + 
+           sizeof(txn_id));
 
     const void *key = stringPiece.data();
 
@@ -1239,7 +1380,7 @@ public:
 
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset;
+    dec >> key_offset >> txn_id;
 
     DCHECK(dec.size() == 0);
 
@@ -1251,10 +1392,13 @@ public:
     }
     // prepare response message header
     auto message_size =
-        MessagePiece::get_header_size() + sizeof(bool) + sizeof(key_offset);
+        MessagePiece::get_header_size() + 
+        sizeof(success) + 
+        sizeof(key_offset) + 
+        sizeof(txn_id);
 
     if (success) {
-      message_size += value_size + sizeof(uint64_t);
+      message_size += value_size + sizeof(latest_tid);
     }
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
@@ -1263,7 +1407,7 @@ public:
 
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header;
-    encoder << success << key_offset;
+    encoder << success << key_offset << txn_id;
 
     VLOG(DEBUG_V16) << "WRITE_LOCK_REQUEST " << *(int*)key << " " << success ;
 
@@ -1283,7 +1427,9 @@ public:
 
   static void write_lock_response_handler(MessagePiece inputPiece,
                                           Message &responseMessage,
-                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
+                                          Database &db, 
+                                          const Context &context,  
+                                          Partitioner *partitioner, std::vector<std::unique_ptr<Transaction>>& txns) {
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_RESPONSE));
     auto table_id = inputPiece.get_table_id();
@@ -1303,11 +1449,15 @@ public:
 
     bool success;
     uint32_t key_offset;
+    uint32_t txn_id;  
+    uint64_t tid;
 
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
-    dec >> success >> key_offset;
+    dec >> success >> key_offset >> txn_id;
 
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
     LionSSRWKey &readKey = txn->readSet[key_offset];
 
     VLOG(DEBUG_V16) << " WRITE_LOCK_RESPONSE  " << *(int*)readKey.get_key() << " " << success;
@@ -1315,18 +1465,25 @@ public:
 
     if (success) {
       DCHECK(inputPiece.get_message_length() ==
-             MessagePiece::get_header_size() + sizeof(success) +
-                 sizeof(key_offset) + value_size + sizeof(uint64_t));
+             MessagePiece::get_header_size() + 
+             sizeof(success) +
+             sizeof(key_offset) + 
+             sizeof(txn_id) + 
+             value_size + 
+             sizeof(tid));
 
       dec.read_n_bytes(readKey.get_value(), value_size);
-      uint64_t tid;
+      
       dec >> tid;
       readKey.set_write_lock_bit();
       readKey.set_tid(tid);
     } else {
       DCHECK(inputPiece.get_message_length() ==
-             MessagePiece::get_header_size() + sizeof(success) +
-                 sizeof(key_offset));
+             MessagePiece::get_header_size() + 
+             sizeof(success) +
+             sizeof(key_offset) +
+             sizeof(txn_id)
+             );
       LOG(INFO) << "failed READ_LOCK_RESPONSE";
       txn->abort_lock = true;
     }
@@ -1336,8 +1493,11 @@ public:
   }
 
   static void abort_request_handler(MessagePiece inputPiece,
-                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                    Transaction *txn) {
+                                    Message &responseMessage, 
+                                    Database &db, 
+                                    const Context &context,  
+                                    Partitioner *partitioner,
+                                    std::vector<std::unique_ptr<Transaction>>& txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::ABORT_REQUEST));
@@ -1349,23 +1509,27 @@ public:
     DCHECK(table_id == table.tableID());
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
-
+    bool write_lock;
+    uint32_t txn_id;
     /*
      * The structure of an abort request: (primary key, write_lock)
      * The structure of an abort response: null
      */
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(bool));
+           MessagePiece::get_header_size() + 
+           key_size + 
+           sizeof(write_lock) + 
+           sizeof(txn_id));
 
     auto stringPiece = inputPiece.toStringPiece();
 
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
 
-    bool write_lock;
+    
     Decoder dec(stringPiece);
-    dec >> write_lock;
+    dec >> write_lock >> txn_id;
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     // LOG(INFO) << "ABORT_REQUEST " << *(int*)key << " " << write_lock;
@@ -1377,8 +1541,11 @@ public:
   }
 
   static void write_request_handler(MessagePiece inputPiece,
-                                    Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                    Transaction *txn) {
+                                    Message &responseMessage, 
+                                    Database &db, 
+                                    const Context &context,  
+                                    Partitioner *partitioner,
+                                    std::vector<std::unique_ptr<Transaction>>& txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::WRITE_REQUEST));
@@ -1386,19 +1553,26 @@ public:
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);       
 
-
+    uint32_t txn_id;
     auto key_size = table.key_size();
     auto field_size = table.field_size();
-
+    
     /*
      * The structure of a write request: (primary key, field value)
      * The structure of a write response: ()
      */
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + field_size);
+           MessagePiece::get_header_size() + 
+           sizeof(txn_id) + 
+           key_size + 
+           field_size);
 
     auto stringPiece = inputPiece.toStringPiece();
+
+    Decoder dec(stringPiece);
+    dec >> txn_id;
+    stringPiece.remove_prefix(sizeof(txn_id));
 
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
@@ -1406,13 +1580,14 @@ public:
     table.deserialize_value(key, stringPiece);
 
     // prepare response message header
-    auto message_size = MessagePiece::get_header_size();
+    auto message_size = MessagePiece::get_header_size() + 
+                        sizeof(txn_id);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::WRITE_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
-    encoder << message_piece_header;
+    encoder << message_piece_header << txn_id;
     responseMessage.flush();
 
     VLOG(DEBUG_V16) << " WRITE_REQUEST  " << *(int*)key; // << " " << success;
@@ -1420,7 +1595,7 @@ public:
 
   static void write_response_handler(MessagePiece inputPiece,
                                      Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
-                                     Transaction *txn) {
+                                     std::vector<std::unique_ptr<Transaction>>& txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::WRITE_RESPONSE));
@@ -1428,12 +1603,28 @@ public:
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);   
 
+    uint32_t txn_id;
     auto key_size = table.key_size();
+    
+    /*
+     * The structure of a write request: (primary key, field value)
+     * The structure of a write response: ()
+     */
+
+    DCHECK(inputPiece.get_message_length() ==
+           MessagePiece::get_header_size() + 
+           sizeof(txn_id));
+
+    auto stringPiece = inputPiece.toStringPiece();
+
+    Decoder dec(stringPiece);
+    dec >> txn_id;
 
     /*
      * The structure of a write response: ()
      */
-
+    auto txn = txns[txn_id].get();
+    assert(txn != nullptr);
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
     VLOG(DEBUG_V16) << " WRITE_RESPONSE  "; //  << *(int*)key; // << " " << success;
@@ -1445,7 +1636,7 @@ public:
 
   static void replication_request_handler(MessagePiece inputPiece,
                                           Message &responseMessage,
-                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
+                                          Database &db, const Context &context,  Partitioner *partitioner, std::vector<std::unique_ptr<Transaction>>&txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::REPLICATION_REQUEST));
@@ -1456,7 +1647,8 @@ public:
     DCHECK(partition_id == table.partitionID());
     auto key_size = table.key_size();
     auto field_size = table.field_size();
-
+    uint64_t commit_tid;
+    uint32_t txn_id;
     /*
      * The structure of a replication request: (primary key, field value,
      * commit_tid) The structure of a replication response: null
@@ -1464,7 +1656,8 @@ public:
 
     DCHECK(inputPiece.get_message_length() == MessagePiece::get_header_size() +
                                                   key_size + field_size +
-                                                  sizeof(uint64_t));
+                                                  sizeof(commit_tid) + 
+                                                  sizeof(txn_id));
 
     auto stringPiece = inputPiece.toStringPiece();
 
@@ -1473,14 +1666,12 @@ public:
     auto valueStringPiece = stringPiece;
     stringPiece.remove_prefix(field_size);
 
-    uint64_t commit_tid;
     Decoder dec(stringPiece);
-    dec >> commit_tid;
+    dec >> commit_tid >> txn_id;
     
     DCHECK(dec.size() == 0);
     bool success = false;
     std::atomic<uint64_t> &tid = table.search_metadata(key, success);
-    uint32_t txn_id = 0;
     int debug_key = 0;
 
     if(success){
@@ -1518,7 +1709,7 @@ public:
 
   static void replication_response_handler(MessagePiece inputPiece,
                                           Message &responseMessage,
-                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn
+                                          Database &db, const Context &context,  Partitioner *partitioner, std::vector<std::unique_ptr<Transaction>>& txns
 
 ) {
 
@@ -1552,7 +1743,7 @@ public:
   static void release_read_lock_request_handler(MessagePiece inputPiece,
                                                 Message &responseMessage,
                                                 Database &db, const Context &context,  Partitioner *partitioner,
-                                                Transaction *txn) {
+                                                std::vector<std::unique_ptr<Transaction>>& txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_REQUEST));
@@ -1561,14 +1752,16 @@ public:
     ITable &table = *db.find_table(table_id, partition_id);   
 
     auto key_size = table.key_size();
-
+    uint32_t txn_id;
     /*
      * The structure of a release read lock request: (primary key)
      * The structure of a release read lock response: ()
      */
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size);
+           MessagePiece::get_header_size() + 
+           key_size + 
+           sizeof(txn_id));
 
     auto stringPiece = inputPiece.toStringPiece();
 
@@ -1596,7 +1789,7 @@ public:
   // static void release_read_lock_response_handler(MessagePiece inputPiece,
   //                                                Message &responseMessage,
   //                                                Database &db, const Context &context,  Partitioner *partitioner,
-  //                                                Transaction *txn) {
+  //                                                std::vector<std::unique_ptr<Transaction>>&txns) {
 
   //   DCHECK(inputPiece.get_message_type() ==
   //          static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_RESPONSE));
@@ -1620,7 +1813,7 @@ public:
   static void release_write_lock_request_handler(MessagePiece inputPiece,
                                                  Message &responseMessage,
                                                  Database &db, const Context &context,  Partitioner *partitioner,
-                                                 Transaction *txn) {
+                                                 std::vector<std::unique_ptr<Transaction>>&txns) {
 
     DCHECK(inputPiece.get_message_type() ==
            static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_REQUEST));
@@ -1629,22 +1822,26 @@ public:
     ITable &table = *db.find_table(table_id, partition_id);   
 
     auto key_size = table.key_size();
+    uint64_t commit_tid;
+    uint32_t txn_id;
     /*
      * The structure of a release write lock request: (primary key, commit tid)
      * The structure of a release write lock response: ()
      */
 
     DCHECK(inputPiece.get_message_length() ==
-           MessagePiece::get_header_size() + key_size + sizeof(uint64_t));
+           MessagePiece::get_header_size() + 
+           key_size + 
+           sizeof(commit_tid) + sizeof(txn_id));
 
     auto stringPiece = inputPiece.toStringPiece();
 
     const void *key = stringPiece.data();
     stringPiece.remove_prefix(key_size);
 
-    uint64_t commit_tid;
+    
     Decoder dec(stringPiece);
-    dec >> commit_tid;
+    dec >> commit_tid >> txn_id;
 
     std::atomic<uint64_t> &tid = table.search_metadata(key);
     TwoPLHelper::write_lock_release(tid, commit_tid);
@@ -1665,7 +1862,7 @@ public:
   // static void release_write_lock_response_handler(MessagePiece inputPiece,
   //                                                 Message &responseMessage,
   //                                                 Database &db, const Context &context,  Partitioner *partitioner,
-  //                                                 Transaction *txn) {
+  //                                                 std::vector<std::unique_ptr<Transaction>>&txns) {
   //   DCHECK(inputPiece.get_message_type() ==
   //          static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_RESPONSE));
   //   auto table_id = inputPiece.get_table_id();
@@ -1688,10 +1885,10 @@ public:
 
 
   static std::vector<
-      std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, Transaction *)>>
+      std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, std::vector<std::unique_ptr<Transaction>>&)>>
   get_message_handlers() {
     std::vector<
-        std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, Transaction *)>>
+        std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, std::vector<std::unique_ptr<Transaction>>&)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
     v.push_back(LionSSMessageHandler::transmit_request_handler);

@@ -1213,9 +1213,7 @@ private:
   // transaction only commit in a single group
   std::queue<std::unique_ptr<TransactionType>> q;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, messages;
-  // std::vector<std::function<void(MessagePiece, Message &, DatabaseType &,
-  //                                TransactionType *, std::deque<simpleTransaction>*)>>
-  //     messageHandlers;
+
   std::vector<std::function<void(
               MessagePiece, 
               Message &,               

@@ -107,9 +107,9 @@ public:
     size_t coordinatorID = partitioner.master_coordinator(table_id, partition_id, (void*)& key);
     readKey.set_dynamic_coordinator_id(coordinatorID);
 
-    if (coordinatorID != coordinator_id) {
-      pendingResponses++;
-    }
+    // if (coordinatorID != coordinator_id) {
+    //   pendingResponses++;
+    // }
 
     add_to_read_set(readKey);
   }
@@ -131,9 +131,9 @@ public:
     size_t coordinatorID = partitioner.master_coordinator(table_id, partition_id, (void*)&  key);
     readKey.set_dynamic_coordinator_id(coordinatorID);
 
-    if (coordinatorID != coordinator_id) {
-      pendingResponses++;
-    }
+    // if (coordinatorID != coordinator_id) {
+    //   pendingResponses++;
+    // }
     
     uint64_t coordinator_secondaryIDs = partitioner.secondary_coordinator(table_id, partition_id, (void*)& key);
     readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
@@ -358,6 +358,7 @@ public:
   int remaster_cnt, migrate_cnt, remote_cnt; // statistic
 
   uint64_t global_id_;
+  uint32_t id;
   RouterTxnOps op_;
 
   // table id, partition id, key, value, local_index_read?, write_lock?,

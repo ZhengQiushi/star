@@ -1360,7 +1360,7 @@ public:
           messageHandlers[type](messagePiece,
                               *sync_messages[message->get_source_node_id()], 
                               db, context, partitioner.get(),
-                              transaction.get());
+                              no_use);
         }
 
         message_stats[type]++;
@@ -1461,7 +1461,10 @@ protected:
   std::unique_ptr<Delay> delay;
   Percentile<int64_t> commit_latency, write_latency;
   Percentile<int64_t> dist_latency, local_latency;
+
   std::unique_ptr<TransactionType> transaction;
+  std::vector<std::unique_ptr<TransactionType>> no_use;
+
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, metis_async_messages;
   std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
@@ -1471,7 +1474,8 @@ protected:
   std::deque<int> router_stop_queue;
 
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, 
+      std::vector<std::unique_ptr<TransactionType>>&)>>
       messageHandlers;      
 
   std::vector<

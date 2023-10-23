@@ -98,7 +98,7 @@ public:
         txn_meta.c_txn_id_queue.push_no_wait(txn_id);
       }
       auto p = workload.unpack_transaction(context, 0, txn_meta.storages[txn_id], simple_txn);
-
+      p->id = txn_id;
       if(simple_txn.is_real_distributed){
         cur_real_distributed_cnt += 1;
         p->distributed_transaction = true;
@@ -138,7 +138,7 @@ public:
 
       bool retry_transaction = false;
 
-      transaction = cur_txns[i];
+      transaction = cur_txns[i].get();
       
       if(transaction == nullptr) continue;
 
@@ -734,7 +734,7 @@ public:
           messageHandlers[type](messagePiece,
                               *messages[message->get_source_node_id()], 
                               db, context, partitioner.get(),
-                              transaction);
+                              txn_meta.c_transactions_queue);
         }
         message_stats[type]++;
         message_sizes[type] += messagePiece.get_message_length();
@@ -790,10 +790,14 @@ public:
 
         if (write_lock) {
           txn.network_size += MessageFactoryType::new_write_lock_message(
-              *(this->sync_messages[coordinatorID]), *table, key, key_offset);
+              *(this->sync_messages[coordinatorID]), *table, key, key_offset,
+              txn.id);
+          txn.pendingResponses++;
         } else {
           txn.network_size += MessageFactoryType::new_read_lock_message(
-              *(this->sync_messages[coordinatorID]), *table, key, key_offset);
+              *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
+              txn.id);
+          txn.pendingResponses++;
         }
         txn.distributed_transaction = true;
 
@@ -873,14 +877,16 @@ public:
               // LOG(INFO) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
               txn.network_size += MessageFactoryType::new_async_search_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
-                  remaster, txn.op_);
-              //  txn.pendingResponses++; already added at myclayTransactions
+                  remaster, 
+                  txn.op_, txn.id);
+               txn.pendingResponses++;// already added at myclayTransactions
           } else {
               // others, only change the router
               // if(i == context.coordinator_num){
               //   LOG(INFO) << "new_transmit_router_only_message: " <<  *(int*)key;
               // }
-              txn.network_size += MessageFactoryType::new_async_search_router_only_message(*(this->sync_messages[i]), *table, key, key_offset, txn.op_);
+              txn.network_size += MessageFactoryType::new_async_search_router_only_message(*(this->sync_messages[i]), *table, key, key_offset, 
+              txn.op_, txn.id);
               txn.pendingResponses++;
           }            
         }
@@ -951,7 +957,8 @@ protected:
   TransactionType* transaction;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages, messages;
   std::vector<
-      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, TransactionType *)>>
+      std::function<void(MessagePiece, Message &, DatabaseType &, const ContextType &,  Partitioner *, 
+      std::vector<std::unique_ptr<TransactionType>>&)>>
       messageHandlers;
 
   std::vector<

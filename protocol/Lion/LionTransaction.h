@@ -183,7 +183,9 @@ public:
     //   debug += " " + std::to_string(*(int*)readSet[i].get_key()) + "(" + std::to_string(readSet[i].get_write_lock_bit()) + " " + std::to_string(readSet[i].get_read_respond_bit()) + ")";
     // }
     // VLOG(DEBUG_V14) << "DEBUG TXN READ SET " << debug;
-
+    if(is_abort()){
+      success = false;
+    }
     // cannot use unsigned type in reverse iteration
     for (int i = int(readSet.size()) - 1; i >= 0; i--) {
       // early return

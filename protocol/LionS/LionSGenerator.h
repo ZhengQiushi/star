@@ -474,17 +474,12 @@ public:
     std::size_t count = 0;
 
     // main loop
-    for (;;) {
+    // for (;;) {
       ExecutorStatus status;
 
       while ((status = static_cast<ExecutorStatus>(worker_status.load())) !=
             ExecutorStatus::START) {
-        if(status == ExecutorStatus::CLEANUP){
-          for(auto& n: dispatcher){
-            n.join();
-          }
-          return;
-        }
+
         std::this_thread::yield();
       }
 
@@ -526,7 +521,7 @@ public:
           schedule_meta.router_transaction_done[i].fetch_add(1);
         }
         status = static_cast<ExecutorStatus>(worker_status.load());
-      } while (status != ExecutorStatus::STOP);
+      } while (status != ExecutorStatus::STOP && status != ExecutorStatus::CLEANUP);
 
       n_complete_workers.fetch_add(1);
 
@@ -541,8 +536,11 @@ public:
 
       process_request();
       n_complete_workers.fetch_add(1);
+    // }
+    for(auto& n: dispatcher){
+      n.join();
     }
-    // not end here!
+    return;
   }
 
   void onExit() override {

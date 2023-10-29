@@ -454,9 +454,8 @@ public:
       responseMessage.flush();
       return;
     }
-
-    std::atomic<uint64_t> &tid = table.search_metadata(key);
     // try to lock tuple. Ensure not locked by current node
+    std::atomic<uint64_t> &tid = table.search_metadata(key);
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
@@ -469,8 +468,21 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+    // simulate migrate latency
+    std::vector<size_t> lock_;
+    size_t p_id = *(size_t*)key / 200000;
+    size_t offset_ = *(size_t*)key % 200000;
+    for(int i = 0 ; i + offset_ < 200000 && i < 500; i ++ ){
+      size_t k = p_id * 200000 + i + offset_;
+      std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
+      bool succ;
+      latest_tid = TwoPLHelper::write_lock(tid, succ); // be locked 
+      if(succ){
+        lock_.push_back(k);
+      }
+    }
 
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
+    if(remaster == false || context.migration_only > 0) {
       // simulate cost of transmit data
       for (auto i = 0u; i < context.n_nop * 2; i++) {
         asm("nop");
@@ -527,6 +539,12 @@ public:
     }
     responseMessage.flush();
     // wait for the commit / abort to unlock
+
+    for(auto& k: lock_){ 
+      std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
+      TwoPLHelper::write_lock_release(tid); // be locked 
+    }
+
     TwoPLHelper::write_lock_release(tid);
   }
 
@@ -581,12 +599,7 @@ public:
     uint64_t last_tid = 0;
 
 
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
-      // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop * 2; i++) {
-        asm("nop");
-      }
-    }
+
 
     if(success == true){
       // update router 
@@ -621,6 +634,12 @@ public:
         return;
       } 
 
+      if(remaster == false || context.migration_only > 0) {
+        // simulate cost of transmit data
+        for (auto i = 0u; i < context.n_nop * 2; i++) {
+          asm("nop");
+        }
+      }
       // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
       auto router_table = db.find_router_table(table_id); // , coordinator_id_old);

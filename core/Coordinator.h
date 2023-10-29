@@ -143,7 +143,6 @@ public:
                   << "metis_remaster | metis_migrate" << "\t" 
                   << "cpu_usage" << "\t" 
                   << "n_network_size" << "\t" 
-                  << "metis_n_network_size" << "\t" 
                   << "abort" << "\n";
 
     std::ofstream outfile_excel_breakdown;

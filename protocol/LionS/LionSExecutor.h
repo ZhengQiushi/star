@@ -202,12 +202,10 @@ public:
           ////
           last_seed = random.get_seed();
 
-          if (retry_transaction) {
-            transaction->reset();
-          } else {
+          if (!retry_transaction) {
             setupHandlers(*transaction, protocol);
           }
-
+          transaction->reset();
 
           //#####
           int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -246,6 +244,7 @@ public:
             retry_transaction = false;
             protocol->abort(*transaction, sync_messages);
             n_abort_no_retry.fetch_add(1);
+            LOG(INFO) << "abort: ";
             continue;
           } else {
             result = transaction->prepare_update_execute(id);
@@ -274,7 +273,7 @@ public:
               n_remaster.fetch_add(transaction->remaster_cnt);
               if(transaction->migrate_cnt > 0 || transaction->remaster_cnt > 0){
                 distributed_num.fetch_add(1);
-                LOG(INFO) << distributed_num.load();
+                // LOG(INFO) << distributed_num.load();
               } else {
                 singled_num.fetch_add(1);
               }
@@ -307,11 +306,13 @@ public:
                 random.set_seed(last_seed);
                 retry_transaction = true;
               }
+              LOG(INFO) << "abort: ";
               protocol->abort(*transaction, sync_messages);
             }
           } else {
             n_abort_no_retry.fetch_add(1);
             protocol->abort(*transaction, sync_messages);
+            LOG(INFO) << "abort: ";
           }
         } while (retry_transaction);
       }
@@ -453,7 +454,7 @@ public:
       }
       txn_meta.clear();
       status = static_cast<ExecutorStatus>(worker_status.load());
-    } while (status != ExecutorStatus::STOP);
+    } while (status != ExecutorStatus::STOP && status != ExecutorStatus::CLEANUP);
 
     n_complete_workers.fetch_add(1);
 
@@ -637,6 +638,7 @@ public:
           // master-replica is at local node 
           std::atomic<uint64_t> &tid = table->search_metadata(key, success);
           if(success == false){
+            LOG(INFO) << "failed LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
             return 0;
           }
           // immediatly lock local record 赶快本地lock
@@ -730,14 +732,11 @@ public:
       if (coordinatorID == coordinator_id) {
         // master-replica is at local node 
         std::atomic<uint64_t> &tid = table->search_metadata(key, success);
-        if(success == false){
-          return 0;
-        }
-
         if(success){
-          // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
           readKey.set_read_respond_bit();
         } else {
+          LOG(INFO) << "failed LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
+          
           return 0;
         }
         local_read = true;

@@ -1066,6 +1066,7 @@ public:
   }
 
   void func(){
+      // return;
       std::vector<std::shared_ptr<simpleTransaction>> &txns =schedule_meta.node_txns;
       auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
 
@@ -1195,7 +1196,7 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-      // func();
+      func();
       if(latency > start_offset){
         break;
       }
@@ -1214,7 +1215,7 @@ public:
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
 
-      // func();
+      func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));

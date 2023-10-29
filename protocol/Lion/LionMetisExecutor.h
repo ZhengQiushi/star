@@ -232,7 +232,7 @@ public:
     int times = 0;
     ExecutorStatus status;
 
-    while(status != ExecutorStatus::EXIT){
+    while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
       status = static_cast<ExecutorStatus>(worker_status.load());
       // process_metis_request();
       process_request();

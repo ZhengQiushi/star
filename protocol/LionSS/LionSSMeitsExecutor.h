@@ -138,6 +138,7 @@ public:
     
     int total_span = 0;
     size_t i = 0;
+    int cnt = 0;
     for(;;) {
       bool success = false;
       i = txn_id_queue.pop_no_wait(success);
@@ -157,7 +158,11 @@ public:
 
       transaction = std::move(cur_trans[i]);
 
-
+      if(!transaction->distributed_transaction || 
+         (transaction->distributed_transaction && !transaction->check_cross_node_txn(true))){
+        continue;;
+      }
+      cnt += 1;
        
       transaction->startTime = std::chrono::steady_clock::now();;
 
@@ -172,10 +177,6 @@ public:
           setupHandlers(*transaction);
         }
 
-        auto s = transaction->txn_nodes_involved(true);
-        if(!transaction->distributed_transaction && s.size() == 1){
-          break;
-        }
 
         
         // auto debug = transaction->debug_record_keys();
@@ -270,7 +271,7 @@ public:
     flush_sync_messages();
 
 
-    LOG(INFO) << "cur_queue_size: " << cur_queue_size; //  << " " << " cross_txn_num: " << cross_txn_num;
+    LOG(INFO) << "cur_queue_size: " << cur_queue_size << " " << cnt; //  << " " << " cross_txn_num: " << cross_txn_num;
   }
 
   // bool is_router_stopped(int& router_recv_txn_num){
@@ -498,7 +499,7 @@ public:
 
         if(remaster && !context.migration_only){
           txn.remaster_cnt ++ ;
-          VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
+          LOG(INFO) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
         } else {
           txn.migrate_cnt ++ ;
         }

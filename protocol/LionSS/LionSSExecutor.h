@@ -330,7 +330,7 @@ public:
                      .count() * 1.0;
     
 
-    if(cnt > 0){
+    if(cnt > 500){
       LOG(INFO) << "rrrrremaster : " << total_sec / 1000 / 1000 << " s, " << total_sec / cnt << " per/micros." << cnt ;
 
       VLOG(DEBUG_V4) << time_read_remote << " "<< cnt  << " prepare: " << time_prepare_read / cnt << "  execute: " << time_read_remote / cnt << "  commit: " << time3 / cnt;

@@ -525,7 +525,7 @@ public:
         // 
         int cur_workload = 0;
 
-        while(status != ExecutorStatus::EXIT){
+        while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
           process_request();
           std::this_thread::sleep_for(std::chrono::microseconds(5));
           status = static_cast<ExecutorStatus>(worker_status.load());
@@ -540,7 +540,7 @@ public:
         last_timestamp_ = std::chrono::steady_clock::now();
         // 
 
-        while(status != ExecutorStatus::EXIT){
+        while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
 
           process_request();
           status = static_cast<ExecutorStatus>(worker_status.load());
@@ -602,7 +602,7 @@ public:
         }
         LOG(INFO) << "transmiter " << " exits.";
     // });
-      while(status != ExecutorStatus::EXIT){
+      while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
         process_request();
         status = static_cast<ExecutorStatus>(worker_status.load());
         std::this_thread::sleep_for(std::chrono::microseconds(5));

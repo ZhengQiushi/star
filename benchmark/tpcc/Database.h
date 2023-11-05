@@ -52,6 +52,15 @@ public:
     return tbl_vecs_router[table_id]; // [coordinator_id];
   }
 
+  ITable *find_router_lock_table(std::size_t table_id) { // , std::size_t coordinator_id
+    // 找某个节点的路由表
+    // DCHECK(table_id < tbl_vecs.size());
+    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
+    DCHECK(false);
+    DCHECK(isolation_replica == false);
+    return nullptr;
+  }
+
   ITable *find_table(std::size_t table_id, std::size_t partition_id, int replica_id) {
     DCHECK(table_id < tbl_vecs_[replica_id].size());
     DCHECK(partition_id < tbl_vecs_[replica_id][table_id].size());
@@ -62,6 +71,12 @@ public:
   ITable *find_router_table(std::size_t table_id, int replica_id) {
     DCHECK(isolation_replica == true && replica_id != -1);
     return tbl_vecs_router_[replica_id][table_id]; // tbl_vecs_router[table_id]
+  }
+  
+  ITable *find_router_lock_table(std::size_t table_id, int replica_id) {
+    DCHECK(false);
+    DCHECK(isolation_replica == true && replica_id != -1);
+    return nullptr;
   }
 
   ITable *tbl_warehouse(std::size_t partition_id) {

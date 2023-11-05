@@ -337,7 +337,7 @@ public:
       //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       //     debug += std::to_string(txns_coord_cost_[t->idx_][i]) + " ";
       //   }
-      //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
+      //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " -> " << max_node << " : " << debug;
       // }
       size_t cnt_master = from_nodes_id[max_node];
       size_t cnt_secondary = from_nodes_id_secondary[max_node];

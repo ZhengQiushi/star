@@ -37,6 +37,169 @@ public:
 
   using StorageType = typename WorkloadType::StorageType;
   int pin_thread_id_ = 3;
+ 
+   
+  struct Clump
+  {
+    std::chrono::_V2::steady_clock::time_point ts;
+    std::unordered_set<uint64_t> keys;
+    int coordinator_id;
+  };
+
+  class RouterClump {
+  public:  
+    std::chrono::_V2::steady_clock::time_point ts;
+    const ContextType &context;
+    int partition_num;
+    RouterClump(const ContextType &context): context(context){
+      ts = std::chrono::steady_clock::now();
+      keyToClump.resize(context.partition_num, std::vector<int>(200000, -1));
+    }
+
+    std::vector<std::vector<int>> keyToClump;
+    std::vector<Clump> clumps;
+    std::queue<int> freeClumps;
+    const int expire_duration = 30;
+    void addToClump(simpleTransaction* t, Clump& c){
+      for(auto& key: t->keys){
+        c.keys.insert(key);
+      }
+      c.ts = std::chrono::steady_clock::now();
+    }
+
+    void MergeClump(Clump& c1, Clump& c2){
+      for(auto& key: c2.keys){
+        c1.keys.insert(key);
+      }
+      c1.ts = std::chrono::steady_clock::now();
+    }
+    void updateDest(simpleTransaction* t){
+      for(auto& key: t->keys){
+        int k = key % 200000;
+        int p_id = key / 200000;
+        int clump_id = keyToClump[p_id][k];
+        Clump& c = clumps[clump_id];
+        c.coordinator_id = t->destination_coordinator;
+        break;
+      }
+    }
+    void addTxn(simpleTransaction* t){
+      // merges two clumps
+      bool has_add = false;
+
+      int clumps_ids[20] = {0};
+      int clumps_cnt = 0;
+
+      for(int kk = t->keys.size() - 1; kk >= 0 ; kk -- ){
+        int key = t->keys[kk];
+        int k = key % 200000;
+        int p_id = key / 200000;
+        if(keyToClump[p_id][k] == -1){
+          continue;
+        }
+
+        int clump_id = keyToClump[p_id][k];
+        Clump& c = clumps[clump_id];
+        auto now = std::chrono::steady_clock::now();
+
+        if(std::chrono::duration_cast<std::chrono::seconds>(now - c.ts).count() > expire_duration){
+          // expired
+          freeClumps.push(clump_id);
+          // clean expired clump
+          for(auto& key: c.keys){
+            int k = key % 200000;
+            keyToClump[p_id][k] = -1;
+          }
+          c.keys.clear();
+        } else {
+          bool is_find = false;
+          for(int i = 0; i < clumps_cnt; i ++ ){
+            if(clumps_ids[i] == clump_id){
+              is_find = true;
+            }
+          }
+          if(!is_find || clumps_cnt == 0){
+            clumps_ids[clumps_cnt ++ ] = clump_id;
+          }
+          has_add = true;
+        }
+        if(t->keys[1] == 429321){
+          LOG(INFO) << "!!!! " << 429321 << " " << key << " " << clump_id << " " << c.coordinator_id;
+        }
+        if(t->keys[0] == 932){
+          LOG(INFO) << "!!!! " << 932 << " " << key << " " << clump_id << " " << c.coordinator_id;
+        }
+      }
+
+      if(has_add){
+        Clump& c = clumps[clumps_ids[0]];
+        if(clumps_cnt == 1){
+          addToClump(t, c);
+        } else if(clumps_cnt > 1){
+          for(int i = 1 ; i < clumps_cnt; i ++ ){
+            Clump& c2 = clumps[clumps_ids[i]];
+            MergeClump(c, c2);
+            freeClumps.push(clumps_ids[i]);
+            for(auto& key: c2.keys){
+              int k = key % 200000;
+              int p_id = key / 200000;
+              keyToClump[p_id][k] = clumps_ids[0];
+            }
+            c2.keys.clear();
+          }
+        }
+      } else {
+        // has_not_add 
+        // first find a free clumps
+        int new_clump_id = -1;
+        if(!freeClumps.empty()){
+          new_clump_id = freeClumps.front();
+          freeClumps.pop();
+        } else {
+          // else alloc a new one 
+          new_clump_id = clumps.size();
+          Clump c;
+          clumps.push_back(c);
+        }
+
+        Clump& c = clumps[new_clump_id];
+        for(auto& key: t->keys){
+          c.keys.insert(key);
+          int k = key % 200000;
+          int p_id = key / 200000;
+          keyToClump[p_id][k] = new_clump_id;
+        }
+        c.ts = std::chrono::steady_clock::now();
+        // DCHECK(t->destination_coordinator != -1);
+        c.coordinator_id = -1; // t->destination_coordinator;
+      }
+    }
+
+    int searchTxn(simpleTransaction* t){
+      int ret = -1;
+      auto now = std::chrono::steady_clock::now();
+      if(std::chrono::duration_cast<std::chrono::seconds>(now - ts).count() > 10){
+        for(auto& key: t->keys){
+          int k = key % 200000;
+          int p_id = key / 200000;
+          if(keyToClump[p_id][k] == -1){
+            continue;
+          }
+          int clump_id = keyToClump[p_id][k];
+          Clump& c = clumps[clump_id];
+          auto now = std::chrono::steady_clock::now();
+
+          if(std::chrono::duration_cast<std::chrono::seconds>(now - c.ts).count() > expire_duration){
+            continue;
+          }
+          ret = c.coordinator_id;
+          break;
+        }
+      }
+      return ret;
+    }
+  };
+
   LionSSGenerator(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
@@ -47,6 +210,7 @@ public:
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
         schedule_meta(schedule_meta),
+        routerClumps(context),
         partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
             coordinator_id, context.coordinator_num, db)),
         random(reinterpret_cast<uint64_t>(this)),
@@ -109,11 +273,12 @@ public:
         
         while(is_full_signal_self[dispatcher_id].load() == false){
             bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-                                  transactions_queue_self[dispatcher_id]);
+                                  transactions_queue_self[dispatcher_id], 
+                                  dispatcher_id);
 
             if(!success){ // full
                 is_full_signal_self[dispatcher_id].store(true);
-            } 
+            }
         }
         // 
         is_inited.fetch_add(1);
@@ -132,7 +297,7 @@ public:
           }
 
           bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-            transactions_queue_self[dispatcher_id]);
+            transactions_queue_self[dispatcher_id], dispatcher_id);
           if(!success){ // full
             is_full_signal_self[dispatcher_id].store(true);
           }                    
@@ -164,7 +329,8 @@ public:
   };
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 1000>& transactions_queue_self_){
+      ShareQueue<simpleTransaction*, 1000>& transactions_queue_self_,
+      int dispatcher_id){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
@@ -220,6 +386,11 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
+    // LOG(INFO) << txn->partition_id << " " 
+    //           << partition_id_ << " " 
+    //           << partition_id << " " 
+    //           << dispatcher_id << " " 
+    //           << txn->keys[0] << " " << txn->keys[1];
 
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
@@ -273,19 +444,27 @@ public:
       }
 
       int max_cnt = INT_MIN;
+      int max_real_cnt = INT_MIN;
       int max_node = -1;
 
       int replica_most_cnt = INT_MIN;
       int replica_max_node = -1;
 
+      // routerClumps.addTxn(t);
+      int clump_coordinator_id = -1; // routerClumps.searchTxn(t);
+
       for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
+        int other_cur_score = 0;
 
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
         if(context.migration_only){
           cur_score += 100 * cnt_master;
         } else {
+          if(clump_coordinator_id == cur_c_id && context.migration_only == 0){
+            other_cur_score += 100 * (int)query_keys.size();
+          } 
           if(cnt_master == query_keys.size()){
             cur_score += 100 * (int)query_keys.size();
           } else if(cnt_secondary + cnt_master == query_keys.size()){
@@ -295,9 +474,10 @@ public:
           }
         }
 
-        if(cur_score > max_cnt){
+        if(cur_score + other_cur_score > max_cnt){
           max_node = cur_c_id;
-          max_cnt = cur_score;
+          max_cnt = cur_score + other_cur_score;
+          max_real_cnt = cur_score;
         }
 
         if(cnt_secondary > replica_most_cnt){
@@ -319,7 +499,13 @@ public:
 
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
-      t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
+      if(clump_coordinator_id != -1 && clump_coordinator_id != max_node){
+        t->is_real_distributed = true;
+      } else if(max_real_cnt == 100 * (int)query_keys.size()){
+        t->is_real_distributed = false;
+      } else {
+        t->is_real_distributed = true;
+      }
 
       t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){
@@ -335,6 +521,10 @@ public:
       // if(cnt_secondary + cnt_master != query_keys.size()){
       //   distributed_outfile_excel << t->keys[0] << "\t" << t->keys[1] << "\t" << max_node << "\n";
       // }
+
+    // LOG(INFO) << t->keys[0] << " " << t->keys[1] << " : " << t->destination_coordinator;
+    // routerClumps.updateDest(t);
+
 
      return;
    }
@@ -523,7 +713,8 @@ public:
           bool success = false;
           simpleTransaction* new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
 
-          DCHECK(success == true);
+          if(!success) continue;
+
           // determine its ideal destination
           if(WorkloadType::which_workload == myTestSet::YCSB){
             txn_nodes_involved(new_txn);
@@ -536,9 +727,14 @@ public:
 
           // add to metis generator for schedule
           bool ss = schedule_meta.transactions_queue_self.push_no_wait(new_txn);
-          // LOG(INFO) << ss << " " << new_txn->keys[0] << 
-          //                    " " << new_txn->keys[1] << 
-          //                    " " << new_txn->destination_coordinator;
+          // if(ss){
+          //   LOG(INFO) << dispatcher_id <<
+          //                " " << new_txn->keys[0] << 
+          //                " " << new_txn->keys[1] << 
+          //                " " << new_txn->destination_coordinator << 
+          //                " ";
+          // }
+
 
           // inform generator to create new transactions
           is_full_signal_self[dispatcher_id].store(false);
@@ -816,6 +1012,8 @@ protected:
 
   int dispatcher_num;
   int cur_txn_num;
+
+  RouterClump routerClumps;
 
 };
 } // namespace group_commit

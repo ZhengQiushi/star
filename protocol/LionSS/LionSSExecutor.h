@@ -293,10 +293,13 @@ public:
 
         auto result = transaction->read_execute(id, ReadMethods::REMASTER_ONLY);
         
-        if(result != TransactionResult::READY_TO_COMMIT){
-          retry_transaction = false;
-          protocol.abort(*transaction, async_messages);
+        if(transaction->abort_lock){
+          // protocol.abort(*transaction, async_messages);
+          retry_transaction = true;
           n_abort_no_retry.fetch_add(1);
+          // LOG(INFO) << "RETRY" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
+        } else {
+          retry_transaction = false;
         }
         
         n_migrate.fetch_add(transaction->migrate_cnt);
@@ -350,12 +353,8 @@ public:
     uint64_t last_seed = 0;
 
     // int time1 = 0;
-    int time_before_prepare_set = 0;
-    int time_prepare_read = 0;
-    int time_read_remote = 0;
-    int time3 = 0;
     auto begin = std::chrono::steady_clock::now();
-
+    int cur_cross_num = 0;
     std::vector<int> why(30, 0);
 
     auto i = 0u;
@@ -435,18 +434,19 @@ public:
         if(!transaction->is_transmit_requests()){
           if(transaction->distributed_transaction){
             cross_txn_num ++ ;
-            if(i < 5){
-              auto k = transaction->get_query();
-              auto kc = transaction->get_query_master();
-              // MoveRecord<WorkloadType> rec;
-              // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+            cur_cross_num += 1;
+            if(cur_cross_num < 5){
+              // auto k = transaction->get_query();
+              // auto kc = transaction->get_query_master();
+              // // MoveRecord<WorkloadType> rec;
+              // // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-              LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
-                                             " " << k[0] << " | "
-                                             " " << k[1] << " | " 
-                                             " " << k[2] << " | " 
-                                             " " << k[3] << " | " 
-                                             " " << k[4];
+              // LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
+              //                                " " << k[0] << " | "
+              //                                " " << k[1] << " | " 
+              //                                " " << k[2] << " | " 
+              //                                " " << k[3] << " | " 
+              //                                " " << k[4];
             }
           } else {
             single_txn_num ++ ;
@@ -507,15 +507,16 @@ public:
 
       // cur_txns.pop_front();
 
-      if (i % context.batch_flush == 0) {
+      // if (i % context.batch_flush == 0) {
         flush_async_messages();
         flush_sync_messages();
-      }
+      // }
     }
     flush_async_messages();
     flush_sync_messages();
 
-    // LOG(INFO) << "cur_queue_size: " << cur_queue_size; //  << " " << " cross_txn_num: " << cross_txn_num;
+    if(cur_queue_size > 500)
+      LOG(INFO) << "cur_queue_size: " << cur_queue_size  << " " << " cross_txn_num: " << cur_cross_num;
 
   }
   
@@ -568,7 +569,7 @@ public:
 
       unpack_route_transaction(); // 
       
-      if(cur_real_distributed_cnt > 0){
+      if(cur_real_distributed_cnt > 0 && context.lion_self_remaster){
         do_remaster_transaction(txn_meta.c_transactions_queue);
       }
 
@@ -777,11 +778,32 @@ public:
           TwoPLHelper::read_lock(tid, success);
         }
 
+        if(success){
+          // todo ycsb only
+          ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+          ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+          std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+          TwoPLHelper::write_lock(lock_tid, success); // be locked 
+
+          if(!success){
+            // 
+            // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+            if (write_lock) {
+              TwoPLHelper::write_lock_release(tid);
+            } else {
+              TwoPLHelper::read_lock_release(tid);
+            }
+          } else {
+            TwoPLHelper::write_lock_release(lock_tid);
+          }
+          // 
+        }
+
         if (success) {
           // LOG(INFO) << "local LOCK " << *(int*)key;
           return this->protocol.search(table_id, partition_id, key, value);
         } else {
-          LOG(INFO) << "FAILED TO LOCK " << *(int*)key;
+          // LOG(INFO) << "FAILED TO LOCK " << *(int*)key;
           return 0;
         }
 
@@ -880,7 +902,7 @@ public:
               // if(i == context.coordinator_num){
               //   LOG(INFO) << "new_transmit_router_only_message: " <<  *(int*)key;
               // }
-              txn.network_size += MessageFactoryType::new_async_search_router_only_message(*(this->sync_messages[i]), *table, key, key_offset, txn.op_);
+              txn.network_size += MessageFactoryType::new_async_search_router_only_message(*(this->sync_messages[i]), *table, key, key_offset, txn.op_, coordinatorID);
               txn.pendingResponses++;
           }            
         }

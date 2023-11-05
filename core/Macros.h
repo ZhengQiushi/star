@@ -33,6 +33,7 @@ DEFINE_int64(n_nop, 10000, "total number of nop");
 DEFINE_string(lock_manager, "1,1", "calvin lock manager");
 // 每个replica group的lock manager的数量
 DEFINE_bool(read_on_replica, false, "read from replicas");
+DEFINE_bool(lion_self_remaster, false, "lion_self_remaster");
 DEFINE_bool(local_validation, false, "local validation");
 DEFINE_bool(rts_sync, false, "rts sync");
 DEFINE_bool(star_sync, false, "synchronous write in the single-master phase");
@@ -94,6 +95,7 @@ DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
   context.replica_group = std::to_string(context.coordinator_num);             \
   context.lock_manager = FLAGS_lock_manager;                                   \
   context.read_on_replica = FLAGS_read_on_replica;                             \
+  context.lion_self_remaster = FLAGS_lion_self_remaster;                       \
   context.local_validation = FLAGS_local_validation;                           \
   context.rts_sync = FLAGS_rts_sync;                                           \
   context.star_sync_in_single_master_phase = FLAGS_star_sync;                  \

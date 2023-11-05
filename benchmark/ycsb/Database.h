@@ -34,13 +34,18 @@ public:
     DCHECK(isolation_replica == false);
     return tbl_vecs[table_id][partition_id];
   }
+  
+  ITable *find_router_lock_table(std::size_t table_id, std::size_t partition_id) {
+    DCHECK(table_id < tbl_vecs_router_lock.size());
+    DCHECK(partition_id < tbl_vecs_router_lock[table_id].size());
+    DCHECK(isolation_replica == false);
+    return tbl_vecs_router_lock[table_id][partition_id];
+  }
 
   ImyRouterTable *find_router_table(std::size_t table_id) { // , std::size_t coordinator_id
     // 找某个节点的路由表
-    // DCHECK(table_id < tbl_vecs.size());
-    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
     DCHECK(isolation_replica == false);
-    return tbl_vecs_router[table_id]; // tbl_vecs_router[table_id][coordinator_id];
+    return tbl_vecs_router[table_id];
   }
 
   std::size_t get_dynamic_coordinator_id(size_t coordinator_num, std::size_t table_id, const void* key){
@@ -92,13 +97,9 @@ public:
 
   ImyRouterTable *find_router_table(std::size_t table_id, int replica_id) { // , std::size_t coordinator_id
     // 找某个节点的路由表
-    // DCHECK(table_id < tbl_vecs.size());
-    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
     DCHECK(isolation_replica == true && replica_id != -1);
-    return tbl_vecs_router_[replica_id][table_id]; // tbl_vecs_router[table_id][coordinator_id];
+    return tbl_vecs_router_[replica_id][table_id]; 
   }
-
-
 
   void init_router_table(const Context& context, std::unique_ptr<Partitioner> &partitioner){
     /**
@@ -122,7 +123,7 @@ public:
           size_t last_replica = (partitionID + 1) % context.coordinator_num;
           size_t first_replica = (last_replica - partitioner->replica_num() + 1 + context.coordinator_num) % context.coordinator_num;
 
-          ImyRouterTable *table_router = tbl_vecs_router[0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
+          ImyRouterTable *table_router = tbl_vecs_router[0]; 
 
           RouterValue router;
           router.set_dynamic_coordinator_id(last_replica);
@@ -151,7 +152,6 @@ public:
     }
   }
 
-
   void init_hermes_router_table(const Context& context, std::size_t replica_id){
     /**
      * @brief for Lion only.
@@ -174,7 +174,7 @@ public:
 
           int router_coordinator = (partitionID + replica_id) % context.coordinator_num;
 
-          ImyRouterTable *table_router = tbl_vecs_router_[replica_id][0]; // tbl_ycsb_vec_router.get(); // 两个不能相同
+          ImyRouterTable *table_router = tbl_vecs_router_[replica_id][0]; 
 
           RouterValue router;
           router.set_dynamic_coordinator_id(router_coordinator);
@@ -271,6 +271,46 @@ public:
                      .count()
               << " milliseconds. "  << threadsNum; 
   }
+  template <class InitFunc>
+  void initLockTables(const std::string &name, InitFunc initFunc,
+                  std::size_t partitionNum, std::size_t threadsNum,
+                  Partitioner *partitioner) {
+
+    std::vector<int> all_parts;
+
+    for (auto i = 0u; i < partitionNum; i++) {
+        all_parts.push_back(i);
+    }
+
+    std::vector<std::thread> v;
+    auto now = std::chrono::steady_clock::now();
+
+    for (auto threadID = 0u; threadID < threadsNum; threadID++) {
+      v.emplace_back([=]() {
+        auto now1 = std::chrono::steady_clock::now();
+        
+        for (auto i = threadID; i < all_parts.size(); i += threadsNum) {
+          auto partitionID = all_parts[i];
+          initFunc(partitionID);
+        }
+
+        LOG(INFO) << " threadID: " << threadID << " " << all_parts.size() << " " 
+                  << std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - now1)
+                        .count()
+                  << " milliseconds. "; 
+      });
+    }
+    for (auto &t : v) {
+      t.join();
+    }
+    LOG(INFO) << name << " initialization finished in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds. "  << threadsNum; 
+  }
+
 
   template <class InitFunc>
   void MyInitTables(const Context& context,
@@ -326,15 +366,21 @@ public:
       tbl_ycsb_vec.push_back(
           std::make_unique<Table<100860, ycsb::key, ycsb::value>>(ycsbTableID,
                                                                 partitionID));
+      tbl_ycsb_vec_router_lock.push_back(
+          std::make_unique<Table<100860, ycsb::key, ycsb::value>>(ycsbTableID,
+                                                                partitionID));
     }
 
     // there is 1 table in ycsb
     tbl_vecs.resize(1);
+    tbl_vecs_router_lock.resize(1);
 
     auto tFunc = [](std::unique_ptr<ITable> &table) { return table.get(); };
 
     std::transform(tbl_ycsb_vec.begin(), tbl_ycsb_vec.end(),
                    std::back_inserter(tbl_vecs[0]), tFunc);
+    std::transform(tbl_ycsb_vec_router_lock.begin(), tbl_ycsb_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[0]), tFunc);
 
     using std::placeholders::_1;
     initTables("ycsb",
@@ -342,7 +388,13 @@ public:
                  ycsbInit(context, partitionID, tbl_ycsb_vec[partitionID].get());
                },
                partitionNum, threadsNum, partitioner.get());
-    
+
+    initLockTables("ycsb",
+               [&context, this](std::size_t partitionID) {
+                 ycsbInit(context, partitionID, tbl_ycsb_vec_router_lock[partitionID].get());
+               },
+               partitionNum, threadsNum, partitioner.get());
+
     // initalize_router_table
     // quick look-up for certain-key on which node, pre-allocate space
     const size_t sz = context.partition_num * context.keysPerPartition * context.coordinator_num;
@@ -382,8 +434,6 @@ public:
       }
       for(size_t i = 0; i < replica_num; i ++ ){
         tbl_ycsb_vec_router_[i] = (std::make_unique<myRouterTable<ycsb::key, RouterValue>>(sz, ycsbTableID, 0));
-
-        std::vector<ITable *> tt;
         tbl_vecs_router_[i].resize(1);
         tbl_vecs_router_[i][0] = tbl_ycsb_vec_router_[i].get();
       }
@@ -427,7 +477,6 @@ private:
   void ycsbInit(const Context &context, std::size_t partitionID, ITable *table) {
 
     Random random;
-    // ITable *table = tbl_ycsb_vec[partitionID].get();
 
     std::size_t keysPerPartition =
         context.keysPerPartition; // 5M keys per partition
@@ -486,21 +535,26 @@ private:
   }
 
 private:
-  std::vector<std::vector<ITable *>> tbl_vecs; // [table_id][tbl_ycsb_vec]
+  std::vector<std::vector<ITable *>> tbl_vecs;
   std::vector<ImyRouterTable *> tbl_vecs_router;
+  std::vector<std::vector<ITable *>> tbl_vecs_router_lock;
+
   
-  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec; // partition -> table
+  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec;   // partition -> table
   std::unique_ptr<ImyRouterTable> tbl_ycsb_vec_router; // table_id, coordinator_id
-                                                            // key
-                                                            // 
+  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router_lock; // key
 
 
   bool isolation_replica;
 
-  std::vector<std::vector<ITable *>> tbl_vecs_[2]; // [table_id][tbl_ycsb_vec]
+  std::vector<std::vector<ITable *>> tbl_vecs_[2];
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_[2]; // partition -> table
+
   std::vector<ImyRouterTable *> tbl_vecs_router_[2];
   std::unique_ptr<ImyRouterTable> tbl_ycsb_vec_router_[2]; // table_id, coordinator_id
+
+  std::vector<std::vector<ITable *>> tbl_vecs_router_lock_[2];
+  std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router_lock_[2]; // table_id, coordinator_id
 
   std::size_t coordinator_id; // = context.coordinator_id;
   std::size_t partitionNum; // = context.partition_num;

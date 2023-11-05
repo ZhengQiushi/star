@@ -71,6 +71,7 @@ public:
   bool sleep_on_retry = false;
 
   bool read_on_replica = false;
+  bool lion_self_remaster = false;
   bool local_validation = false;
   bool rts_sync = false;
   bool star_sync_in_single_master_phase = false;

@@ -335,17 +335,23 @@ public:
     }
 
     // simulate migrate latency
-    std::vector<size_t> lock_;
-    size_t p_id = *(size_t*)key / 200000;
-    size_t offset_ = *(size_t*)key % 200000;
-    for(int i = 0 ; i + offset_ < 200000 && i < 500; i ++ ){
-      size_t k = p_id * 200000 + i + offset_;
-      std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
-      bool succ;
-      latest_tid = TwoPLHelper::write_lock(tid, succ); // be locked 
-      if(succ){
-        lock_.push_back(k);
-      }
+    ycsb::ycsb::key k(*(size_t*)key % 200000 / 500 + 200000 * partition_id);
+    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+    TwoPLHelper::write_lock(lock_tid, success); // be locked 
+    if(!success){
+      TwoPLHelper::write_lock_release(tid);
+      // auto test = my_debug_key(table_id, partition_id, key);
+      // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key; //  << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid 
+              << key_offset 
+              << txn_id
+              << success 
+              << remaster 
+              << is_metis;
+      responseMessage.data.append(value_size, ' ');
+      responseMessage.flush();
+      return;
     }
 
     if(remaster == false || context.migration_only > 0) {
@@ -434,13 +440,14 @@ public:
       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
     }
 
-    for(auto& k: lock_){ 
-      std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
-      TwoPLHelper::write_lock_release(tid); // be locked 
-    }
+    // for(auto& k: lock_){ 
+    //   std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
+    //   TwoPLHelper::write_lock_release(tid); // be locked 
+    // }
 
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
+    TwoPLHelper::write_lock_release(lock_tid);
   }
 
   static void search_response_handler(MessagePiece inputPiece,
@@ -598,7 +605,7 @@ public:
       }
 
     } else {
-      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      // LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
       txn->abort_lock = true;
     }
 
@@ -954,6 +961,23 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+
+    
+    ycsb::ycsb::key k(*(size_t*)key % 200000 / 500 + 200000 * partition_id);
+    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+    TwoPLHelper::write_lock(lock_tid, success); // be locked 
+    if(!success){
+      TwoPLHelper::write_lock_release(tid);
+      // auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << "  can't Lock " << *(int*)key;// << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid << key_offset << txn_id << success << remaster << is_metis;
+      encoder.write_n_bytes(key, key_size);
+      responseMessage.data.append(value_size, 0);
+      responseMessage.flush();
+      return;
+    }
+
     // lock the router_table 
     if(partitioner->is_dynamic()){
           // 数据所在节点的路由表
@@ -1022,6 +1046,8 @@ public:
 
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
+    TwoPLHelper::write_lock_release(lock_tid);
+
   }
 
   static void async_search_response_handler(MessagePiece inputPiece,

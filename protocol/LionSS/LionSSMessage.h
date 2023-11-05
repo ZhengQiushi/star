@@ -328,7 +328,7 @@ public:
 
   static std::size_t new_async_search_router_only_message(Message &message, ITable &table,
                                         const void *key, uint32_t key_offset,
-                                        RouterTxnOps op
+                                        RouterTxnOps op, uint32_t new_destination
                                         ) {
 
     /*
@@ -339,7 +339,7 @@ public:
 
     auto message_size =
         MessagePiece::get_header_size() + key_size + 
-        sizeof(key_offset) + sizeof(op);
+        sizeof(key_offset) + sizeof(op) + sizeof(new_destination);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
         static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY), message_size,
         table.tableID(), table.partitionID());
@@ -347,7 +347,7 @@ public:
     Encoder encoder(message.data);
     encoder << message_piece_header;
     encoder.write_n_bytes(key, key_size);
-    encoder << key_offset << op;
+    encoder << key_offset << op << new_destination;
     message.flush();
     return message_size;
   }
@@ -448,7 +448,7 @@ public:
 
     success = table.contains(key);
     if(!success){
-      LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+      LOG(INFO) << " TRANSMIT_REQUEST!!! dont Exist " << *(int*)key ; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -460,7 +460,7 @@ public:
 
     if(!success){ // VLOG(DEBUG_V12) 
       auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -469,17 +469,30 @@ public:
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
     // simulate migrate latency
-    std::vector<size_t> lock_;
-    size_t p_id = *(size_t*)key / 200000;
-    size_t offset_ = *(size_t*)key % 200000;
-    for(int i = 0 ; i + offset_ < 200000 && i < 500; i ++ ){
-      size_t k = p_id * 200000 + i + offset_;
-      std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
-      bool succ;
-      latest_tid = TwoPLHelper::write_lock(tid, succ); // be locked 
-      if(succ){
-        lock_.push_back(k);
-      }
+    // std::vector<size_t> lock_;
+    // size_t p_id = *(size_t*)key / 200000;
+    // size_t offset_ = *(size_t*)key % 200000;
+    // for(int i = 0 ; i + offset_ < 200000 && i < 50000; i ++ ){
+    //   size_t k = p_id * 200000 + i + offset_;
+      
+    //   // bool succ;
+    //   // latest_tid = TwoPLHelper::write_lock(tid, succ); // be locked 
+    //   // if(succ){
+    //   //   lock_.push_back(k);
+    //   // }
+    // }
+    ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+    TwoPLHelper::write_lock(lock_tid, success); // be locked 
+    if(!success){
+      TwoPLHelper::write_lock_release(tid);
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid << key_offset << success << remaster << op;
+      responseMessage.data.append(value_size, 0);
+      responseMessage.flush();
+      return;
     }
 
     if(remaster == false || context.migration_only > 0) {
@@ -487,7 +500,12 @@ public:
       for (auto i = 0u; i < context.n_nop * 2; i++) {
         asm("nop");
       }
+    } else {
+      for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
+        asm("nop");
+      }
     }
+
 
     // lock the router_table 
     auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
@@ -515,7 +533,7 @@ public:
     } else if(coordinator_id_new == coordinator_id_old) {
       success = true;
       auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << test << " " << tid;
+      LOG(INFO) << " TRANSMIT_REQUEST!!! Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << test << " " << tid;
       // encoder << latest_tid << key_offset << success << remaster;
       // responseMessage.data.append(value_size, 0);
       // responseMessage.flush();
@@ -540,12 +558,13 @@ public:
     responseMessage.flush();
     // wait for the commit / abort to unlock
 
-    for(auto& k: lock_){ 
-      std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
-      TwoPLHelper::write_lock_release(tid); // be locked 
-    }
+    // for(auto& k: lock_){ 
+    //   std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
+    //   TwoPLHelper::write_lock_release(tid); // be locked 
+    // }
 
     TwoPLHelper::write_lock_release(tid);
+    TwoPLHelper::write_lock_release(lock_tid);
   }
 
 
@@ -629,7 +648,7 @@ public:
         VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
 
       if(!success){
-        LOG(INFO) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+        LOG(INFO) << "TRANSMIT_RESPONSE !!! AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
         txn->abort_lock = true;
         return;
       } 
@@ -637,6 +656,10 @@ public:
       if(remaster == false || context.migration_only > 0) {
         // simulate cost of transmit data
         for (auto i = 0u; i < context.n_nop * 2; i++) {
+          asm("nop");
+        }
+      } else {
+        for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
           asm("nop");
         }
       }
@@ -666,7 +689,7 @@ public:
       
       // txn->tids[key_offset] = &tid_;
     } else {
-      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      LOG(INFO) << "TRANSMIT_RESPONSE !!! FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
       txn->abort_lock = true;
     }
 
@@ -842,6 +865,20 @@ public:
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
 
+    
+    ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+    TwoPLHelper::write_lock(lock_tid, success); // be locked 
+    if(!success){
+      TwoPLHelper::write_lock_release(tid);
+      auto test = my_debug_key(table_id, partition_id, key);
+      // LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid << key_offset << success << remaster << op;
+      responseMessage.data.append(value_size, 0);
+      responseMessage.flush();
+      return;
+    }
     // lock the router_table 
     auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
     auto router_val = (RouterValue*)router_table->search_value(key);
@@ -889,6 +926,7 @@ public:
     responseMessage.flush();
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
+    TwoPLHelper::write_lock_release(lock_tid);
   }
 
 
@@ -928,8 +966,6 @@ public:
                                                   sizeof(op) +
                                                   value_size);
 
-    txn->pendingResponses--;
-    txn->network_size += inputPiece.get_message_length();
 
     LionSSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
@@ -998,9 +1034,11 @@ public:
       
       // txn->tids[key_offset] = &tid_;
     } else {
-      LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      // LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
       txn->abort_lock = true;
     }
+    txn->pendingResponses--;
+    txn->network_size += inputPiece.get_message_length();
 
   }
   static void async_search_request_router_only_handler(MessagePiece inputPiece,
@@ -1029,11 +1067,13 @@ public:
     auto stringPiece = inputPiece.toStringPiece();
     uint32_t key_offset;
     RouterTxnOps op;
+    uint32_t new_destination;
 
     DCHECK(inputPiece.get_message_length() ==
            MessagePiece::get_header_size() + key_size + 
            sizeof(key_offset) + 
-           sizeof(op));
+           sizeof(op) + 
+           sizeof(new_destination));
 
     // get row and offset
     const void *key = stringPiece.data();
@@ -1041,7 +1081,7 @@ public:
      // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_REQUEST " << *(int*)key;
     stringPiece.remove_prefix(key_size);
     star::Decoder dec(stringPiece);
-    dec >> key_offset >> op; // index offset in the readSet from source request node
+    dec >> key_offset >> op >> new_destination; // index offset in the readSet from source request node
 
     DCHECK(dec.size() == 0);
 
@@ -1063,7 +1103,7 @@ public:
     // lock the router_table 
     auto coordinator_id_old = db.get_dynamic_coordinator_id(context.coordinator_num, table_id, key);
     // create the new tuple in global router of source request node
-    auto coordinator_id_new = responseMessage.get_dest_node_id(); 
+    auto coordinator_id_new = responseMessage.get_dest_node_id(); // new_destination;// 
     if(coordinator_id_new != coordinator_id_old){
       auto router_table = db.find_router_table(table_id); // , coordinator_id_new);
       auto router_val = (RouterValue*)router_table->search_value(key);
@@ -1134,6 +1174,21 @@ public:
       std::atomic<uint64_t> &tid = *std::get<0>(row);
       VLOG(DEBUG_V16) << "READ_LOCK_REQUEST " << *(int*)key;
       latest_tid = TwoPLHelper::read_lock(tid, success);
+
+      if(success){
+        ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+        ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+        std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+        TwoPLHelper::write_lock(lock_tid, success); // be locked 
+
+        if(!success){
+          // 
+          // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+          TwoPLHelper::read_lock_release(tid);
+        } else {
+          TwoPLHelper::write_lock_release(lock_tid);
+        }
+      }
     }
     
 
@@ -1212,7 +1267,7 @@ public:
       DCHECK(inputPiece.get_message_length() ==
              MessagePiece::get_header_size() + sizeof(success) +
                  sizeof(key_offset));
-      LOG(INFO) << "failed READ_LOCK_RESPONSE";
+      // LOG(INFO) << "failed READ_LOCK_RESPONSE " << *(int*)readKey.get_key();
       txn->abort_lock = true;
     }
 
@@ -1266,7 +1321,21 @@ public:
       auto row = table.search(key);
       std::atomic<uint64_t> &tid = *std::get<0>(row);
       latest_tid = TwoPLHelper::write_lock(tid, success);
+      // 
+      if(success){
+        ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+        ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+        std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+        TwoPLHelper::write_lock(lock_tid, success); // be locked 
 
+        if(!success){
+          // 
+          // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+          TwoPLHelper::write_lock_release(tid);
+        } else {
+          TwoPLHelper::write_lock_release(lock_tid);
+        }
+      }
     }
     // prepare response message header
     auto message_size =
@@ -1346,7 +1415,7 @@ public:
       DCHECK(inputPiece.get_message_length() ==
              MessagePiece::get_header_size() + sizeof(success) +
                  sizeof(key_offset));
-      LOG(INFO) << "failed READ_LOCK_RESPONSE";
+      // LOG(INFO) << "failed READ_LOCK_RESPONSE";
       txn->abort_lock = true;
     }
 

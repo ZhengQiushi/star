@@ -244,7 +244,7 @@ public:
             retry_transaction = false;
             protocol->abort(*transaction, sync_messages);
             n_abort_no_retry.fetch_add(1);
-            LOG(INFO) << "abort: ";
+            // LOG(INFO) << "abort: ";
             continue;
           } else {
             result = transaction->prepare_update_execute(id);
@@ -648,6 +648,27 @@ public:
           } else {
             TwoPLHelper::read_lock(tid, success);
             // VLOG(DEBUG_V14) << "LOCK-read " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;
+          }
+
+          if(success){
+            // todo ycsb only
+            ycsb::ycsb::key k(*(size_t*)key % 200000 / 500 + 200000 * partition_id);
+            ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+            std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
+            TwoPLHelper::write_lock(lock_tid, success); // be locked 
+
+            if(!success){
+              // 
+              // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+              if (readKey.get_write_lock_bit()) {
+                TwoPLHelper::write_lock_release(tid);
+              } else {
+                TwoPLHelper::read_lock_release(tid);
+              }
+            } else {
+              TwoPLHelper::write_lock_release(lock_tid);
+            }
+            // 
           }
           // 
           txn.tids[key_offset] = &tid;

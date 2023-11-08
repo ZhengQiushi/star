@@ -2,6 +2,8 @@ scp -i ~/.ssh/zqs_key -r docker-18.03.0-ce.tgz zqs@10.77.70.90:/home/zqs/
 scp -i ~/.ssh/zqs_key -r docker.service zqs@10.77.70.90:/home/zqs/
 scp -i ~/.ssh/zqs_key -r zqs_image.tar zqs@10.77.70.90:/home/zqs/
 
+
+scp docker.service zqs@10.77.110.144:/home/zqs/
 ssh zqs@10.77.70.90 -i ~/.ssh/zqs_key
 
 sudo sh -c "echo '$USER ALL = (ALL) NOPASSWD:ALL' > /etc/sudoers.d/$USER"
@@ -9,7 +11,7 @@ sudo sh -c "echo '$USER ALL = (ALL) NOPASSWD:ALL' > /etc/sudoers.d/$USER"
 
 tar zxf docker-18.03.0-ce.tgz && sudo mv docker/* /usr/bin/
 sudo mv docker.service /etc/systemd/system/
-sudo chmod 777 /etc/systemd/system/docker.service
+sudo chmod 644 /etc/systemd/system/docker.service
 sudo systemctl daemon-reload
 sudo systemctl start docker
 sudo systemctl enable docker
@@ -34,6 +36,8 @@ docker exec -it zqs_0 bash
 
 
 # docker save -o coredns.tar k8s.gcr.io/coredns:1.3.1
+dockerd --log-level error
+sudo journalctl -xe | grep docker
 
 232
 233

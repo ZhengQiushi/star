@@ -143,7 +143,8 @@ public:
                   << "metis_remaster | metis_migrate" << "\t" 
                   << "cpu_usage" << "\t" 
                   << "n_network_size" << "\t" 
-                  << "abort" << "\n";
+                  << "abort" << "\t" 
+                  << "r_abort" << "\n";
 
     std::ofstream outfile_excel_breakdown;
     char output2[256];
@@ -207,6 +208,7 @@ public:
                metis_remaster = 0, metis_migrate = 0, // 
                n_abort_no_retry = 0, n_abort_lock = 0,
                n_abort_read_validation = 0, n_local = 0,
+               n_remaster_abort = 0,
                n_si_in_serializable = 0, n_network_size = 0, 
                metis_n_network_size = 0;
       
@@ -218,42 +220,43 @@ public:
                  .count() / context.workload_time % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
-        if(i == 1){
-          outfile_excel_breakdown  
-                        << workers[i]->txn_statics.nth(10).time_router << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_scheuler << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_local_locks << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_remote_locks << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_execute << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_commit << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_wait4serivce << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_other_module << "\t" 
-                        << workers[i]->txn_statics.nth(10).time_latency << "\t" 
-                        << workers[i]->total_latency.nth(10) << "\t" 
+        // if(i == 1){
+        //   outfile_excel_breakdown  
+        //                 << workers[i]->txn_statics.nth(10).time_router << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_scheuler << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_local_locks << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_remote_locks << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_execute << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_commit << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_wait4serivce << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_other_module << "\t" 
+        //                 << workers[i]->txn_statics.nth(10).time_latency << "\t" 
+        //                 << workers[i]->total_latency.nth(10) << "\t" 
 
-                        << workers[i]->txn_statics.nth(50).time_router << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_scheuler << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_local_locks << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_remote_locks << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_execute << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_commit << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_wait4serivce << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_other_module << "\t" 
-                        << workers[i]->txn_statics.nth(50).time_latency << "\t" 
-                        << workers[i]->total_latency.nth(50) << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_router << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_scheuler << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_local_locks << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_remote_locks << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_execute << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_commit << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_wait4serivce << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_other_module << "\t" 
+        //                 << workers[i]->txn_statics.nth(50).time_latency << "\t" 
+        //                 << workers[i]->total_latency.nth(50) << "\t" 
 
-                        << workers[i]->txn_statics.nth(95).time_router << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_scheuler << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_local_locks << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_remote_locks << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_execute << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_commit << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_wait4serivce << "\t" 
-                        << workers[i]->txn_statics.nth(95).time_other_module << "\t"
-                        << workers[i]->txn_statics.nth(95).time_latency << "\t"
-                        << workers[i]->total_latency.nth(95) << "\n" ;
-                        ;
-        }
+        //                 << workers[i]->txn_statics.nth(95).time_router << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_scheuler << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_local_locks << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_remote_locks << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_execute << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_commit << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_wait4serivce << "\t" 
+        //                 << workers[i]->txn_statics.nth(95).time_other_module << "\t"
+        //                 << workers[i]->txn_statics.nth(95).time_latency << "\t"
+        //                 << workers[i]->total_latency.nth(95) << "\n" ;
+        //                 ;
+        // }
+        
         if((context.protocol.find("Lion") != context.protocol.npos || 
             context.protocol.find("LION") != context.protocol.npos ||
             context.protocol == "MyClay") && i == context.worker_num){
@@ -268,6 +271,9 @@ public:
 
           metis_n_network_size += workers[i]->n_network_size.load();
           workers[i]->n_network_size.store(0);
+
+          n_remaster_abort += workers[i]->n_remaster_abort.load();
+          workers[i]->n_remaster_abort.store(0);
           continue;
         }
         n_commit += workers[i]->n_commit.load();
@@ -287,6 +293,9 @@ public:
 
         n_abort_read_validation += workers[i]->n_abort_read_validation.load();
         workers[i]->n_abort_read_validation.store(0);
+
+        n_remaster_abort += workers[i]->n_remaster_abort.load();
+        workers[i]->n_remaster_abort.store(0);
 
         n_local += workers[i]->n_local.load();
         workers[i]->n_local.store(0);
@@ -328,6 +337,7 @@ public:
                   << cpu_usage << "\t" 
                   << (1.0 * n_network_size + metis_n_network_size) / n_commit << "\t" 
                   << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\t" 
+                  << n_remaster_abort << "\t"
                   << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";
                   // n_singled << " | " << n_distributed << " = " << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";
 

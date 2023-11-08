@@ -459,8 +459,8 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
-      // auto test = my_debug_key(table_id, partition_id, key);
-      // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -493,29 +493,26 @@ public:
       TwoPLHelper::write_lock(lock_tid, success); // be locked 
       if(!success){
         TwoPLHelper::write_lock_release(tid);
-        // auto test = my_debug_key(table_id, partition_id, key);
-        // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+        auto test = my_debug_key(table_id, partition_id, key);
+        LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
         encoder << latest_tid << key_offset << success << remaster << op;
         responseMessage.data.append(value_size, 0);
         responseMessage.flush();
         return;
       }
-      if(remaster == false || context.migration_only > 0) {
-        // simulate cost of transmit data
-        for (auto i = 0u; i < context.n_nop * 2; i++) {
-          asm("nop");
-        }
-      } 
     }
 
 
-
-    // else {
-    //   for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
-    //     asm("nop");
-    //   }
-    // }
-
+    if(remaster == false || context.migration_only > 0) {
+      // simulate cost of transmit data
+      for (auto i = 0u; i < context.n_nop * 2; i++) {
+        asm("nop");
+      }
+    } else if(remaster == true) {
+        for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
+          asm("nop");
+        }
+    }
 
     // lock the router_table 
     auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
@@ -624,7 +621,7 @@ public:
     LionSSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    // auto test = my_debug_key(table_id, partition_id, key);
+    auto test = my_debug_key(table_id, partition_id, key);
     // LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
     //                                   << test << " " << *(int*)key << " "
     //                                   << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
@@ -666,21 +663,17 @@ public:
         txn->abort_lock = true;
         return;
       } 
-      if(op == RouterTxnOps::ADD_REPLICA){
-        
-      } else {
-        if(remaster == false || context.migration_only > 0) {
-          // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
-            asm("nop");
-          }
-        } 
+
+      if(remaster == false || context.migration_only > 0) {
+        // simulate cost of transmit data
+        for (auto i = 0u; i < context.n_nop * 2; i++) {
+          asm("nop");
+        }
+      } else if(remaster == true) {
+        for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
+          asm("nop");
+        }
       }
-      // else {
-      //   for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
-      //     asm("nop");
-      //   }
-      // }
       // LOG(INFO) << table_id <<" " << *(int*) key << " " << (char*)readKey.get_value() << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
 
       auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
@@ -707,7 +700,7 @@ public:
       
       // txn->tids[key_offset] = &tid_;
     } else {
-      // LOG(INFO) << "TRANSMIT_RESPONSE !!! FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      LOG(INFO) << "TRANSMIT_RESPONSE !!! FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
       txn->abort_lock = true;
     }
 
@@ -873,8 +866,8 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
-      // auto test = my_debug_key(table_id, partition_id, key);
-      // LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << "  can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -894,28 +887,26 @@ public:
       TwoPLHelper::write_lock(lock_tid, success); // be locked 
       if(!success){
         TwoPLHelper::write_lock_release(tid);
-        // auto test = my_debug_key(table_id, partition_id, key);
-        // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+        auto test = my_debug_key(table_id, partition_id, key);
+        LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
         encoder << latest_tid << key_offset << success << remaster << op;
         responseMessage.data.append(value_size, 0);
         responseMessage.flush();
         return;
       }
-      if(remaster == false || context.migration_only > 0) {
-        // simulate cost of transmit data
-        for (auto i = 0u; i < context.n_nop * 2; i++) {
-          asm("nop");
-        }
-      } 
     }
 
 
-
-    // else if(remaster == true) {
-    //     for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
-    //       asm("nop");
-    //     }
-    // }    
+    if(remaster == false || context.migration_only > 0) {
+      // simulate cost of transmit data
+      for (auto i = 0u; i < context.n_nop * 2; i++) {
+        asm("nop");
+      }
+    } else if(remaster == true) {
+        for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
+          asm("nop");
+        }
+    }    
 
     // lock the router_table 
     auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
@@ -929,7 +920,7 @@ public:
 
     if(coordinator_id_new != coordinator_id_old){
       // 数据更新到 发req的对面
-      // auto test = my_debug_key(table_id, partition_id, key);
+      auto test = my_debug_key(table_id, partition_id, key);
       // LOG(INFO) << table_id <<" " << *(int*) key << " REMASTER request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster << " " << test << " " << success;
       
       // update the router 
@@ -964,6 +955,7 @@ public:
     responseMessage.flush();
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
+    
     if(op == RouterTxnOps::ADD_REPLICA){
       
     } else {
@@ -1012,7 +1004,7 @@ public:
     LionSSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    // auto test = my_debug_key(table_id, partition_id, key);
+    auto test = my_debug_key(table_id, partition_id, key);
     // LOG(INFO) << "TRANSMIT_RESPONSE " << table_id << " "
     //                                   << test << " " << *(int*)key << " "
     //                                   << success << " " << responseMessage.get_dest_node_id() << " -> " << responseMessage.get_source_node_id() ;
@@ -1025,16 +1017,6 @@ public:
       auto key = readKey.get_key();
       auto value = readKey.get_value();
 
-      if(op == RouterTxnOps::ADD_REPLICA){
-        
-      } else {
-        if(remaster == false || context.migration_only > 0) {
-          // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
-            asm("nop");
-          }
-        } 
-      }
       if(!remaster){
         // read value message piece
         stringPiece = inputPiece.toStringPiece();

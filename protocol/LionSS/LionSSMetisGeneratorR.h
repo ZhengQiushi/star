@@ -160,6 +160,8 @@ public:
           new_txn->update.push_back(false);
           new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
           new_txn->metis_idx_ = metis_txns[i]->idx_;
+          new_txn->is_real_distributed = metis_txns[i]->is_real_distributed;
+          new_txn->is_distributed = metis_txns[i]->is_distributed;
 
           if(new_txn->keys.size() > transmit_block_size){
             // added to the router
@@ -1234,7 +1236,28 @@ public:
       begin = std::chrono::steady_clock::now();
 
       cur_workload = (cur_workload + 1) % workload_num;
-      // break; // debug
+      
+      // if(context.lion_with_metis_init){
+      //   break; // debug
+      // }
+    }
+
+    while(status != ExecutorStatus::EXIT && 
+          status != ExecutorStatus::CLEANUP){
+
+      process_request();
+      status = static_cast<ExecutorStatus>(worker_status.load());
+
+      auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - last_timestamp_)
+                              .count();
+
+      func();
+
+      if(last_timestamp_int != 0 && latency < trigger_time_interval){
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+        continue;
+      }
     }
     LOG(INFO) << "transmiter " << " exits.";
 

@@ -352,7 +352,7 @@ public:
 
     coordinator_id = context.coordinator_id;
     partitionNum = context.partition_num;
-    threadsNum = context.worker_num;
+    threadsNum = std::max(context.worker_num, size_t(8));
     
     if(context.protocol == "Hermes"){
       isolation_replica = true;
@@ -391,7 +391,7 @@ public:
 
     initLockTables("ycsb",
                [&context, this](std::size_t partitionID) {
-                 ycsbInit(context, partitionID, tbl_ycsb_vec_router_lock[partitionID].get());
+                 ycsbLockInit(context, partitionID, tbl_ycsb_vec_router_lock[partitionID].get());
                },
                partitionNum, threadsNum, partitioner.get());
 
@@ -528,6 +528,47 @@ private:
         value.Y_F08.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         value.Y_F09.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
         value.Y_F10.assign(random.a_string(YCSB_FIELD_SIZE, YCSB_FIELD_SIZE));
+
+        table->insert(&key, &value);
+      }
+    }
+  }
+
+
+
+  void ycsbLockInit(const Context &context, std::size_t partitionID, ITable *table) {
+
+    Random random;
+
+    std::size_t keysPerPartition =
+        context.keysPerPartition; // 5M keys per partition
+    std::size_t partitionNum = context.partition_num;
+    std::size_t totalKeys = keysPerPartition * partitionNum;
+
+    if (context.strategy == PartitionStrategy::RANGE) {
+
+      // use range partitioning
+
+      for (auto i = partitionID * keysPerPartition;
+           i < (partitionID + 1) * keysPerPartition; i++) {
+
+        DCHECK(context.getPartitionID(i) == partitionID);
+
+        ycsb::key key(i);
+        ycsb::value value;
+        table->insert(&key, &value);
+      }
+
+    } else {
+
+      // use round-robin hash partitioning
+
+      for (auto i = partitionID; i < totalKeys; i += partitionNum) {
+
+        DCHECK(context.getPartitionID(i) == partitionID);
+
+        ycsb::key key(i);
+        ycsb::value value;
 
         table->insert(&key, &value);
       }

@@ -175,7 +175,7 @@ public:
                     std::this_thread::sleep_for(std::chrono::microseconds(5));
                     status = static_cast<ExecutorStatus>(worker_status.load());
                   }
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
 
                   is_full_signal_self[dispatcher_id].store(false);
 
@@ -708,7 +708,7 @@ public:
     cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                  std::chrono::steady_clock::now() - staart)
                  .count() * 1.0 / 1000 ;
-    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
+    // LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
 
   }
 
@@ -1051,14 +1051,14 @@ public:
       cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "send : " << cur_timestamp__;
+      // LOG(INFO) << "send : " << cur_timestamp__;
 
       // 
       for (auto l = 0u; l < context.coordinator_num; l++){
         if(l == context.coordinator_id){
           continue;
         }
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+        // LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
         messages_mutex[l]->lock();
         ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
         flush_message(async_messages, l);
@@ -1071,7 +1071,7 @@ public:
 
       n_complete_workers.fetch_add(1);
       // VLOG(DEBUG_V) << "Generator " << id << " finish START";
-      LOG(INFO) << "?? done_schedule ?? = " << schedule_meta.all_done_schedule.load();
+      // LOG(INFO) << "?? done_schedule ?? = " << schedule_meta.all_done_schedule.load();
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::CLEANUP) {
         process_request();

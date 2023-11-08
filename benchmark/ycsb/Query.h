@@ -53,6 +53,7 @@ public:
   static int round(int a, int b){
     return a / b * b;
   }
+  
   using DatabaseType = Database;
   YCSBQuery operator()(const Context &context, 
                        uint32_t partitionID,// uint32_t hot_area_size,
@@ -75,19 +76,29 @@ public:
     int32_t key_range = partitionID;
     int factor = 10;
 
+    
     int workload_type = get_workload_type(context, cur_timestamp);
     int last_workload_type = get_workload_type(context, 
                                       std::max(0.0, cur_timestamp - 1.0 * context.workload_time / factor));
-
+    static int tests = 0;
+    bool show = false;
+    if(tests ++ % 10000 == 0){
+      LOG(INFO) << tests << " " << cur_timestamp << " " <<  cur_timestamp - 1.0 * context.workload_time / factor <<  " "  << workload_type << " " << last_workload_type;
+      show = true;
+    }
     if(workload_type != last_workload_type){
-      int last_type_ratio = 30 * (context.workload_time - 1.0 * factor * 
-      (cur_timestamp - round(cur_timestamp, context.workload_time))) / context.workload_time;
+      int last_type_ratio = 30 * 
+      (context.workload_time - (int)cur_timestamp % context.workload_time) / 
+      context.workload_time;
 
       int lastWorkload = random.uniform_dist(1, 100);
       if(lastWorkload <= last_type_ratio){
         workload_type = last_workload_type;
       } else {
         workload_type = workload_type + 0;
+      }
+      if(show){
+        LOG(INFO) << last_type_ratio << " " << context.workload_time << "-" << (int)cur_timestamp % context.workload_time;
       }
     }
 

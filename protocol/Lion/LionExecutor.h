@@ -540,17 +540,17 @@ public:
 
           if(transaction->distributed_transaction){
             if(i < 5){
-              auto k = transaction->get_query();
-              auto kc = transaction->get_query_master();
-              // MoveRecord<WorkloadType> rec;
-              // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+              // auto k = transaction->get_query();
+              // auto kc = transaction->get_query_master();
+              // // MoveRecord<WorkloadType> rec;
+              // // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-              LOG(INFO) << "cross_txn_num ++ : " << " " << 
-                                             " " << k[0] << " | "
-                                             " " << k[1] << " | " 
-                                             " " << k[2] << " | " 
-                                             " " << k[3] << " | " 
-                                             " " << k[4];
+              // LOG(INFO) << "cross_txn_num ++ : " << " " << 
+              //                                " " << k[0] << " | "
+              //                                " " << k[1] << " | " 
+              //                                " " << k[2] << " | " 
+              //                                " " << k[3] << " | " 
+              //                                " " << k[4];
             }
           }
           
@@ -596,7 +596,7 @@ public:
               n_remaster.fetch_add(transaction->remaster_cnt);
               if(transaction->migrate_cnt > 0 || transaction->remaster_cnt > 0){
                 distributed_num.fetch_add(1);
-                LOG(INFO) << distributed_num.load();
+                // LOG(INFO) << distributed_num.load();
               } else {
                 singled_num.fetch_add(1);
               }

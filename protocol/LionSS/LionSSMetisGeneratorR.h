@@ -173,6 +173,7 @@ public:
       if(new_txn->keys.size() > 0){
         transmit_requests.push_back(new_txn);
       }
+      delete metis_txns[i];
     }
 
 
@@ -180,9 +181,10 @@ public:
 
     
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
-      outfile_excel << "Send MyClay Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      // outfile_excel << "Send LION Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
       router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::ADD_REPLICA);
+      delete transmit_requests[i];
       // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
@@ -204,7 +206,16 @@ public:
      
 
     LOG(INFO) << "start read from file";
-    my_clay->metis_partiion_read_from_file(file_name_.c_str());
+    
+    if(context.repartition_strategy == "lion"){
+      my_clay->metis_partiion_read_from_file(file_name_.c_str());
+    } else if(context.repartition_strategy == "clay"){
+      my_clay->clay_partiion_read_from_file(file_name_.c_str());
+    } else if(context.repartition_strategy == "metis"){
+      DCHECK(false);
+    }
+
+    
     LOG(INFO) << "read from file done";
 
     auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -221,7 +232,16 @@ public:
     LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
     
     // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    int num = router_transmit_request(my_clay->move_plans);
+    
+    int num = 0;
+    if(context.repartition_strategy == "lion"){
+      num = router_transmit_request(my_clay->move_plans);
+    } else {
+      DCHECK(false);
+    }
+    
+    
+
     if(num > 0){
       LOG(INFO) << "router transmit request " << num; 
     }    
@@ -644,13 +664,8 @@ public:
       // LOG(INFO) << txns[i]->idx_ << "\t" << txns[i]->destination_coordinator << "\t" << txns[i]->access_frequency << "\n";
     }
   }
-  
-  int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
-
-    if(schedule_meta.transactions_queue_self.size() < context.batch_size){
-      return -1;
-    }
-
+  int router_fence(){
+    process_request();
     if(router_transaction_done.load() != router_transactions_send.load()){
       int a = router_transaction_done.load();
       int b = router_transactions_send.load();
@@ -659,6 +674,17 @@ public:
 
     router_transaction_done.store(0);
     router_transactions_send.store(0);
+    return 0;
+  }
+  
+  int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
+
+    if(schedule_meta.transactions_queue_self.size() < context.batch_size){
+      return -1;
+    }
+    if(router_fence() == -1){
+      return -1;
+    }
 
     int idx_offset = dispatcher_id * cur_txn_num;
 
@@ -693,6 +719,7 @@ public:
       int idx = cnt + idx_offset;
 
       txns[idx] = std::make_shared<simpleTransaction>(*new_txn);
+      delete new_txn;
       // if(i < 2){
       //   LOG(INFO) << i << " " << txns[idx]->is_distributed;
       // }
@@ -756,6 +783,7 @@ public:
     // }
 
     if(cur_val > threshold && context.random_router == 0){ 
+      LOG(INFO) << "real_distribute_num: " << real_distribute_num;
       LOG(INFO) << "busy: ";
       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
@@ -915,7 +943,7 @@ public:
 
           if(overload_node.count(cur.dest)){
             // find minial cost in idle_node
-            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node);
+            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node, context.migration_only);
             if(idle_coord_id == -1){
               continue;
             }
@@ -1069,6 +1097,8 @@ public:
 
   void func(){
       // return;
+      if(context.repartition_strategy != "lion") return;
+
       std::vector<std::shared_ptr<simpleTransaction>> &txns =schedule_meta.node_txns;
       auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
 
@@ -1087,7 +1117,7 @@ public:
           send_migrate_request += 1;
           txns[idx]->global_id_ = ++global_id;
 
-          auto debug_master = debug_record_keys_master(txns[idx]->keys);
+          // auto debug_master = debug_record_keys_master(txns[idx]->keys);
 
           // LOG(INFO) << j << " " << txns[idx]->global_id_ 
           //           << " router to [" << txns[idx]->destination_coordinator
@@ -1153,16 +1183,19 @@ public:
     std::unordered_map<int, std::string> map_;
     
     if(context.repartition_strategy == "lion"){
+      LOG(INFO) << "lion!!!!!!";
       map_[0] = context.data_src_path_dir + "resultss_partition_30_60.xls";
       map_[1] = context.data_src_path_dir + "resultss_partition_60_90.xls";
       map_[2] = context.data_src_path_dir + "resultss_partition_90_120.xls";
       map_[3] = context.data_src_path_dir + "resultss_partition_0_30.xls";
     } else if(context.repartition_strategy == "clay"){
-      map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls";
-      map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls";
-      map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls";
-      map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls";
+      LOG(INFO) << "clay!!!!!!";
+      map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls_0";
+      map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls_0";
+      map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_0";
+      map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_0";
     } else if(context.repartition_strategy == "metis"){
+      DCHECK(false);
       map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
       map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
       map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
@@ -1188,8 +1221,18 @@ public:
     auto last_timestamp_ = start_time;
     int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-    int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
+    int start_offset = 60 * 1000; // 10 * 1000 * 2; // debug
     // 
+    if(context.repartition_strategy == "clay"){
+      start_offset = 0 * 1000 ;
+    }
+    LOG(INFO) << "START INIT!";
+    migration(map_[3]);
+    while(router_fence() == -1){
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+    }
+    LOG(INFO) << "INIT DONE!";
+
     int cur_workload = 0;
 
     while(status != ExecutorStatus::EXIT){
@@ -1229,13 +1272,14 @@ public:
       // directly jump into first phase
       begin = std::chrono::steady_clock::now();
       
-      migration(map_[cur_workload]);
+
+      migration(map_[cur_workload % workload_num]);
 
       last_timestamp_ = begin;
       last_timestamp_int += trigger_time_interval;
       begin = std::chrono::steady_clock::now();
 
-      cur_workload = (cur_workload + 1) % workload_num;
+      cur_workload = (cur_workload + 1) ;
       
       // if(context.lion_with_metis_init){
       //   break; // debug

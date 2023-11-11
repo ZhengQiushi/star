@@ -3,7 +3,7 @@ set -x
 
 user="centos"
 #TODO@luoyu: read from ips.txt
-ips=(10.77.70.116 10.77.70.117 10.77.70.252 10.77.70.253) 
+ips=(10.77.70.246 10.77.70.247 10.77.70.248 10.77.70.117) 
 # 10.77.110.147
 nodes=3 # replace with the size of ips
 port=20010
@@ -26,5 +26,6 @@ for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
+        ssh  -i ~/.ssh/zzh_cloud $user@${ips[id]} "rm -rf /core*"
     done 
 bash /home/star/scripts/remove.sh # ps aux | grep zqs_laji | awk '{print $2}' | xargs kill -9

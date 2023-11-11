@@ -14,29 +14,29 @@
 
 #include "common/ShareQueue.h"
 #include "protocol/LionS/LionSManager.h"
-#include "protocol/LionSS/LionSSMessage.h"
-#include "protocol/LionSS/LionSSTransaction.h"
-#include "protocol/LionSS/LionSSMeta.h"
+#include "protocol/ClaySS/ClaySSMessage.h"
+#include "protocol/ClaySS/ClaySSTransaction.h"
+#include "protocol/ClaySS/ClaySSMeta.h"
 
 #include <chrono>
 
 namespace star {
-template <class Workload> class LionSSExecutor : public Worker {
+template <class Workload> class ClaySSExecutor : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
   using StorageType = typename WorkloadType::StorageType;
-  using TransactionType = LionSSTransaction;
+  using TransactionType = ClaySSTransaction;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
 
-  using ProtocolType = LionSS<DatabaseType>;
+  using ProtocolType = ClaySS<DatabaseType>;
 
-  using MessageType = LionSSMessage;
-  using MessageFactoryType = LionSSMessageFactory;
-  using MessageHandlerType = LionSSMessageHandler<DatabaseType>;
+  using MessageType = ClaySSMessage;
+  using MessageFactoryType = ClaySSMessageFactory;
+  using MessageHandlerType = ClaySSMessageHandler<DatabaseType>;
 
-  LionSSExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  ClaySSExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers
@@ -108,123 +108,123 @@ public:
     }
   }
 
-  //   void migrate_run_transaction(ShareQueue<int>& txn_id_queue,
-  //                        std::vector<std::unique_ptr<TransactionType>>& cur_txns) {
-  //   /**
-  //    * @brief 
-  //    * @note modified by truth 22-01-24
-  //    *       
-  //   */
-  //   ProtocolType protocol(db, context, *partitioner.get());
-  //   WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner.get(), start_time);
+    void migrate_run_transaction(ShareQueue<int>& txn_id_queue,
+                         std::vector<std::unique_ptr<TransactionType>>& cur_txns) {
+    /**
+     * @brief 
+     * @note modified by truth 22-01-24
+     *       
+    */
+    ProtocolType protocol(db, context, *partitioner.get());
+    WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner.get(), start_time);
 
-  //   uint64_t last_seed = 0;
+    uint64_t last_seed = 0;
 
-  //   int single_txn_num = 0;
-  //   int cross_txn_num = 0;
-  //   size_t cur_queue_size = cur_txns.size();
+    int single_txn_num = 0;
+    int cross_txn_num = 0;
+    size_t cur_queue_size = cur_txns.size();
     
-  //   size_t i = 0;
-  //   for(;;) {
-  //     bool success = false;
-  //     i = txn_id_queue.pop_no_wait(success);
-  //     if(!success){
-  //       break;
-  //     }
-  //     if(i >= cur_txns.size() || cur_txns[i].get() == nullptr){
-  //       // DCHECK(false) << i << " " << cur_txns.size();
-  //       continue;
-  //     }
+    size_t i = 0;
+    for(;;) {
+      bool success = false;
+      i = txn_id_queue.pop_no_wait(success);
+      if(!success){
+        break;
+      }
+      if(i >= cur_txns.size() || cur_txns[i].get() == nullptr){
+        // DCHECK(false) << i << " " << cur_txns.size();
+        continue;
+      }
 
-  //     bool retry_transaction = false;
+      bool retry_transaction = false;
 
-  //     transaction = cur_txns[i];
+      transaction = cur_txns[i];
       
-  //     if(transaction == nullptr) continue;
+      if(transaction == nullptr) continue;
 
-  //     transaction->startTime = std::chrono::steady_clock::now();;
+      transaction->startTime = std::chrono::steady_clock::now();;
 
-  //     do {
-  //       process_request();
-  //       last_seed = random.get_seed();
+      do {
+        process_request();
+        last_seed = random.get_seed();
 
-  //       if (retry_transaction) {
-  //         transaction->reset();
-  //       } else {
-  //         // std::size_t partition_id = transaction->get_partition_id();
-  //         setupHandlers(*transaction);
-  //       }
+        if (retry_transaction) {
+          transaction->reset();
+        } else {
+          // std::size_t partition_id = transaction->get_partition_id();
+          setupHandlers(*transaction);
+        }
 
-  //       auto s = transaction->txn_nodes_involved(true);
-  //       if(s.size() == 1){
-  //         break;
-  //       }
+        auto s = transaction->txn_nodes_involved(true);
+        if(s.size() == 1){
+          break;
+        }
 
-  //       // auto debug = transaction->debug_record_keys();
-  //       // auto debug_master = transaction->debug_record_keys_master();
+        // auto debug = transaction->debug_record_keys();
+        // auto debug_master = transaction->debug_record_keys_master();
 
-  //       // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
-  //       //                         << debug[1] << " " << debug_master[1]; 
+        // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
+        //                         << debug[1] << " " << debug_master[1]; 
                                     
-  //       auto result = transaction->transmit_execute(id);
-  //       // if(!transaction->is_transmit_requests()){
-  //       //   if(transaction->distributed_transaction){
-  //       //     cross_txn_num ++ ;
-  //       // if(i < 5){
-  //       //   if(WorkloadType::which_workload == myTestSet::TPCC){
+        auto result = transaction->transmit_execute(id);
+        // if(!transaction->is_transmit_requests()){
+        //   if(transaction->distributed_transaction){
+        //     cross_txn_num ++ ;
+        // if(i < 5){
+        //   if(WorkloadType::which_workload == myTestSet::TPCC){
 
-  //       //   }
-  //       // }
-  //       // if(transaction->is_transmit_requests()){
-  //       //   LOG(INFO) << "transmit txn: " << i  << " " << transaction->get_query_printed() << " " << (result == TransactionResult::TRANSMIT_REQUEST);
-  //       // }
-  //       //   } else {
-  //       //     single_txn_num ++ ;
+        //   }
+        // }
+        // if(transaction->is_transmit_requests()){
+        //   LOG(INFO) << "transmit txn: " << i  << " " << transaction->get_query_printed() << " " << (result == TransactionResult::TRANSMIT_REQUEST);
+        // }
+        //   } else {
+        //     single_txn_num ++ ;
 
-  //       //     // debug
-  //       //     // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
-  //       //   }
+        //     // debug
+        //     // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
+        //   }
 
-  //       if (result == TransactionResult::READY_TO_COMMIT) {
-  //         // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
-  //         DCHECK(false);
-  //       } else if(result == TransactionResult::TRANSMIT_REQUEST){
-  //         // pass
-  //         uint64_t commit_tid = protocol.generate_tid(*transaction);
-  //         protocol.release_lock(*transaction, commit_tid, sync_messages);
-  //         if(!transaction->abort_lock){
-  //           n_commit.fetch_add(1);
-  //           n_migrate.fetch_add(transaction->migrate_cnt);
-  //           n_remaster.fetch_add(transaction->remaster_cnt);
-  //           retry_transaction = false;
-  //         } else {
-  //           n_abort_lock.fetch_add(1);
-  //           // retry_transactions(t_simple_txn[i]);
-  //           // protocol.abort(*transaction, sync_messages);
-  //           retry_transaction = true;
-  //         }
-  //       } else {
-  //         protocol.abort(*transaction, sync_messages);
-  //         n_abort_no_retry.fetch_add(1);
-  //         retry_transaction = false;
-  //       }
-  //       n_network_size.fetch_add(transaction->network_size);
-  //       // LOG(INFO) << transaction->network_size;
-  //     } while (retry_transaction);
+        if (result == TransactionResult::READY_TO_COMMIT) {
+          // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
+          DCHECK(false);
+        } else if(result == TransactionResult::TRANSMIT_REQUEST){
+          // pass
+          uint64_t commit_tid = protocol.generate_tid(*transaction);
+          protocol.release_lock(*transaction, commit_tid, sync_messages);
+          if(!transaction->abort_lock){
+            n_commit.fetch_add(1);
+            n_migrate.fetch_add(transaction->migrate_cnt);
+            n_remaster.fetch_add(transaction->remaster_cnt);
+            retry_transaction = false;
+          } else {
+            n_abort_lock.fetch_add(1);
+            // retry_transactions(t_simple_txn[i]);
+            // protocol.abort(*transaction, sync_messages);
+            retry_transaction = true;
+          }
+        } else {
+          protocol.abort(*transaction, sync_messages);
+          n_abort_no_retry.fetch_add(1);
+          retry_transaction = false;
+        }
+        n_network_size.fetch_add(transaction->network_size);
+        // LOG(INFO) << transaction->network_size;
+      } while (retry_transaction);
 
-  //     if (i % context.batch_flush == 0) {
-  //       flush_async_messages();
-  //       flush_sync_messages();
-  //     }
-  //   }
-  //   flush_async_messages();
-  //   flush_sync_messages();
+      if (i % context.batch_flush == 0) {
+        flush_async_messages();
+        flush_sync_messages();
+      }
+    }
+    flush_async_messages();
+    flush_sync_messages();
 
-  //   if(cur_queue_size > 0){
-  //     // LOG(INFO) << "cur_queue_size: " << cur_queue_size; //  << " " << " cross_txn_num: " << 
-  //   }
+    if(cur_queue_size > 0){
+      // LOG(INFO) << "cur_queue_size: " << cur_queue_size; //  << " " << " cross_txn_num: " << 
+    }
 
-  // }
+  }
 
   void do_remaster_transaction(std::vector<std::unique_ptr<TransactionType>>& cur_txns) {
     /**
@@ -243,7 +243,7 @@ public:
 
     auto i = 0u;
     int cnt = 0;
-    size_t cur_queue_size = cur_txns.size();
+    size_t cur_queue_size = my_sz;// cur_txns.size();
     int router_txn_num = 0;
 
 
@@ -296,7 +296,7 @@ public:
         if(transaction->abort_lock){
           // protocol.abort(*transaction, async_messages);
           retry_transaction = true;
-          n_remaster_abort.fetch_add(1);
+          n_abort_no_retry.fetch_add(1);
           // LOG(INFO) << "RETRY" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
         } else {
           retry_transaction = false;
@@ -304,7 +304,7 @@ public:
         
         n_migrate.fetch_add(transaction->migrate_cnt);
         n_remaster.fetch_add(transaction->remaster_cnt);
-        // LOG(INFO) << transaction->migrate_cnt << " " << transaction->remaster_cnt;
+
       } while (retry_transaction);
 
       // int remaster_time = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -358,12 +358,12 @@ public:
     std::vector<int> why(30, 0);
 
     auto i = 0u;
-    size_t cur_queue_size = cur_txns.size(); 
+    size_t cur_queue_size = my_sz; // cur_txns.size(); 
     int router_txn_num = 0;
     // 
     int total_span = 0;
     // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
-    for(;;) {
+    for(int x = 0 ; x < my_sz; x += 1) {
       bool success = false;
       i = txn_id_queue.pop_no_wait(success);
       if(!success){
@@ -435,19 +435,19 @@ public:
           if(transaction->distributed_transaction){
             cross_txn_num ++ ;
             cur_cross_num += 1;
-            // if(cur_cross_num < 5){
-            //   auto k = transaction->get_query();
-            //   auto kc = transaction->get_query_master();
-            //   // MoveRecord<WorkloadType> rec;
-            //   // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+            if(cur_cross_num < 5){
+              // auto k = transaction->get_query();
+              // auto kc = transaction->get_query_master();
+              // // MoveRecord<WorkloadType> rec;
+              // // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-            //   LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
-            //                                  " " << k[0] << " | "
-            //                                  " " << k[1] << " | " 
-            //                                  " " << k[2] << " | " 
-            //                                  " " << k[3] << " | " 
-            //                                  " " << k[4];
-            // }
+              // LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
+              //                                " " << k[0] << " | "
+              //                                " " << k[1] << " | " 
+              //                                " " << k[2] << " | " 
+              //                                " " << k[3] << " | " 
+              //                                " " << k[4];
+            }
           } else {
             single_txn_num ++ ;
 
@@ -489,7 +489,6 @@ public:
           // pass
           n_migrate.fetch_add(transaction->migrate_cnt);
           n_remaster.fetch_add(transaction->remaster_cnt);
-          //  LOG(INFO) << transaction->migrate_cnt << " " << transaction->remaster_cnt;
         } else {
           protocol.abort(*transaction, sync_messages);
           n_abort_no_retry.fetch_add(1);
@@ -570,12 +569,16 @@ public:
 
       unpack_route_transaction(); // 
       
-      if(cur_real_distributed_cnt > 0 && context.lion_self_remaster){
-        do_remaster_transaction(txn_meta.c_transactions_queue);
+      int total_size = txn_meta.c_transactions_queue.size();
+      for(int i = 0 ; i < total_size; i += 500){
+        if(context.repartition_strategy == "clay" || cur_real_distributed_cnt > 0 && context.lion_self_remaster){
+          do_remaster_transaction(txn_meta.c_transactions_queue);
+        }
+
+        run_transaction(txn_meta.c_transactions_queue,
+                        txn_meta.c_txn_id_queue);
       }
 
-      run_transaction(txn_meta.c_transactions_queue,
-                      txn_meta.c_txn_id_queue);
 
       // migrate_run_transaction(migrate_txn_meta.t_txn_id_queue,
       //                         migrate_txn_meta.t_transactions_queue);
@@ -815,6 +818,7 @@ public:
           txn.network_size += MessageFactoryType::new_write_lock_message(
               *(this->sync_messages[coordinatorID]), *table, key, key_offset);
           txn.pendingResponses++;
+
         } else {
           txn.network_size += MessageFactoryType::new_read_lock_message(
               *(this->sync_messages[coordinatorID]), *table, key, key_offset);
@@ -884,7 +888,6 @@ public:
         if(remaster && !context.migration_only){
           txn.remaster_cnt ++ ;
           VLOG(DEBUG_V12) << "LOCK LOCAL " << table_id << " ASK " << coordinatorID << " " << *(int*)key << " " << txn.readSet.size();
-
           for(size_t i = 0; i <= context.coordinator_num; i ++ ){ 
             // also send to generator to update the router-table
             if(i == coordinator_id){
@@ -895,21 +898,18 @@ public:
                 // LOG(INFO) << "new_transmit_message : " << *(int*)key << " " << context.coordinator_id << " -> " << coordinatorID;
                 txn.network_size += MessageFactoryType::new_async_search_message(
                     *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
-                    remaster, RouterTxnOps::REMASTER);
-                 txn.pendingResponses++; //  already added at myclayTransactions
+                    remaster, txn.op_);
+                txn.pendingResponses++;
             } else {
                 // others, only change the router
                 // if(i == context.coordinator_num){
                 //   LOG(INFO) << "new_transmit_router_only_message: " <<  *(int*)key;
                 // }
-                txn.network_size += MessageFactoryType::new_async_search_router_only_message(*(this->sync_messages[i]), *table, key, key_offset, RouterTxnOps::REMASTER, coordinatorID);
+                txn.network_size += MessageFactoryType::new_async_search_router_only_message(*(this->sync_messages[i]), *table, key, key_offset, txn.op_, coordinatorID);
                 txn.pendingResponses++;
             }            
           }
-
-        } else {
-          // txn.migrate_cnt ++ ;
-        }
+        } 
 
 
 
@@ -961,7 +961,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   // std::vector<std::unique_ptr<TransactionType>>  &r_transactions_queue;
   // ShareQueue<int> &txn_id_queue;
-  lionss::TransactionMeta<WorkloadType> txn_meta;
+  clayss::TransactionMeta<WorkloadType> txn_meta;
 
 
   std::unique_ptr<Partitioner> partitioner;
@@ -1012,6 +1012,8 @@ protected:
   int time3 = 0;
   int time4 = 0;
   int count = 0;
+
+  int my_sz = 500;
 
 };
 } // namespace star

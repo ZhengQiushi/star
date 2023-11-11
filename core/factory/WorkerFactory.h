@@ -67,6 +67,14 @@
 #include "protocol/LionSS/LionSSMetisGeneratorR.h"
 #include "protocol/LionSS/LionSSManager.h"
 
+#include "protocol/ClaySS/ClaySS.h"
+#include "protocol/ClaySS/ClaySSExecutor.h"
+#include "protocol/ClaySS/ClaySSTransaction.h"
+#include "protocol/ClaySS/ClaySSGenerator.h"
+#include "protocol/ClaySS/ClaySSMeitsExecutor.h"
+#include "protocol/ClaySS/ClaySSMetisGeneratorR.h"
+#include "protocol/ClaySS/ClaySSManager.h"
+
 #include "protocol/Lion/LionMetisExecutor.h"
 #include "protocol/Lion/LionMetisGenerator.h"
 
@@ -144,7 +152,7 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria", "LION-S"};
+                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria", "LION-S", "CLAY-S"};
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -339,8 +347,43 @@ public:
 
       workers.push_back(manager);
       // workers.push_back(recorder);  
+    } else if (context.protocol.find("CLAY-S") != context.protocol.npos) {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Lion, each partition is managed by only one thread.";
+
+      using TransactionType = star::ClaySSTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      int manager_thread_id = context.worker_num;
+      manager_thread_id += 1;
+
+      auto manager = std::make_shared<ClaySSManager<WorkloadType>>(
+          coordinator_id, manager_thread_id, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<ClaySSExecutor<WorkloadType>>(
+            coordinator_id, i, db, 
+            context, manager->worker_status,
+            manager->n_completed_workers, 
+            manager->n_started_workers));
+      }
+      // 
+      workers.push_back(std::make_shared<ClaySSMetisExecutor<WorkloadType>>(
+            coordinator_id, workers.size(), db, 
+            context, manager->worker_status, 
+            manager->n_completed_workers,
+            manager->n_started_workers, 
+            manager->txn_meta));
+
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
     }
-    
     else if (context.protocol == "TwoPL") {
 
       // using TransactionType = star::TwoPLTransaction;
@@ -678,6 +721,40 @@ public:
       // 
       // if(context.lion_with_metis_init){
         workers.push_back(std::make_shared<group_commit::LionSSMetisGeneratorR<WorkloadType, LionSS<DatabaseType>>>(
+              coordinator_id, workers.size(), db, context, manager->worker_status,
+              manager->n_completed_workers, 
+              manager->n_started_workers, 
+              manager->schedule_meta));
+      // }
+      workers.push_back(manager);
+      // workers.push_back(recorder);  
+    } else if (context.protocol.find("CLAY-S") != context.protocol.npos) {
+
+      CHECK(context.partition_num %
+                (context.worker_num * context.coordinator_num) ==
+            0)
+          << "In Clay, each partition is managed by only one thread.";
+
+      using TransactionType = star::ClaySSTransaction ;// TwoPLTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      int manager_thread_id = context.worker_num + 1;
+
+      auto manager = std::make_shared<ClaySSManager<WorkloadType>>(
+          coordinator_id, manager_thread_id, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<star::group_commit::ClaySSGenerator<WorkloadType, ClaySS<DatabaseType>>>(
+              coordinator_id, i, db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers,
+              manager->schedule_meta));
+      }
+      // 
+      // if(context.lion_with_metis_init){
+        workers.push_back(std::make_shared<group_commit::ClaySSMetisGeneratorR<WorkloadType, ClaySS<DatabaseType>>>(
               coordinator_id, workers.size(), db, context, manager->worker_status,
               manager->n_completed_workers, 
               manager->n_started_workers, 

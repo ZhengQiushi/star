@@ -259,6 +259,7 @@ public:
         
         if((context.protocol.find("Lion") != context.protocol.npos || 
             context.protocol.find("LION") != context.protocol.npos ||
+            context.protocol.find("CLAY-S") != context.protocol.npos ||
             context.protocol == "MyClay") && i == context.worker_num){
           metis_commit += workers[i]->n_commit.load();
           workers[i]->n_commit.store(0);

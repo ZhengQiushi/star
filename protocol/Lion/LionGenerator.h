@@ -168,7 +168,7 @@ public:
 
                   schedule_meta.done_schedule.fetch_add(1);
                   status = static_cast<ExecutorStatus>(worker_status.load());
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
                   // wait for end
                   while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
                     auto i = schedule_meta.done_schedule.load();
@@ -582,7 +582,7 @@ public:
 
     // which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<int> busy_local(context.coordinator_num, 0);
     std::vector<int> replicate_busy_local(context.coordinator_num, 0);
@@ -648,7 +648,7 @@ public:
     LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
               
     if(real_distribute_num > 0){
-      LOG(INFO) << "real_distribute_num = " << real_distribute_num;
+      // LOG(INFO) << "real_distribute_num = " << real_distribute_num;
     }
     while((int)schedule_meta.txn_id.load() < dispatcher_num){
       std::this_thread::sleep_for(std::chrono::microseconds(5));

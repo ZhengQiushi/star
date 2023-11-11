@@ -281,7 +281,6 @@ private:
               readKey.get_value(), commit_tid);
         }
       }
-
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 

@@ -9,25 +9,25 @@
 #include "core/Defs.h"
 #include "core/Partitioner.h"
 #include "core/Table.h"
-#include "protocol/LionSS/LionSSRWKey.h"
+#include "protocol/ClaySS/ClaySSRWKey.h"
 #include <chrono>
 #include <glog/logging.h>
 #include <vector>
 
 namespace star {
-class LionSSTransaction {
+class ClaySSTransaction {
 
 public:
   using MetaDataType = std::atomic<uint64_t>;
 
-  LionSSTransaction(std::size_t coordinator_id, std::size_t partition_id,
+  ClaySSTransaction(std::size_t coordinator_id, std::size_t partition_id,
                    Partitioner &partitioner)
       : coordinator_id(coordinator_id), partition_id(partition_id),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
   }
 
-  virtual ~LionSSTransaction() = default;
+  virtual ~ClaySSTransaction() = default;
 
   void reset() {
     pendingResponses = 0;
@@ -74,7 +74,7 @@ public:
   template <class KeyType, class ValueType>
   void search_local_index(std::size_t table_id, std::size_t partition_id,
                           const KeyType &key, ValueType &value) {
-    LionSSRWKey readKey;
+    ClaySSRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
@@ -94,7 +94,7 @@ public:
 
 
 
-    LionSSRWKey readKey;
+    ClaySSRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
@@ -114,7 +114,7 @@ public:
   void search_for_update(std::size_t table_id, std::size_t partition_id,
                          const KeyType &key, ValueType &value) {
 
-    LionSSRWKey readKey;
+    ClaySSRWKey readKey;
 
     readKey.set_table_id(table_id);
     readKey.set_partition_id(partition_id);
@@ -127,6 +127,7 @@ public:
     size_t coordinatorID = partitioner.master_coordinator(table_id, partition_id, (void*)&  key);
     readKey.set_dynamic_coordinator_id(coordinatorID);
 
+    
     uint64_t coordinator_secondaryIDs = partitioner.secondary_coordinator(table_id, partition_id, (void*)& key);
     readKey.set_router_value(coordinatorID, coordinator_secondaryIDs);
 
@@ -137,7 +138,7 @@ public:
   void update(std::size_t table_id, std::size_t partition_id,
               const KeyType &key, const ValueType &value) {
 
-    LionSSRWKey writeKey;
+    ClaySSRWKey writeKey;
 
     writeKey.set_table_id(table_id);
     writeKey.set_partition_id(partition_id);
@@ -159,7 +160,7 @@ public:
         break;
       }
 
-      const LionSSRWKey &readKey = readSet[i];
+      const ClaySSRWKey &readKey = readSet[i];
       bool success, remote;
       auto tid = lock_request_handler(
           readKey.get_table_id(), readKey.get_partition_id(), i,
@@ -212,7 +213,7 @@ public:
         break;
       }
 
-      const LionSSRWKey &readKey = readSet[i];
+      const ClaySSRWKey &readKey = readSet[i];
       bool success, remote;
       auto tid = remaster_request_handler(
           readKey.get_table_id(), readKey.get_partition_id(), i,
@@ -267,7 +268,7 @@ public:
         break;
       }
 
-      const LionSSRWKey &readKey = readSet[i];
+      const ClaySSRWKey &readKey = readSet[i];
       bool success, remote;
       auto tid = migrate_request_handler(
           readKey.get_table_id(), readKey.get_partition_id(), i,
@@ -316,7 +317,7 @@ public:
     DCHECK(false);
     return false;
   } 
-  LionSSRWKey *get_read_key(const void *key) {
+  ClaySSRWKey *get_read_key(const void *key) {
 
     for (auto i = 0u; i < readSet.size(); i++) {
       if (readSet[i].get_key() == key) {
@@ -327,12 +328,12 @@ public:
     return nullptr;
   }
 
-  std::size_t add_to_read_set(const LionSSRWKey &key) {
+  std::size_t add_to_read_set(const ClaySSRWKey &key) {
     readSet.push_back(key);
     return readSet.size() - 1;
   }
 
-  std::size_t add_to_write_set(const LionSSRWKey &key) {
+  std::size_t add_to_write_set(const ClaySSRWKey &key) {
     writeSet.push_back(key);
     return writeSet.size() - 1;
   }
@@ -372,7 +373,7 @@ public:
 
   Partitioner &partitioner;
   Operation operation;
-  std::vector<LionSSRWKey> readSet, writeSet;
+  std::vector<ClaySSRWKey> readSet, writeSet;
 
   ExecutorStatus status;
 };

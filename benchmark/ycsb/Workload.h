@@ -42,12 +42,12 @@ public:
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
     // 同一个节点的不同部分（前后部分）
-    if(workload_type <= 2) {
-    // if(workload_type % 2 == 0) {
-      partition_id = partition_id % (context.partition_num / 2);
-    } else {
-      partition_id = context.partition_num / 2 + partition_id % (context.partition_num / 2);
-    }
+    // if(workload_type % 2 == 1) {
+    // // if(workload_type % 2 == 0) {
+    // partition_id = partition_id % (context.partition_num / 2);
+    // } else {
+    //   partition_id = context.partition_num / 2 + partition_id % (context.partition_num / 2);
+    // }
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(

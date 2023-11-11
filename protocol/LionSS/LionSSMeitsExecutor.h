@@ -98,7 +98,9 @@ public:
       p->distributed_transaction = simple_txn.is_real_distributed;
       p->op_ = simple_txn.op;
 
-      // LOG(INFO) << "unpack_route_transaction: " << simple_txn.keys[0] << " | " << simple_txn.keys[1];
+      // LOG(INFO) << "unpack_route_transaction: " << txn_id << " " 
+      //           << p->distributed_transaction << " "
+      //           << simple_txn.keys[0] << " | " << simple_txn.keys[1];
 
       txn_meta.t_transactions_queue[txn_id] = std::move(p);
     }

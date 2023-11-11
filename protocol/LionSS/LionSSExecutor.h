@@ -435,19 +435,19 @@ public:
           if(transaction->distributed_transaction){
             cross_txn_num ++ ;
             cur_cross_num += 1;
-            if(cur_cross_num < 5){
-              // auto k = transaction->get_query();
-              // auto kc = transaction->get_query_master();
-              // // MoveRecord<WorkloadType> rec;
-              // // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+            // if(cur_cross_num < 2){
+            //   auto k = transaction->get_query();
+            //   auto kc = transaction->get_query_master();
+            //   // MoveRecord<WorkloadType> rec;
+            //   // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-              // LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
-              //                                " " << k[0] << " | "
-              //                                " " << k[1] << " | " 
-              //                                " " << k[2] << " | " 
-              //                                " " << k[3] << " | " 
-              //                                " " << k[4];
-            }
+            //   LOG(INFO) << "cross_txn_num ++ : " <<  total_span / (i + 1) << " " << 
+            //                                  " " << k[0] << " | "
+            //                                  " " << k[1] << " | " 
+            //                                  " " << k[2] << " | " 
+            //                                  " " << k[3] << " | " 
+            //                                  " " << k[4];
+            // }
           } else {
             single_txn_num ++ ;
 
@@ -571,7 +571,7 @@ public:
       
       int total_size = txn_meta.c_transactions_queue.size();
       for(int i = 0 ; i < total_size; i += 500){
-        if(cur_real_distributed_cnt > 0 && context.lion_self_remaster){
+        if(context.repartition_strategy == "clay" || cur_real_distributed_cnt > 0 && context.lion_self_remaster){
           do_remaster_transaction(txn_meta.c_transactions_queue);
         }
 

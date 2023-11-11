@@ -12,31 +12,31 @@
 #include "core/Worker.h"
 #include "glog/logging.h"
 
-#include "protocol/LionSS/LionSSMessage.h"
-#include "protocol/LionSS/LionSSMeta.h"
+#include "protocol/ClaySS/ClaySSMessage.h"
+#include "protocol/ClaySS/ClaySSMeta.h"
 #include <chrono>
 
 namespace star {
-template <class Workload> class LionSSMetisExecutor : public Worker {
+template <class Workload> class ClaySSMetisExecutor : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
   using StorageType = typename WorkloadType::StorageType;
-  using TransactionType = LionSSTransaction;
+  using TransactionType = ClaySSTransaction;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
 
-  using ProtocolType = LionSS<DatabaseType>;
+  using ProtocolType = ClaySS<DatabaseType>;
 
-  using MessageType = LionSSMessage;
-  using MessageFactoryType = LionSSMessageFactory;
-  using MessageHandlerType = LionSSMessageHandler<DatabaseType>;
+  using MessageType = ClaySSMessage;
+  using MessageFactoryType = ClaySSMessageFactory;
+  using MessageHandlerType = ClaySSMessageHandler<DatabaseType>;
 
-  LionSSMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  ClaySSMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers, 
-           lionss::TransactionMeta<WorkloadType> &txn_meta)
+           clayss::TransactionMeta<WorkloadType> &txn_meta)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -98,7 +98,9 @@ public:
       p->distributed_transaction = simple_txn.is_real_distributed;
       p->op_ = simple_txn.op;
 
-      // LOG(INFO) << "unpack_route_transaction: " << simple_txn.keys[0] << " | " << simple_txn.keys[1];
+      // LOG(INFO) << "unpack_route_transaction: " << txn_id << " " 
+      //           << p->distributed_transaction << " "
+      //           << simple_txn.keys[0] << " | " << simple_txn.keys[1];
 
       txn_meta.t_transactions_queue[txn_id] = std::move(p);
     }
@@ -185,11 +187,8 @@ public:
       bool retry_transaction = false;
 
       transaction = std::move(cur_trans[i]);
-      // LOG(INFO) << i << " " << transaction->distributed_transaction << " " 
-      //           << *(int*)transaction->readSet[0].get_key() << " " 
-      //           << *(int*)transaction->readSet[1].get_key();
+
       if(!transaction->distributed_transaction){
-        single_txn_num += 1;
         continue;
       }
       // int target_coordinator_id_ = -1;
@@ -286,7 +285,6 @@ public:
         //   LOG(INFO) << "n_migrate: " << n_migrate.load() << " " 
         //             << "n_remaster: " << n_remaster.load();
         // }
-        //  LOG(INFO) << transaction->migrate_cnt << " " << transaction->remaster_cnt;
         n_network_size.fetch_add(transaction->network_size);
 
         time3 += std::chrono::duration_cast<std::chrono::microseconds>(
@@ -328,7 +326,6 @@ public:
 
     if(cur_queue_size > 0){
       LOG(INFO) << "Metis cur_queue_size: " << cur_queue_size << " " << cnt << " "
-                << single_txn_num << " "
                 << time_before_prepare_set * 1.0 / cur_queue_size << " "
                 << time_read_remote * 1.0 / cur_queue_size << " "
                 << time3 * 1.0 / cur_queue_size;
@@ -597,7 +594,7 @@ public:
               txn.network_size += MessageFactoryType::new_transmit_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
                   remaster, txn.op_);
-               txn.pendingResponses++; // already added at myclayTransactions
+              txn.pendingResponses++;
           } else {
               // others, only change the router
               // if(i == context.coordinator_num){
@@ -657,7 +654,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;
   // Partitioner* partitioner_ptr;
-  lionss::TransactionMeta<WorkloadType> &txn_meta;
+  clayss::TransactionMeta<WorkloadType> &txn_meta;
 
   RandomType random;
   ProtocolType protocol;

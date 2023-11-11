@@ -156,13 +156,18 @@ namespace star
             return std::make_pair(idle_coord_id, min_cost);
         }
 
-        std::pair<int, int> CalIdleNodes(const std::unordered_map<size_t, int>& idle_node){
+        std::pair<int, int> CalIdleNodes(const std::unordered_map<size_t, int>& idle_node, 
+                                         bool migrate_only){
             int idle_coord_id = -1;                        
             int min_cost = INT_MAX;
             // int idle_coord_id = -1;
             for(auto& idle: idle_node){
-                if(min_cost > move_cost[idle.first]){
-                    min_cost = move_cost[idle.first];
+                int cur_min_cost = 0;
+                for(int i = 0 ; i < txns.size(); i ++ ){
+                    cur_min_cost += cost[txns[i]->idx_][idle.first];
+                }
+                if(min_cost > cur_min_cost && (migrate_only || true)){
+                    min_cost = cur_min_cost;// move_cost[idle.first];
                     idle_coord_id = idle.first;
                 }
             }

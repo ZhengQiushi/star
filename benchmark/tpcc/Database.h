@@ -856,6 +856,7 @@ public:
 
       if(context.protocol.find("Lion") != context.protocol.npos || 
          context.protocol.find("LION") != context.protocol.npos ||
+         context.protocol.find("CLAY-S") != context.protocol.npos ||
          context.protocol == "MyClay"){
         init_router_table(context, partitioner);
       } else if (context.protocol == "Star"){

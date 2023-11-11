@@ -42,12 +42,7 @@ public:
   }
   static int get_workload_type(const Context &context, double cur_timestamp){
     int workload_type_num = 3;
-    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-    if(workload_type == 3){
-      workload_type = -2;
-    } else if(workload_type == 4){
-      workload_type = -3;
-    }
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// 
     return workload_type;
   }
   static int round(int a, int b){
@@ -82,10 +77,10 @@ public:
                                       std::max(0.0, cur_timestamp - 1.0 * context.workload_time / factor));
     static int tests = 0;
     bool show = false;
-    if(tests ++ % 10000 == 0){
-      LOG(INFO) << tests << " " << cur_timestamp << " " <<  cur_timestamp - 1.0 * context.workload_time / factor <<  " "  << workload_type << " " << last_workload_type;
-      show = true;
-    }
+    // if(tests ++ % 10000 == 0){
+    //   LOG(INFO) << tests << " " << cur_timestamp << " " <<  cur_timestamp - 1.0 * context.workload_time / factor <<  " "  << workload_type << " " << last_workload_type;
+    //   show = true;
+    // }
     if(workload_type != last_workload_type){
       int last_type_ratio = 30 * 
       (context.workload_time - (int)cur_timestamp % context.workload_time) / 

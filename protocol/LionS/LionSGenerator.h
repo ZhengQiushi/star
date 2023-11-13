@@ -368,7 +368,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
@@ -488,7 +488,9 @@ public:
       do {
         process_request();
         for(int i = 0 ; i < context.coordinator_num; i ++ ){
-          if(schedule_meta.router_transaction_done[i].load() >= context.batch_size){
+          int cur = schedule_meta.router_transaction_done[i].load();
+          int b_sz = context.batch_size;
+          if(cur >= b_sz){
             continue;
           }
           // consumed one transaction and route one

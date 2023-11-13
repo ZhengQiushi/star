@@ -411,7 +411,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
@@ -680,6 +680,7 @@ public:
   int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
     if(schedule_meta.transactions_queue_self.size() < context.batch_size){
+      // LOG(INFO) << schedule_meta.transactions_queue_self.size();
       return -1;
     }
     if(router_fence() == -1){
@@ -737,6 +738,7 @@ public:
       if(txn->is_real_distributed){
         real_distribute_num += 1;
       }
+      // LOG(INFO) << txn->keys[0] << " " << txn->keys[1] << " " << txn->is_real_distributed << " " << txn->destination_coordinator;
       busy_local[txn->destination_coordinator] += 1;
       cnt += 1;
     }
@@ -802,6 +804,7 @@ public:
     } else if(real_distribute_num > 0) {
       // pass
     } else {
+      LOG(INFO) << "NO DISTRIBUTED TXN";
       return -1;
     }
 
@@ -1112,6 +1115,15 @@ public:
           process_request();
 
           int idx = idx_offset + j;
+          // LOG(INFO) << txns[idx]->keys[0] << " " << 
+          //              txns[idx]->keys[1] << " " << 
+          //              txns[idx]->is_real_distributed << " | " << 
+          //              txns_coord_cost[idx][0] << " "     << 
+          //              txns_coord_cost[idx][1] << " "     << 
+          //              txns_coord_cost[idx][2] << " "     << 
+          //              txns_coord_cost[idx][3] << " | "   << 
+          //              txns[idx]->destination_coordinator; 
+
           if(!txns[idx]->is_real_distributed) continue;
 
           send_migrate_request += 1;
@@ -1129,14 +1141,6 @@ public:
 
 
           
-          // LOG(INFO) << txns[idx]->keys[0] << " " << 
-          //              txns[idx]->keys[1] << " " << 
-          //              txns[idx]->is_real_distributed << " | " << 
-          //              txns_coord_cost[idx][0] << " "     << 
-          //              txns_coord_cost[idx][1] << " "     << 
-          //              txns_coord_cost[idx][2] << " "     << 
-          //              txns_coord_cost[idx][3] << " | "   << 
-          //              txns[idx]->destination_coordinator; 
 
           // coordinator_send[txns[idx]->destination_coordinator] ++ ;
           
@@ -1226,13 +1230,15 @@ public:
     if(context.repartition_strategy == "clay"){
       start_offset = 0 * 1000 ;
     }
-    LOG(INFO) << "START INIT!";
-    migration(map_[3]);
-    while(router_fence() == -1){
-      std::this_thread::sleep_for(std::chrono::microseconds(5));
-    }
-    LOG(INFO) << "INIT DONE!";
 
+    if(context.lion_with_metis_init){
+      LOG(INFO) << "START INIT!";
+      migration(map_[3]);
+      while(router_fence() == -1){
+        std::this_thread::sleep_for(std::chrono::microseconds(5));
+      }
+      LOG(INFO) << "INIT DONE!";
+    }
     int cur_workload = 0;
 
     while(status != ExecutorStatus::EXIT){
@@ -1242,6 +1248,7 @@ public:
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
       func();
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
       if(latency > start_offset){
         break;
       }

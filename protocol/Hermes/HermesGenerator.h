@@ -445,7 +445,7 @@ public:
                  .count() * 1.0 / 1000 / 1000;
     int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<std::vector<int>> busy_local(replica_num, std::vector<int>(context.coordinator_num, 0));
     int real_distribute_num = 0;
@@ -508,22 +508,25 @@ public:
       for(size_t r = 0 ; r < replica_num; r ++ ){
         long long cur_val = cal_load_distribute(aver_val, busy_[r]);
         if(cur_val > threshold && context.random_router == 0){ 
+
+
           if(WorkloadType::which_workload == myTestSet::YCSB){
             balance_master(r, aver_val, threshold);
           } else {
             balance_master_tpcc(r, aver_val, threshold);
           }
-        }
-        cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - staart)
-                    .count() * 1.0 / 1000 ;
-        LOG(INFO) << "scheduler + reorder : " << cur_timestamp__  << " " << cur_val << " " << aver_val << " " << threshold;
+          cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                      std::chrono::steady_clock::now() - staart)
+                      .count() * 1.0 / 1000 ;
+          LOG(INFO) << "scheduler + reorder : " << cur_timestamp__  << " " << cur_val << " " << aver_val << " " << threshold;
 
-        LOG(INFO) << " after: ";
-        auto& cur_busy = busy_[r];
-        for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-          LOG(INFO) <<" busy[" << i << "] = " << cur_busy[i];
+          LOG(INFO) << " after: ";
+          auto& cur_busy = busy_[r];
+          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) <<" busy[" << i << "] = " << cur_busy[i];
+          }
         }
+
       }
 
     schedule_meta.reorder_done.store(true);
@@ -855,14 +858,14 @@ public:
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "send : " << cur_timestamp__;
+      // LOG(INFO) << "send : " << cur_timestamp__;
 
       // 
       for (auto l = 0u; l < context.coordinator_num; l++){
         if(l == context.coordinator_id){
           continue;
         }
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+        // LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
         messages_mutex[l]->lock();
         ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
         flush_message(async_messages, l);

@@ -83,7 +83,6 @@ namespace star
   std::vector<uint64_t> record_keys; // for migration
 };
 
-
     #define MAX_COORDINATOR_NUM 20
     struct Clump {
         using T = u_int64_t;
@@ -207,7 +206,7 @@ namespace star
         std::vector<Clump> clumps;
         std::vector<std::vector<int>>& cost;
 
-        std::unordered_map<int, int> key_clumps_idx;
+        std::unordered_map<uint64_t, int> key_clumps_idx;
 
         Clumps(std::vector<std::vector<int>>& cost):cost(cost){
 
@@ -217,6 +216,7 @@ namespace star
 
             for(int i = 0; i < txn->keys.size(); i ++ ){
                 if(!key_clumps_idx.count(txn->keys[i])) continue;
+                // LOG(INFO) << "ADD TO " << key_clumps_idx[txn->keys[i]] << " " << txn->keys[0] << " " << txn->keys[1] << " " << txn->keys[4];
                 need_new_clump = false;
                 clumps[key_clumps_idx[txn->keys[i]]].AddTxn(txn);
                 break;
@@ -225,6 +225,7 @@ namespace star
                 for(int i = 0; i < txn->keys.size(); i ++ ){
                     key_clumps_idx[txn->keys[i]] = clumps.size();
                 }
+                // LOG(INFO) << "ADD TO " << clumps.size() << " " << txn->keys[0] << " " << txn->keys[1] << " " << txn->keys[4];
                 clumps.push_back(Clump(txn, cost));
             }
         }

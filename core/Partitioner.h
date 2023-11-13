@@ -628,6 +628,7 @@ public:
 
   std::size_t secondary_coordinator(std::size_t partition_id) const override {
     // the static replica is master at initial state
+    DCHECK(false);
     return (partition_id) % coordinator_num;
   }
   std::size_t master_coordinator(int table_id, int partition_id, const void* key, int replica_id) const override {

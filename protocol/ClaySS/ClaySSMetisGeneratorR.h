@@ -411,7 +411,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
@@ -1087,77 +1087,6 @@ public:
     return query_master;
   }
 
-  void func(){
-      // return;
-      if(context.repartition_strategy != "lion") return;
-
-      std::vector<std::shared_ptr<simpleTransaction>> &txns =schedule_meta.node_txns;
-      auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
-
-      std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-      int ret_cnt = scheduler_transactions(dispatcher_num, dispatcher_id);
-      if(ret_cnt > 0){
-        int idx_offset = dispatcher_id * ret_cnt;
-        int send_migrate_request = 0;
-        for(int j = 0; j < ret_cnt; j ++ ){
-
-          process_request();
-
-          int idx = idx_offset + j;
-          if(!txns[idx]->is_real_distributed) continue;
-
-          send_migrate_request += 1;
-          txns[idx]->global_id_ = ++global_id;
-
-          auto debug_master = debug_record_keys_master(txns[idx]->keys);
-
-          // LOG(INFO) << j << " " << txns[idx]->global_id_ 
-          //           << " router to [" << txns[idx]->destination_coordinator
-          //           << "] : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
-          //           << txns[idx]->keys[1] << " " << debug_master[1] << " w="
-          //           << txns[idx]->access_frequency << " change=" 
-          //           << (txns[idx]->destination_coordinator != txns[idx]->old_dest) << " "
-          //           << txns[idx]->old_dest << "->" << txns[idx]->destination_coordinator; 
-
-
-          
-          // LOG(INFO) << txns[idx]->keys[0] << " " << 
-          //              txns[idx]->keys[1] << " " << 
-          //              txns[idx]->is_real_distributed << " | " << 
-          //              txns_coord_cost[idx][0] << " "     << 
-          //              txns_coord_cost[idx][1] << " "     << 
-          //              txns_coord_cost[idx][2] << " "     << 
-          //              txns_coord_cost[idx][3] << " | "   << 
-          //              txns[idx]->destination_coordinator; 
-
-          // coordinator_send[txns[idx]->destination_coordinator] ++ ;
-          
-
-          router_request(router_send_txn_cnt, txns[idx].get(), RouterTxnOps::TRANSFER);   
-
-          if(j % context.batch_flush == 0){
-            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-              messages_mutex[i]->lock();
-              flush_message(async_messages, i);
-              messages_mutex[i]->unlock();
-            }
-          }
-        }
-        for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-          messages_mutex[i]->lock();
-          flush_message(async_messages, i);
-          messages_mutex[i]->unlock();
-        }
-        LOG(INFO) << "send_migrate_request: " << send_migrate_request << " global_id: " << global_id;
-      }
-      for(int i = 0 ; i < context.coordinator_num; i ++ ){
-        schedule_meta.node_busy[i] = 0;
-      }
-      
-  }
-
-
-
   int clay_router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
     // transmit_request_queue
     std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
@@ -1329,7 +1258,6 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-      func();
       if(latency > start_offset){
         break;
       }
@@ -1348,7 +1276,6 @@ public:
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
 
-      func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -1383,8 +1310,6 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-
-      func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));

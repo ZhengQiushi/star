@@ -459,8 +459,8 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
-      // auto test = my_debug_key(table_id, partition_id, key);
-      // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      auto test = my_debug_key(table_id, partition_id, key);
+      LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -468,33 +468,27 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
-    // simulate migrate latency
-    // std::vector<size_t> lock_;
-    // size_t p_id = *(size_t*)key / 200000;
-    // size_t offset_ = *(size_t*)key % 200000;
-    // for(int i = 0 ; i + offset_ < 200000 && i < 50000; i ++ ){
-    //   size_t k = p_id * 200000 + i + offset_;
-      
-    //   // bool succ;
-    //   // latest_tid = TwoPLHelper::write_lock(tid, succ); // be locked 
-    //   // if(succ){
-    //   //   lock_.push_back(k);
-    //   // }
-    // }
-    ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
-    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
 
+   std::atomic<uint64_t> *lock_tid;
+   if(Database::which_workload() == myTestSet::YCSB){
+     ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+     ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+     lock_tid = &router_lock_table.search_metadata((void*) &k);
+   } else {
+     ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+     lock_tid = &router_lock_table.search_metadata((void*) key);
+   }
+   
     if(op == RouterTxnOps::ADD_REPLICA){
       
     } else {
       // LOG(INFO) << "LOCK ROUTER " << *(int*)key << " " << static_cast<int>(op);
 
-      TwoPLHelper::write_lock(lock_tid, success); // be locked 
+      TwoPLHelper::write_lock(*lock_tid, success); // be locked 
       if(!success){
         TwoPLHelper::write_lock_release(tid);
-        // auto test = my_debug_key(table_id, partition_id, key);
-        // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+        auto test = my_debug_key(table_id, partition_id, key);
+        LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
         encoder << latest_tid << key_offset << success << remaster << op;
         responseMessage.data.append(value_size, 0);
         responseMessage.flush();
@@ -577,7 +571,7 @@ public:
     if(op == RouterTxnOps::ADD_REPLICA){
       
     } else {
-      TwoPLHelper::write_lock_release(lock_tid);
+      TwoPLHelper::write_lock_release(*lock_tid);
     }
   }
 
@@ -882,20 +876,27 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+    std::atomic<uint64_t> *lock_tid;
+    if(Database::which_workload() == myTestSet::YCSB){
+      ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) &k);
+    } else {
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) key);
+    }
+      
 
-    ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
-    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
 
     if(op == RouterTxnOps::ADD_REPLICA){
       
     } else {
       // LOG(INFO) << "LOCK ROUTER " << *(int*)key << " " << static_cast<int>(op);
-      TwoPLHelper::write_lock(lock_tid, success); // be locked 
+      TwoPLHelper::write_lock(*lock_tid, success); // be locked 
       if(!success){
         TwoPLHelper::write_lock_release(tid);
-        // auto test = my_debug_key(table_id, partition_id, key);
-        // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+        auto test = my_debug_key(table_id, partition_id, key);
+        LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
         encoder << latest_tid << key_offset << success << remaster << op;
         responseMessage.data.append(value_size, 0);
         responseMessage.flush();
@@ -967,7 +968,7 @@ public:
     if(op == RouterTxnOps::ADD_REPLICA){
       
     } else {
-      TwoPLHelper::write_lock_release(lock_tid);
+      TwoPLHelper::write_lock_release(*lock_tid);
     }
   }
 
@@ -1228,17 +1229,23 @@ public:
       latest_tid = TwoPLHelper::read_lock(tid, success);
 
       if(success){
-        ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
-        ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-        std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
-        TwoPLHelper::write_lock(lock_tid, success); // be locked 
+        std::atomic<uint64_t> *lock_tid;
+        if(Database::which_workload() == myTestSet::YCSB){
+          ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+          ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+          lock_tid = &router_lock_table.search_metadata((void*) &k);
+        } else {
+          ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+          lock_tid = &router_lock_table.search_metadata((void*) key);
+        }
+        TwoPLHelper::write_lock(*lock_tid, success); // be locked 
 
         if(!success){
           // 
-          // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+          LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
           TwoPLHelper::read_lock_release(tid);
         } else {
-          TwoPLHelper::write_lock_release(lock_tid);
+          TwoPLHelper::write_lock_release(*lock_tid);
         }
       }
     }
@@ -1375,17 +1382,22 @@ public:
       latest_tid = TwoPLHelper::write_lock(tid, success);
       // 
       if(success){
-        ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
-        ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-        std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
-        TwoPLHelper::write_lock(lock_tid, success); // be locked 
-
+        std::atomic<uint64_t> *lock_tid;
+        if(Database::which_workload() == myTestSet::YCSB){
+          ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+          ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+          lock_tid = &router_lock_table.search_metadata((void*) &k);
+        } else {
+          ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+          lock_tid = &router_lock_table.search_metadata((void*) key);
+        }
+        TwoPLHelper::write_lock(*lock_tid, success); // be locked 
         if(!success){
           // 
           // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
           TwoPLHelper::write_lock_release(tid);
         } else {
-          TwoPLHelper::write_lock_release(lock_tid);
+          TwoPLHelper::write_lock_release(*lock_tid);
         }
       }
     }

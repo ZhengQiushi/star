@@ -546,10 +546,16 @@ public:
 
         if(success){
           // todo ycsb only
-          ycsb::ycsb::key k(*(size_t*)key % 200000 / 500 + 200000 * partition_id);
-          ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-          std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
-          TwoPLHelper::write_lock(lock_tid, success); // be locked 
+          std::atomic<uint64_t> *lock_tid;
+          if(WorkloadType::which_workload == myTestSet::YCSB){
+            ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+            ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+            lock_tid = &router_lock_table.search_metadata((void*) &k);
+          } else {
+            ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+            lock_tid = &router_lock_table.search_metadata((void*) key);
+          }
+          TwoPLHelper::write_lock(*lock_tid, success); // be locked 
 
           if(!success){
             // 
@@ -560,7 +566,7 @@ public:
               TwoPLHelper::read_lock_release(tid);
             }
           } else {
-            TwoPLHelper::write_lock_release(lock_tid);
+            TwoPLHelper::write_lock_release(*lock_tid);
           }
           // 
         }

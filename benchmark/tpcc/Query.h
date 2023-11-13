@@ -71,11 +71,7 @@ public:
 
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-    if(workload_type == 3){
-      workload_type = -2;
-    } else if(workload_type == 4){
-      workload_type = -3;
-    }
+
 
     NewOrderQuery query;
     // W_ID is constant over the whole measurement interval
@@ -88,7 +84,7 @@ public:
     // The non-uniform random customer number (C_ID) is selected using the
     // NURand(1023,1,3000) function from the selected district number (C_D_ID =
     // D_ID) and the home warehouse number (C_W_ID = W_ID).
-    double my_thresh = 0.01;
+    double my_thresh = 0.1;
     int x = random.uniform_dist(1, 100);
     if (x <= context.newOrderCrossPartitionProbability &&
              context.partition_num > 1) {

@@ -213,7 +213,7 @@ public:
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -417,7 +417,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
@@ -645,7 +645,7 @@ public:
                  std::chrono::steady_clock::now() - staart)
                  .count() * 1.0 / 1000 ;
 
-    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
+    // LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
               
     if(real_distribute_num > 0){
       // LOG(INFO) << "real_distribute_num = " << real_distribute_num;
@@ -670,6 +670,9 @@ public:
 
     if(dispatcher_id == 0){
 
+
+
+    if(cur_val > threshold && context.random_router == 0){ 
     LOG(INFO) << "busy: ";
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
@@ -679,24 +682,21 @@ public:
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
     }
-
-    if(cur_val > threshold && context.random_router == 0){ 
       if(WorkloadType::which_workload == myTestSet::YCSB){
         balance_master(aver_val, threshold);  
       } else {
         balance_master_tpcc(aver_val, threshold);  
       }
-      
+    LOG(INFO) << " after: ";
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
+    }
     }
 
     if(replica_cur_val > replica_threshold && context.random_router == 0){
       // balance_replica(node_replica_busy, replica_cur_val);
     }
 
-    LOG(INFO) << " after: ";
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
-    }
 
     schedule_meta.reorder_done.store(true);
     }

@@ -27,6 +27,7 @@ public:
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = Context;
   using RandomType = Random;
+  static myTestSet which_workload() {return myTestSet::YCSB;}
 
   ITable *find_table(std::size_t table_id, std::size_t partition_id) {
     DCHECK(table_id < tbl_vecs.size());
@@ -109,47 +110,55 @@ public:
     auto keysPerPartition = context.keysPerPartition;
     auto partitionNum = context.partition_num;
     std::size_t totalKeys = keysPerPartition * partitionNum;
+    std::vector<std::thread> v;
+    DCHECK(partitionNum % threadsNum == 0);
+    for (auto threadID = 0u; threadID < threadsNum; threadID++) {
+      v.emplace_back([&](int thread_id) {
+        for (auto j = thread_id; j < partitionNum; j += threadsNum) {
+          auto partitionID = j;
+          LOG(INFO) << "threadID: " << thread_id << " " << j << " ";
+          if (context.strategy == PartitionStrategy::RANGE) {
+            // use range partitioning
+            for (auto i = partitionID * keysPerPartition; i < (partitionID + 1) * keysPerPartition; i++) {
+              DCHECK(context.getPartitionID(i) == partitionID);
+              ycsb::key key(i);
 
+              size_t last_replica = (partitionID + 1) % context.coordinator_num;
+              size_t first_replica = (last_replica - partitioner->replica_num() + 1 + context.coordinator_num) % context.coordinator_num;
 
-    for (auto j = 0u; j < partitionNum; j++) {
-      auto partitionID = j;
-      
-      if (context.strategy == PartitionStrategy::RANGE) {
-        // use range partitioning
-        for (auto i = partitionID * keysPerPartition; i < (partitionID + 1) * keysPerPartition; i++) {
-          DCHECK(context.getPartitionID(i) == partitionID);
-          ycsb::key key(i);
+              ImyRouterTable *table_router = tbl_vecs_router[0]; 
 
-          size_t last_replica = (partitionID + 1) % context.coordinator_num;
-          size_t first_replica = (last_replica - partitioner->replica_num() + 1 + context.coordinator_num) % context.coordinator_num;
+              RouterValue router;
+              router.set_dynamic_coordinator_id(last_replica);
+              
+              if(first_replica <= last_replica){
+                for(int k = first_replica; k <= last_replica; k += 1){
+                  router.set_secondary_coordinator_id(k);
+                }
+              } else {
+                for(int k = 0; k <= last_replica; k += 1){
+                  router.set_secondary_coordinator_id(k);
+                }
+                for(int k = first_replica; k < context.coordinator_num; k += 1){
+                  router.set_secondary_coordinator_id(k);
+                }
+              }
+              
+              table_router->insert(&key, &router); // 
 
-          ImyRouterTable *table_router = tbl_vecs_router[0]; 
-
-          RouterValue router;
-          router.set_dynamic_coordinator_id(last_replica);
-          
-          if(first_replica <= last_replica){
-            for(int k = first_replica; k <= last_replica; k += 1){
-              router.set_secondary_coordinator_id(k);
+              // }
             }
           } else {
-            for(int k = 0; k <= last_replica; k += 1){
-              router.set_secondary_coordinator_id(k);
-            }
-            for(int k = first_replica; k < context.coordinator_num; k += 1){
-              router.set_secondary_coordinator_id(k);
-            }
+            // not available so far
+            DCHECK(false);
           }
-          
-          table_router->insert(&key, &router); // 
-
-          // }
         }
-      } else {
-        // not available so far
-        DCHECK(false);
-      }
+      }, threadID);
     }
+    for (auto &t : v) {
+      t.join();
+    }
+
   }
 
   void init_hermes_router_table(const Context& context, std::size_t replica_id){
@@ -391,7 +400,7 @@ public:
 
     initLockTables("ycsb",
                [&context, this](std::size_t partitionID) {
-                 ycsbLockInit(context, partitionID, tbl_ycsb_vec_router_lock[partitionID].get());
+                 ycsbInit(context, partitionID, tbl_ycsb_vec_router_lock[partitionID].get());
                },
                partitionNum, threadsNum, partitioner.get());
 
@@ -535,46 +544,6 @@ private:
     }
   }
 
-
-
-  void ycsbLockInit(const Context &context, std::size_t partitionID, ITable *table) {
-
-    Random random;
-
-    std::size_t keysPerPartition =
-        context.keysPerPartition; // 5M keys per partition
-    std::size_t partitionNum = context.partition_num;
-    std::size_t totalKeys = keysPerPartition * partitionNum;
-
-    if (context.strategy == PartitionStrategy::RANGE) {
-
-      // use range partitioning
-
-      for (auto i = partitionID * keysPerPartition;
-           i < (partitionID + 1) * keysPerPartition; i++) {
-
-        DCHECK(context.getPartitionID(i) == partitionID);
-
-        ycsb::key key(i);
-        ycsb::value value;
-        table->insert(&key, &value);
-      }
-
-    } else {
-
-      // use round-robin hash partitioning
-
-      for (auto i = partitionID; i < totalKeys; i += partitionNum) {
-
-        DCHECK(context.getPartitionID(i) == partitionID);
-
-        ycsb::key key(i);
-        ycsb::value value;
-
-        table->insert(&key, &value);
-      }
-    }
-  }
 
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;

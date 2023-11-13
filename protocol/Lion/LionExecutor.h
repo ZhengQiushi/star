@@ -181,15 +181,15 @@ public:
           cur_real_distributed_cnt += 1;
           p->distributed_transaction = true;
           // if(cur_real_distributed_cnt < 10){
-          //   LOG(INFO) << " test if abort?? " << simple_txn.keys[0] << " " << simple_txn.keys[1];
+          //   VLOG_IF(DEBUG_V, id==0) << " test if abort?? " << simple_txn.keys[0] << " " << simple_txn.keys[1];
           // }
           // if(transaction->distributed_transaction){
               // auto debug = p->debug_record_keys();
               // auto debug_master = p->debug_record_keys_master();
 
-              // LOG(INFO) << " OMG ";
+              // VLOG_IF(DEBUG_V, id==0) << " OMG ";
               // for(int i = 0 ; i < debug.size(); i ++){
-              //   LOG(INFO) << " #### : " << debug[i] << " " << debug_master[i]; 
+              //   VLOG_IF(DEBUG_V, id==0) << " #### : " << debug[i] << " " << debug_master[i]; 
               // }
           // }
 
@@ -236,7 +236,7 @@ public:
                      std::chrono::steady_clock::now() - start_time)
                      .count();
                      
-      LOG(INFO) << "new batch processing ";
+      VLOG_IF(DEBUG_V, id==0) << "new batch processing ";
       times ++ ;
       if(clear_status.load() == true){
         clear_time_status();
@@ -293,7 +293,7 @@ public:
                     std::chrono::steady_clock::now() - begin)
                     .count();
 
-      LOG(INFO) << "prepare_transactions_to_run "
+      VLOG_IF(DEBUG_V, id==0) << "prepare_transactions_to_run "
               << router_time
               << " milliseconds.";
 
@@ -316,7 +316,7 @@ public:
       n_started_workers.fetch_add(1);
 
       if(cur_real_distributed_cnt > 0){
-        LOG(INFO) << "[C-PHASE] do remaster "
+        VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
@@ -326,7 +326,7 @@ public:
         async_fence();
       }
 
-      LOG(INFO) << "[C-PHASE] do remaster "
+      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
@@ -339,7 +339,7 @@ public:
     
       n_complete_workers.fetch_add(1);
 
-      LOG(INFO) << "[C-PHASE] C_phase - local "
+      VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] C_phase - local "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
                      std::chrono::steady_clock::now() - begin)
                      .count()
@@ -358,7 +358,7 @@ public:
       if(cur_time > 10)
         execute_latency.add(execution_schedule_time);
 
-      LOG(INFO) << "whole batch "
+      VLOG_IF(DEBUG_V, id==0) << "whole batch "
               << execution_schedule_time
               << " milliseconds, " 
               << commit_num;
@@ -505,7 +505,7 @@ public:
         auto now = std::chrono::steady_clock::now();
 
         do {
-          ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
+          ////  // VLOG_IF(DEBUG_V, id==0) << "LionExecutor: "<< id << " " << "process_request" << i;
           process_request();
           ////
           last_seed = random.get_seed();
@@ -545,7 +545,7 @@ public:
               // // MoveRecord<WorkloadType> rec;
               // // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
               
-              // LOG(INFO) << "cross_txn_num ++ : " << " " << 
+              // VLOG_IF(DEBUG_V, id==0) << "cross_txn_num ++ : " << " " << 
               //                                " " << k[0] << " | "
               //                                " " << k[1] << " | " 
               //                                " " << k[2] << " | " 
@@ -596,7 +596,7 @@ public:
               n_remaster.fetch_add(transaction->remaster_cnt);
               if(transaction->migrate_cnt > 0 || transaction->remaster_cnt > 0){
                 distributed_num.fetch_add(1);
-                // LOG(INFO) << distributed_num.load();
+                // VLOG_IF(DEBUG_V, id==0) << distributed_num.load();
               } else {
                 singled_num.fetch_add(1);
               }
@@ -659,7 +659,7 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count() * 1.0;
     if(count > 0){
-      LOG(INFO) << total_sec / 1000 / 1000 << " s, " << total_sec / count << " per/micros."
+      VLOG_IF(DEBUG_V, id==0) << total_sec / 1000 / 1000 << " s, " << total_sec / count << " per/micros."
                 << txn_percentile.nth(10) << " " 
                 << txn_percentile.nth(50) << " "
                 << txn_percentile.nth(80) << " "
@@ -680,12 +680,12 @@ public:
       << " : "        << why[11] / count
       << " : "        << why[12] / count
       << " : "        << why[13] / count; // << "  router : " << time1 / cur_queue_size; 
-      // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
+      // VLOG_IF(DEBUG_V, id==0) << "remaster_delay_transactions: " << remaster_delay_transactions;
       // remaster_delay_transactions = 0;
     }
       
 
-    ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
+    ////  // VLOG_IF(DEBUG_V, id==0) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 
   void do_remaster_transaction(ExecutorStatus status, 
@@ -754,7 +754,7 @@ public:
       auto rematser_begin = std::chrono::steady_clock::now();
       
       do {
-        ////  // LOG(INFO) << "LionExecutor: "<< id << " " << "process_request" << i;
+        ////  // VLOG_IF(DEBUG_V, id==0) << "LionExecutor: "<< id << " " << "process_request" << i;
         process_request();
         // last_seed = random.get_seed();
 
@@ -805,18 +805,18 @@ public:
     
 
     if(cnt > 0){
-      LOG(INFO) << "rrrrremaster : " << total_sec / 1000 / 1000 << " s, " << total_sec / cnt << " per/micros." << cnt ;
+      VLOG_IF(DEBUG_V, id==0) << "rrrrremaster : " << total_sec / 1000 / 1000 << " s, " << total_sec / cnt << " per/micros." << cnt ;
 
       VLOG(DEBUG_V4) << time_read_remote << " "<< cnt  << " prepare: " << time_prepare_read / cnt << "  execute: " << time_read_remote / cnt << "  commit: " << time3 / cnt;
     } else {
-      LOG(INFO) << "skip remaster";
+      VLOG_IF(DEBUG_V, id==0) << "skip remaster";
     }
 
   }
 
   void onExit() override {
 
-    LOG(INFO) << "Worker " << id << " latency: " << percentile.nth(50)
+    VLOG_IF(DEBUG_V, id==0) << "Worker " << id << " latency: " << percentile.nth(50)
               << " us (50%) " << percentile.nth(75) << " us (75%) "
               << percentile.nth(95) << " us (95%) " << percentile.nth(99)
               << " us (99%).";
@@ -826,7 +826,7 @@ public:
     }
     if (id == 0) {
       for (auto i = 0u; i < message_stats.size(); i++) {
-        LOG(INFO) << "message stats, type: " << i
+        VLOG_IF(DEBUG_V, id==0) << "message stats, type: " << i
                   << " count: " << message_stats[i]
                   << " total size: " << message_sizes[i];
       }
@@ -1023,7 +1023,7 @@ private:
           VLOG(DEBUG_V8) << "SYNC !! " << txn.id << " " 
                          << table_id   << " ASK " 
                          << i << " " << *(int*)key << " " << txn.readSet.size() << " " << txn.pendingResponses;
-          // LOG(INFO) << "txn.pendingResponses: " << txn.pendingResponses << " " << readKey.get_write_lock_bit();
+          // VLOG_IF(DEBUG_V, id==0) << "txn.pendingResponses: " << txn.pendingResponses << " " << readKey.get_write_lock_bit();
         }
         txn.distributed_transaction = true;
         return 0;
@@ -1137,7 +1137,7 @@ private:
 
 //      auto it = message->begin(); 
 //      MessagePiece messagePiece = *it;
-//      LOG(INFO) << "messagePiece " << messagePiece.get_message_type() << " " << i << " = " << static_cast<int>(LionMessage::REPLICATION_RESPONSE);
+//      VLOG_IF(DEBUG_V, id==0) << "messagePiece " << messagePiece.get_message_type() << " " << i << " = " << static_cast<int>(LionMessage::REPLICATION_RESPONSE);
       ////
       out_queue.push(message);
       messages_[i] = std::make_unique<Message>();

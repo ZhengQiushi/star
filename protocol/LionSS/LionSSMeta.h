@@ -63,7 +63,7 @@ struct ScheduleMeta {
   std::atomic<uint32_t> done_schedule;
 
 
-  std::atomic<uint32_t> router_transaction_done[20]; // for single-execution
+  std::atomic<int> router_transaction_done[20]; // for single-execution
 
 
   ShareQueue<simpleTransaction* , 20960> transactions_queue_self;

@@ -335,10 +335,16 @@ public:
     }
 
     // simulate migrate latency
-    ycsb::ycsb::key k(*(size_t*)key % 200000 / 500 + 200000 * partition_id);
-    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
-    TwoPLHelper::write_lock(lock_tid, success); // be locked 
+    std::atomic<uint64_t> *lock_tid;
+    if(Database::which_workload() == myTestSet::YCSB){
+      ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) &k);
+    } else {
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) key);
+    }
+    TwoPLHelper::write_lock(*lock_tid, success); // be locked 
     if(!success){
       TwoPLHelper::write_lock_release(tid);
       // auto test = my_debug_key(table_id, partition_id, key);
@@ -447,7 +453,7 @@ public:
 
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
-    TwoPLHelper::write_lock_release(lock_tid);
+    TwoPLHelper::write_lock_release(*lock_tid);
   }
 
   static void search_response_handler(MessagePiece inputPiece,
@@ -952,7 +958,7 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
+      // VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
       encoder << latest_tid << key_offset << txn_id << success << remaster << is_metis;
       encoder.write_n_bytes(key, key_size);
       responseMessage.data.append(value_size, 0);
@@ -963,14 +969,21 @@ public:
     }
 
     
-    ycsb::ycsb::key k(*(size_t*)key % 200000 / 500 + 200000 * partition_id);
-    ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-    std::atomic<uint64_t> &lock_tid = router_lock_table.search_metadata((void*) &k);
-    TwoPLHelper::write_lock(lock_tid, success); // be locked 
+    std::atomic<uint64_t> *lock_tid;
+    if(Database::which_workload() == myTestSet::YCSB){
+      ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) &k);
+    } else {
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) key);
+    }
+
+    TwoPLHelper::write_lock(*lock_tid, success); // be locked 
     if(!success){
       TwoPLHelper::write_lock_release(tid);
       // auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << "  can't Lock " << *(int*)key;// << " " <<  test; // << " " << tid_int;
+      // LOG(INFO) << "  can't Lock " << *(int*)key;// << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << txn_id << success << remaster << is_metis;
       encoder.write_n_bytes(key, key_size);
       responseMessage.data.append(value_size, 0);
@@ -1046,7 +1059,7 @@ public:
 
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
-    TwoPLHelper::write_lock_release(lock_tid);
+    TwoPLHelper::write_lock_release(*lock_tid);
 
   }
 

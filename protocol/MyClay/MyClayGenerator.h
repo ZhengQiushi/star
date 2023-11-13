@@ -380,7 +380,7 @@ public:
       from_nodes_id[customer_coordinator_id] += 1;
       query_keys.push_back(customer_coordinator_id);
         
-      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);

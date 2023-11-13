@@ -33,6 +33,7 @@ public:
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = Context;
   using RandomType = Random;
+  static myTestSet which_workload() {return myTestSet::TPCC;}
 
   ITable *find_table(std::size_t table_id, std::size_t partition_id) {
     DCHECK(table_id < tbl_vecs.size());
@@ -52,13 +53,11 @@ public:
     return tbl_vecs_router[table_id]; // [coordinator_id];
   }
 
-  ITable *find_router_lock_table(std::size_t table_id) { // , std::size_t coordinator_id
-    // 找某个节点的路由表
-    // DCHECK(table_id < tbl_vecs.size());
-    // DCHECK(coordinator_id < tbl_vecs[table_id].size());
-    DCHECK(false);
+  ITable *find_router_lock_table(std::size_t table_id, std::size_t partition_id) {
+    DCHECK(table_id < tbl_vecs_router_lock.size());
+    DCHECK(partition_id < tbl_vecs_router_lock[table_id].size());
     DCHECK(isolation_replica == false);
-    return nullptr;
+    return tbl_vecs_router_lock[table_id][partition_id];
   }
 
   ITable *find_table(std::size_t table_id, std::size_t partition_id, int replica_id) {
@@ -73,7 +72,7 @@ public:
     return tbl_vecs_router_[replica_id][table_id]; // tbl_vecs_router[table_id]
   }
   
-  ITable *find_router_lock_table(std::size_t table_id, int replica_id) {
+  ITable *find_router_lock_table(std::size_t table_id, std::size_t partition_id, int replica_id) {
     DCHECK(false);
     DCHECK(isolation_replica == true && replica_id != -1);
     return nullptr;
@@ -167,6 +166,40 @@ public:
   }
 
   template <class InitFunc>
+  void initLockTables(const Context& context,
+                  const std::string &name, InitFunc initFunc,
+                  std::size_t partitionNum, std::size_t threadsNum,
+                  Partitioner *partitioner) {
+
+    std::vector<int> all_parts;
+    for (auto i = 0u; i < partitionNum; i++) {
+        all_parts.push_back(i);
+    }
+
+    std::vector<std::thread> v;
+    auto now = std::chrono::steady_clock::now();
+
+    for (auto threadID = 0u; threadID < threadsNum; threadID++) {
+      v.emplace_back([=]() {
+        for (auto i = threadID; i < all_parts.size(); i += threadsNum) {
+          auto partitionID = all_parts[i];
+          initFunc(partitionID);
+        }
+      });
+    }
+
+    for (auto &t : v) {
+      t.join();
+    }
+    LOG(INFO) << name << " initialization finished in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now() - now)
+                     .count()
+              << " milliseconds.";
+  }
+
+
+  template <class InitFunc>
   void MyinitTables(const Context& context,
                   const std::string &name, InitFunc initFunc,
                   std::size_t partitionNum, std::size_t threadsNum,
@@ -213,72 +246,83 @@ public:
     auto coordinatorNum = context.coordinator_num;
 
     std::size_t totalKeys = keysPerPartition * partitionNum;
-    
-    for (auto p_id = 0u; p_id < partitionNum; p_id++) {
-      auto partitionID = p_id;
 
-      size_t last_replica = (partitionID + 1) % context.coordinator_num;
-      size_t first_replica = (last_replica - partitioner->replica_num() + 1 + context.coordinator_num) % context.coordinator_num;
-      
-      RouterValue router;
-      router.set_dynamic_coordinator_id(last_replica);
-      if(first_replica <= last_replica){
-        for(size_t k = first_replica; k <= last_replica; k += 1){
-          router.set_secondary_coordinator_id(k);
-        }
-      } else {
-        for(size_t k = 0; k <= last_replica; k += 1){
-          router.set_secondary_coordinator_id(k);
-        }
-        for(size_t k = first_replica; k < context.coordinator_num; k += 1){
-          router.set_secondary_coordinator_id(k);
-        }
-      }
+    std::vector<std::thread> v;
+    // auto now = std::chrono::steady_clock::now();
+    DCHECK(partitionNum % threadsNum == 0);
+    for (auto threadID = 0u; threadID < threadsNum; threadID++) {
+      v.emplace_back([&](int thread_id) {
+        
+        for (auto p_id = thread_id; p_id < partitionNum; p_id += threadsNum) {
+          auto partitionID = p_id;
+          LOG(INFO) << "threadID: " << thread_id << " " << p_id << " ";
+          size_t last_replica = (partitionID + 1) % context.coordinator_num;
+          size_t first_replica = (last_replica - partitioner->replica_num() + 1 + context.coordinator_num) % context.coordinator_num;
+          
+          RouterValue router;
+          router.set_dynamic_coordinator_id(last_replica);
+          if(first_replica <= last_replica){
+            for(size_t k = first_replica; k <= last_replica; k += 1){
+              router.set_secondary_coordinator_id(k);
+            }
+          } else {
+            for(size_t k = 0; k <= last_replica; k += 1){
+              router.set_secondary_coordinator_id(k);
+            }
+            for(size_t k = first_replica; k < context.coordinator_num; k += 1){
+              router.set_secondary_coordinator_id(k);
+            }
+          }
 
-      // void warehouseInit(std::size_t partitionID) {
-      warehouse::key key;
-      key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
-      ITable *table_router = tbl_warehouse_vec_router.get();
-      table_router->insert(&key, &router);
-
-      // void districtInit(std::size_t partitionID)
-      table_router = tbl_district_vec_router.get();
-      for (int i = 1; i <= 10; i++) {
-        district::key key;
-        key.D_W_ID = partitionID + 1;
-        key.D_ID = i;
-        table_router->insert(&key, &router);
-      }
-
-      // customerInit(std::size_t partitionID)
-      table_router = tbl_customer_vec_router.get();
-      for (int i = 1; i <= 10; i++) {
-        for (int j = 1; j <= 3000; j++) {
-
-          customer::key key;
-          key.C_W_ID = partitionID + 1;
-          key.C_D_ID = i;
-          key.C_ID = j;
-
+          // void warehouseInit(std::size_t partitionID) {
+          warehouse::key key;
+          key.W_ID = partitionID + 1; // partitionID is from 0, W_ID is from 1
+          ITable *table_router = tbl_warehouse_vec_router.get();
           table_router->insert(&key, &router);
-        }
+
+          // void districtInit(std::size_t partitionID)
+          table_router = tbl_district_vec_router.get();
+          for (int i = 1; i <= 10; i++) {
+            district::key key;
+            key.D_W_ID = partitionID + 1;
+            key.D_ID = i;
+            table_router->insert(&key, &router);
+          }
+
+          // customerInit(std::size_t partitionID)
+          table_router = tbl_customer_vec_router.get();
+          for (int i = 1; i <= 10; i++) {
+            for (int j = 1; j <= 3000; j++) {
+
+              customer::key key;
+              key.C_W_ID = partitionID + 1;
+              key.C_D_ID = i;
+              key.C_ID = j;
+
+              table_router->insert(&key, &router);
+            }
+          }
+
+          // customerNameIdxInit
+          table_router = tbl_customer_name_idx_vec_router.get();
+          // todo
+
+          // stockInit
+          table_router = tbl_stock_vec_router.get();
+          for (int i = 1; i <= stock_num; i++) {
+            stock::key key;
+            key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
+            key.S_I_ID = i;
+            table_router->insert(&key, &router);
+          }
+
       }
+      }, threadID);
+    }
 
-      // customerNameIdxInit
-      table_router = tbl_customer_name_idx_vec_router.get();
-      // todo
-
-      // stockInit
-      table_router = tbl_stock_vec_router.get();
-      for (int i = 1; i <= stock_num; i++) {
-        stock::key key;
-        key.S_W_ID = partitionID + 1; // partition_id from 0, W_ID from 1
-        key.S_I_ID = i;
-        table_router->insert(&key, &router);
-      }
-
-  }
-
+    for (auto &t : v) {
+      t.join();
+    }
     // item init 
     // for(auto c_id = 0u; c_id < coordinatorNum; c_id ++ ){
 
@@ -740,16 +784,48 @@ public:
               orderLineTableID, partitionID));
       auto stockTableID = stock::tableID;
       tbl_stock_vec.push_back(
+          std::make_unique<Table<997, stock::key, stock::value>>(stockTableID,
+                                                                 partitionID));
 
+      // 
+      tbl_warehouse_vec_router_lock.push_back(
+          std::make_unique<Table<997, warehouse::key, warehouse::value>>(
+              warehouseTableID, partitionID));
+      tbl_district_vec_router_lock.push_back(
+          std::make_unique<Table<997, district::key, district::value>>(
+              districtTableID, partitionID));
+      tbl_customer_vec_router_lock.push_back(
+          std::make_unique<Table<997, customer::key, customer::value>>(
+              customerTableID, partitionID));
+      tbl_customer_name_idx_vec_router_lock.push_back(
+          std::make_unique<
+              Table<997, customer_name_idx::key, customer_name_idx::value>>(
+              customerNameIdxTableID, partitionID));
+      tbl_history_vec_router_lock.push_back(
+          std::make_unique<Table<997, history::key, history::value>>(
+              historyTableID, partitionID));
+      tbl_new_order_vec_router_lock.push_back(
+          std::make_unique<Table<997, new_order::key, new_order::value>>(
+              newOrderTableID, partitionID));
+      tbl_order_vec_router_lock.push_back(
+          std::make_unique<Table<997, order::key, order::value>>(
+              orderTableID, partitionID));
+      tbl_order_line_vec_router_lock.push_back(
+          std::make_unique<Table<997, order_line::key, order_line::value>>(
+              orderLineTableID, partitionID));
+      tbl_stock_vec_router_lock.push_back(
           std::make_unique<Table<997, stock::key, stock::value>>(stockTableID,
                                                                  partitionID));
     }
     auto itemTableID = item::tableID;
     tbl_item_vec.push_back(
         std::make_unique<Table<997, item::key, item::value>>(itemTableID, 0));
+    tbl_item_vec_router_lock.push_back(
+        std::make_unique<Table<997, item::key, item::value>>(itemTableID, 0));
 
     // there are 10 tables in tpcc
     tbl_vecs.resize(10);
+    tbl_vecs_router_lock.resize(10);
 
     auto tFunc = [](std::unique_ptr<ITable> &table) { return table.get(); };
 
@@ -774,6 +850,28 @@ public:
                    std::back_inserter(tbl_vecs[8]), tFunc);
     std::transform(tbl_stock_vec.begin(), tbl_stock_vec.end(),
                    std::back_inserter(tbl_vecs[9]), tFunc);
+    // 
+    std::transform(tbl_warehouse_vec_router_lock.begin(), tbl_warehouse_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[0]), tFunc);
+    std::transform(tbl_district_vec_router_lock.begin(), tbl_district_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[1]), tFunc);
+    std::transform(tbl_customer_vec_router_lock.begin(), tbl_customer_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[2]), tFunc);
+    std::transform(tbl_customer_name_idx_vec_router_lock.begin(),
+                   tbl_customer_name_idx_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[3]), tFunc);
+    std::transform(tbl_history_vec_router_lock.begin(), tbl_history_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[4]), tFunc);
+    std::transform(tbl_new_order_vec_router_lock.begin(), tbl_new_order_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[5]), tFunc);
+    std::transform(tbl_order_vec_router_lock.begin(), tbl_order_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[6]), tFunc);
+    std::transform(tbl_order_line_vec_router_lock.begin(), tbl_order_line_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[7]), tFunc);
+    std::transform(tbl_item_vec_router_lock.begin(), tbl_item_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[8]), tFunc);
+    std::transform(tbl_stock_vec_router_lock.begin(), tbl_stock_vec_router_lock.end(),
+                   std::back_inserter(tbl_vecs_router_lock[9]), tFunc);
 
     LOG(INFO) << "hash tables created in "
                << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -791,20 +889,53 @@ public:
     initTables(context, "customer",
                [this](std::size_t partitionID) { customerInit(partitionID, tbl_customer_vec[partitionID].get()); },
                partitionNum, threadsNum, partitioner);
+
+    initLockTables(context, "warehouse",
+               [this](std::size_t partitionID) { warehouseInit(partitionID, 
+                tbl_warehouse_vec_router_lock[partitionID].get()); },
+                partitionNum, threadsNum, partitioner);
+    initLockTables(context, "district",
+               [this](std::size_t partitionID) { districtInit(partitionID,  
+                tbl_district_vec_router_lock[partitionID].get()); },
+                partitionNum, threadsNum, partitioner);
+    initLockTables(context, "customer",
+               [this](std::size_t partitionID) { customerInit(partitionID, 
+                tbl_customer_vec_router_lock[partitionID].get()); },
+                partitionNum, threadsNum, partitioner);
+
     if(isolation_replica == true){
       initTables(
           context, 
           "customer_name_idx",
-          [this](std::size_t partitionID) { customerNameIdxInit(partitionID, tbl_customer_name_idx_vec[partitionID].get(), 
-          find_table(customer::tableID, partitionID, 0)); },
+          [this](std::size_t partitionID) { customerNameIdxInit(partitionID,
+            tbl_customer_name_idx_vec[partitionID].get(), 
+            find_table(customer::tableID, partitionID, 0)); },
           partitionNum, threadsNum, partitioner);
+      
+      // initLockTables(
+      //     context, 
+      //     "customer_name_idx",
+      //     [this](std::size_t partitionID) { customerNameIdxInit(partitionID,
+      //       tbl_customer_name_idx_vec_router_lock[partitionID].get(), 
+      //       find_table(customer::tableID, partitionID, 0)); },
+      //     partitionNum, threadsNum, partitioner);
+
     } else {
-    initTables(
-        context, 
-        "customer_name_idx",
-        [this](std::size_t partitionID) { customerNameIdxInit(partitionID, tbl_customer_name_idx_vec[partitionID].get(), 
-        find_table(customer::tableID, partitionID)); },
-        partitionNum, threadsNum, partitioner);
+      initTables(
+          context, 
+          "customer_name_idx",
+          [this](std::size_t partitionID) { customerNameIdxInit(partitionID, 
+            tbl_customer_name_idx_vec[partitionID].get(), 
+            find_table(customer::tableID, partitionID)); },
+          partitionNum, threadsNum, partitioner);
+
+      // initLockTables(
+      //     context, 
+      //     "customer_name_idx",
+      //     [this](std::size_t partitionID) { customerNameIdxInit(partitionID, 
+      //       tbl_customer_name_idx_vec_router_lock[partitionID].get(), 
+      //       find_table(customer::tableID, partitionID)); },
+      //     partitionNum, threadsNum, partitioner);
     }
 
     /*
@@ -828,14 +959,22 @@ public:
                [this](std::size_t partitionID) { stockInit(partitionID, tbl_stock_vec[partitionID].get()); },
                partitionNum, threadsNum, partitioner);
 
-    
+
+    initLockTables(context, "item",
+               [this](std::size_t partitionID) { itemInit(partitionID, 
+                tbl_item_vec_router_lock[partitionID].get()); }, 1, 1, // 只需要一个分区, 因为没有写操作... 
+                nullptr);
+    initLockTables(context, "stock",
+               [this](std::size_t partitionID) { stockInit(partitionID, 
+                tbl_stock_vec_router_lock[partitionID].get()); },
+                partitionNum, threadsNum, partitioner);
 
   }
   void initialize(const Context &context) {
 
     coordinator_id = context.coordinator_id;
     partitionNum = context.partition_num;
-    threadsNum = context.worker_num;
+    threadsNum = std::max(context.worker_num, size_t(8));
 
     if(context.protocol == "Hermes"){
       isolation_replica = true;
@@ -853,15 +992,11 @@ public:
     if(context.protocol != "Hermes"){
       initialize_database(context, partitioner.get());
       allocate_router_table(context);
-
-      if(context.protocol.find("Lion") != context.protocol.npos || 
-         context.protocol.find("LION") != context.protocol.npos ||
-         context.protocol.find("CLAY-S") != context.protocol.npos ||
-         context.protocol == "MyClay"){
-        init_router_table(context, partitioner);
-      } else if (context.protocol == "Star"){
+      if (context.protocol == "Star"){
         init_star_router_table(context);
-      }
+      } else {
+        init_router_table(context, partitioner);
+      } 
     } else {
       initialize_replica_table(context, partitioner.get());
     }
@@ -1422,6 +1557,7 @@ private:
 private:
   std::vector<std::vector<ITable *>> tbl_vecs;
   std::vector<ITable *> tbl_vecs_router;
+  std::vector<std::vector<ITable *>> tbl_vecs_router_lock;
 
   std::vector<std::unique_ptr<ITable>> tbl_warehouse_vec;
   std::vector<std::unique_ptr<ITable>> tbl_district_vec;
@@ -1445,6 +1581,18 @@ private:
   std::unique_ptr<ITable> tbl_order_line_vec_router;
   std::unique_ptr<ITable> tbl_item_vec_router;
   std::unique_ptr<ITable> tbl_stock_vec_router;
+
+  std::vector<std::unique_ptr<ITable>> tbl_warehouse_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_district_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_customer_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_customer_name_idx_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_history_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_new_order_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_order_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_order_line_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_item_vec_router_lock;
+  std::vector<std::unique_ptr<ITable>> tbl_stock_vec_router_lock;
+
 
 
   bool isolation_replica;
@@ -1473,6 +1621,19 @@ private:
   std::unique_ptr<ITable> tbl_order_line_vec_router_[2];
   std::unique_ptr<ITable> tbl_item_vec_router_[2];
   std::unique_ptr<ITable> tbl_stock_vec_router_[2];
+  
+  // 
+  std::unique_ptr<ITable> tbl_warehouse_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_district_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_customer_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_customer_name_idx_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_history_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_new_order_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_order_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_order_line_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_item_vec_router_lock_[2];
+  std::unique_ptr<ITable> tbl_stock_vec_router_lock_[2];
+  
   // 
   std::size_t coordinator_id; // = context.coordinator_id;
   std::size_t partitionNum; // = context.partition_num;

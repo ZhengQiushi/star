@@ -812,7 +812,7 @@ public:
     auto& readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
-    VLOG(DEBUG_V8) << " TRANSFER_RESPONSE_ROUTER_ONLY   " << txn_id << " " << *(int*)key << "response get " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " pending: " << txn->pendingResponses;
+    // VLOG(DEBUG_V8) << " TRANSFER_RESPONSE_ROUTER_ONLY   " << txn_id << " " << *(int*)key << "response get " << responseMessage.get_source_node_id() << "->" << responseMessage.get_dest_node_id() << " pending: " << txn->pendingResponses;
 
   }
 

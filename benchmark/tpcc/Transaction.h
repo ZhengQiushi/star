@@ -405,8 +405,8 @@ public:
           break;
       }
     }
-    LOG(INFO) << "pendingResponses : " << this->pendingResponses;
-    if (this->process_remaster_requests(worker_id)) {
+    // LOG(INFO) << "pendingResponses : " << this->pendingResponses;
+    if (this->process_migrate_requests(worker_id)) {
       return TransactionResult::ABORT;
     }
     return TransactionResult::TRANSMIT_REQUEST;

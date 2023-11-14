@@ -98,6 +98,7 @@ public:
 
   ImyRouterTable *find_router_table(std::size_t table_id, int replica_id) { // , std::size_t coordinator_id
     // 找某个节点的路由表
+    DCHECK(false);
     DCHECK(isolation_replica == true && replica_id != -1);
     return tbl_vecs_router_[replica_id][table_id]; 
   }
@@ -453,14 +454,10 @@ public:
     }
 
     // init router information
-    if(context.protocol.find("Lion") != context.protocol.npos || 
-       context.protocol.find("LION") != context.protocol.npos ||
-       context.protocol.find("CLAY-S") != context.protocol.npos ||
-       context.protocol == "Hermes" || 
-       context.protocol == "MyClay"){
-      init_router_table(context, partitioner);
-    } else if (context.protocol == "Star"){
+    if (context.protocol == "Star"){
       init_star_router_table(context);
+    } else {
+      init_router_table(context, partitioner);
     }
   }
 

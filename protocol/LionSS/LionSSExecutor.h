@@ -797,7 +797,7 @@ public:
 
           if(!success){
             // 
-            LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+            // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
             if (write_lock) {
               TwoPLHelper::write_lock_release(tid);
             } else {

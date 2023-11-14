@@ -235,6 +235,7 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
+      partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);

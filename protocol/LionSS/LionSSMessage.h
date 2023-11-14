@@ -615,6 +615,7 @@ public:
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
     
+    
     LionSSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
@@ -661,9 +662,10 @@ public:
         return;
       } 
       if(op == RouterTxnOps::ADD_REPLICA){
-        
+        txn->network_size += 50000 * (key_size + value_size);
       } else {
         if(remaster == false || context.migration_only > 0) {
+          txn->network_size += 50000 * (key_size + value_size);
           // simulate cost of transmit data
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
@@ -1242,7 +1244,7 @@ public:
 
         if(!success){
           // 
-          LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+          // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
           TwoPLHelper::read_lock_release(tid);
         } else {
           TwoPLHelper::write_lock_release(*lock_tid);

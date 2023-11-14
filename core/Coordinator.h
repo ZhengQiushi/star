@@ -336,7 +336,8 @@ public:
                   << n_migrate << "\t" 
                   << metis_remaster << " | " << metis_migrate << "\t" 
                   << cpu_usage << "\t" 
-                  << (1.0 * n_network_size + metis_n_network_size) / n_commit << "\t" 
+                  << n_network_size << "\t"
+                  << metis_n_network_size << "\t"
                   << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\t" 
                   << n_remaster_abort << "\t"
                   << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";

@@ -20,7 +20,7 @@
 namespace star {
 namespace group_commit {
 
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 
 template <class Workload, class Protocol> class MyClayMetisGenerator : public Worker {
@@ -223,7 +223,8 @@ public:
      
 
     LOG(INFO) << "start read from file";
-    my_clay->clay_partiion_read_from_file(file_name_.c_str());
+    ShareQueue<std::shared_ptr<myMove<WorkloadType>>> rows;
+    my_clay->clay_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
     LOG(INFO) << "read from file done";
 
     auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -240,7 +241,7 @@ public:
     LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
     
     // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    int num = router_transmit_request(my_clay->move_plans);
+    int num = router_transmit_request(rows);
     if(num > 0){
       LOG(INFO) << "router transmit request " << num; 
     }    

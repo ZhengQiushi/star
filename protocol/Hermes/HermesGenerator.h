@@ -80,7 +80,7 @@ public:
     replica_num = partitioner.replica_num();
     ycsbTableID = ycsb::ycsb::tableID;
 
-    for(int i = 0 ; i < 20 ; i ++ ){
+    for(int i = 0 ; i < MAX_COORDINATOR_NUM ; i ++ ){
       is_full_signal_self[i].store(0);
     }
     DCHECK(id < context.worker_num);
@@ -476,7 +476,7 @@ public:
       LOG(INFO) << "real_distribute_num = " << real_distribute_num;
     }
 
-    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
+    // LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
     schedule_meta.txn_id.fetch_add(1);
     {
       std::lock_guard<std::mutex> l(schedule_meta.l);
@@ -493,12 +493,13 @@ public:
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 
-    long long threshold = 400 * 400; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    long long threshold = 400 * 400;
     if(WorkloadType::which_workload == myTestSet::YCSB){
-      threshold = 200 * 200;
-      if(cur_timestamp > 10){
-        threshold = 300 * 300;
-      }
+      long long threshold = (0.1 * context.batch_size / context.coordinator_num) * (0.1 * context.batch_size / context.coordinator_num) / 2; 
+
+      // if(cur_timestamp > 10){
+      //   threshold = (0.15 * context.batch_size / context.coordinator_num) * (0.15 * context.batch_size / context.coordinator_num); 
+      // }
     }
     int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
     
@@ -548,20 +549,14 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -583,7 +578,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -632,7 +626,7 @@ public:
       size_t weight_sum = 0;
 
       // check master num at this replica on each node
-      size_t from_nodes_id[20] = {0};
+      size_t from_nodes_id[MAX_COORDINATOR_NUM] = {0};
       size_t master_max_cnt = 0;
 
       std::vector<int> query_keys;
@@ -729,7 +723,7 @@ public:
     int replica_destination = -1;
     
     // check master num at this replica on each node
-    size_t from_nodes_id[20] = {0};
+    size_t from_nodes_id[MAX_COORDINATOR_NUM] = {0};
     size_t master_max_cnt = 0;
     for (size_t j = 0 ; j < query_keys.size(); j ++ ){
       // LOG(INFO) << "query_keys[j] : " << query_keys[j];
@@ -877,9 +871,9 @@ public:
         LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
       }
 
-      LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count();
+      // LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
+                          //  std::chrono::steady_clock::now() - test)
+                          //  .count();
       test = std::chrono::steady_clock::now();
       
       // process replication request after all workers stop.
@@ -891,7 +885,7 @@ public:
 
       // once all workers are stop, we need to process the replication
       // requests
-      LOG(INFO) << "Analysis done, wait Execute";
+      // LOG(INFO) << "Analysis done, wait Execute";
       while (static_cast<ExecutorStatus>(worker_status.load()) ==
              ExecutorStatus::Analysis) {
         std::this_thread::yield();
@@ -901,7 +895,7 @@ public:
         schedule_meta.clear();
       }
 
-      LOG(INFO) << "Start Execute";
+      // LOG(INFO) << "Start Execute";
       n_started_workers.fetch_add(1);
 
       // while (static_cast<ExecutorStatus>(worker_status.load()) ==
@@ -911,9 +905,9 @@ public:
 
       // router_fence(); // wait for coordinator to response
 
-      LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count();
+      // LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
+      //                      std::chrono::steady_clock::now() - test)
+      //                      .count();
       test = std::chrono::steady_clock::now();
 
       process_request();

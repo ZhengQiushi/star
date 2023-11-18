@@ -9,13 +9,13 @@ ssh zqs@10.77.70.111 -i ~/.ssh/zqs_key
 sudo sh -c "echo '$USER ALL = (ALL) NOPASSWD:ALL' > /etc/sudoers.d/$USER"
 
 
-scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.206:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.206:/home/centos/
-scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.206:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r docker-18.03.0-ce.tgz centos@10.77.70.207:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r docker.service centos@10.77.70.207:/home/centos/
+scp -i ~/.ssh/zzh_cloud -r zqs_image.tar centos@10.77.70.207:/home/centos/
 
 
 scp docker.service centos@10.77.70.111:/home/centos/
-ssh centos@10.77.70.206 -i ~/.ssh/zzh_cloud
+ssh centos@10.77.70.207 -i ~/.ssh/zzh_cloud
 
 sudo sh -c "echo '$USER ALL = (ALL) NOPASSWD:ALL' > /etc/sudoers.d/$USER"
 tar zxf docker-18.03.0-ce.tgz && sudo mv docker/* /usr/bin/

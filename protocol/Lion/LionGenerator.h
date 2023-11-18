@@ -19,7 +19,7 @@
 namespace star {
 namespace group_commit {
 
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 
 template <class Workload, class Protocol> class LionGenerator : public Worker {
@@ -200,13 +200,7 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
@@ -235,8 +229,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
-
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
       
@@ -273,12 +265,9 @@ public:
                           std::vector<int>& busy_local,
                           std::vector<int>& replicate_busy_local) {
     
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
 
-      
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
@@ -295,14 +284,7 @@ public:
 
         cur_c_id = tab->get_dynamic_coordinator_id();
         secondary_c_ids = tab->get_secondary_coordinator_id();
-
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
+        from_nodes_id[cur_c_id] += 1;
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
@@ -679,10 +661,10 @@ public:
       LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
                 << cur_val  << " " << aver_val << " "      << cur_val;
     }
-    LOG(INFO) << "replicate_busy: ";
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
-    }
+    // LOG(INFO) << "replicate_busy: ";
+    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    //   LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
+    // }
       if(WorkloadType::which_workload == myTestSet::YCSB){
         balance_master(aver_val, threshold);  
       } else {
@@ -1010,7 +992,7 @@ public:
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "ExecutorStatus::START : " << cur_timestamp__;
+      // LOG(INFO) << "ExecutorStatus::START : " << cur_timestamp__;
 
       if(id == 0){
         skip_s_phase.store(true);
@@ -1066,9 +1048,9 @@ public:
         messages_mutex[l]->unlock();
       }
 
-      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-      }
+      // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      //   LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
+      // }
 
       n_complete_workers.fetch_add(1);
       // VLOG(DEBUG_V) << "Generator " << id << " finish START";

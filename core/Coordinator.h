@@ -340,7 +340,10 @@ public:
                   << metis_n_network_size << "\t"
                   << n_abort_no_retry + n_abort_lock + n_abort_read_validation << "\t" 
                   << n_remaster_abort << "\t"
-                  << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";
+                  << 1.0 * n_network_size / n_commit << "\t"
+                  << 1.0 * n_distributed / (n_distributed + n_singled) << "\t"
+                  << n_distributed << "\t"
+                  << n_singled << "\n";
                   // n_singled << " | " << n_distributed << " = " << 1.0 * n_distributed / (n_distributed + n_singled) << "\n";
 
 

@@ -22,7 +22,7 @@
 namespace star {
 namespace group_commit {
 
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 
 template <class Workload, class Protocol> class LionSSMetisGeneratorR : public Worker {
@@ -114,7 +114,7 @@ public:
 
     const int transmit_block_size = 10;
 
-    int cur_move_size = my_clay->move_plans.size();
+    int cur_move_size = move_plans.size();
     long long access_freq_aver = 0;
 
     // pack up move-steps to transmit request
@@ -123,7 +123,7 @@ public:
       bool success = false;
       std::shared_ptr<myMove<WorkloadType>> cur_move;
       
-      success = my_clay->move_plans.pop_no_wait(cur_move);
+      success = move_plans.pop_no_wait(cur_move);
       DCHECK(success == true);
       
       
@@ -206,45 +206,50 @@ public:
      
 
     LOG(INFO) << "start read from file";
-    
-    if(context.repartition_strategy == "lion"){
-      my_clay->metis_partiion_read_from_file(file_name_.c_str());
-    } else if(context.repartition_strategy == "clay"){
-      my_clay->clay_partiion_read_from_file(file_name_.c_str());
-    } else if(context.repartition_strategy == "metis"){
-      DCHECK(false);
+    my_clay->clear_graph();
+
+    while(true){
+      ShareQueue<std::shared_ptr<myMove<WorkloadType>>> rows;
+      if(context.repartition_strategy == "lion"){
+        my_clay->metis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
+      } else if(context.repartition_strategy == "clay"){
+        my_clay->clay_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
+      } else if(context.repartition_strategy == "metis"){
+        DCHECK(false);
+      }
+
+      if(rows.size() <= 0){
+        LOG(INFO) << "all metis DONE!!!!!!";
+        break;
+      }
+      LOG(INFO) << "read from file done";
+
+      auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              std::chrono::steady_clock::now() - begin)
+                              .count();
+      LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
+
+
+      // my_clay->metis_partition_graph();
+
+      latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - begin)
+                          .count();
+      LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
+      
+      // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
+      
+      int num = 0;
+      if(context.repartition_strategy == "lion"){
+        num = router_transmit_request(rows);
+      } else {
+        DCHECK(false);
+      }
+      
+      if(num > 0){
+        LOG(INFO) << "router transmit request " << num; 
+      }    
     }
-
-    
-    LOG(INFO) << "read from file done";
-
-    auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now() - begin)
-                            .count();
-    LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
-
-
-    // my_clay->metis_partition_graph();
-
-    latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now() - begin)
-                        .count();
-    LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
-    
-    // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    
-    int num = 0;
-    if(context.repartition_strategy == "lion"){
-      num = router_transmit_request(my_clay->move_plans);
-    } else {
-      DCHECK(false);
-    }
-    
-    
-
-    if(num > 0){
-      LOG(INFO) << "router transmit request " << num; 
-    }    
   }
 
   void txn_nodes_involved(simpleTransaction* t) {
@@ -763,7 +768,7 @@ public:
     }
 
 
-    long long threshold = 200 * 200; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    long long threshold = (0.1 * context.batch_size / context.coordinator_num) * (0.1 * context.batch_size / context.coordinator_num); //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
     if(WorkloadType::which_workload == myTestSet::TPCC){
       threshold = 300 * 300;
     }
@@ -1225,7 +1230,7 @@ public:
     auto last_timestamp_ = start_time;
     int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-    int start_offset = 60 * 1000; // 10 * 1000 * 2; // debug
+    int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
     // 
     if(context.repartition_strategy == "clay"){
       start_offset = 0 * 1000 ;

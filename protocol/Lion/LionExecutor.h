@@ -193,7 +193,9 @@ public:
               // }
           // }
 
-        } 
+        } else {
+          p->distributed_transaction = false;
+        }
         p->id = txn_id;
         txn_meta.c_transactions_queue[txn_id] = std::move(p);
       // }
@@ -314,7 +316,7 @@ public:
       }
 
       n_started_workers.fetch_add(1);
-
+      auto r_now = std::chrono::steady_clock::now();
       if(cur_real_distributed_cnt > 0){
         VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -325,6 +327,11 @@ public:
         do_remaster_transaction(ExecutorStatus::START, txn_meta.c_transactions_queue,async_message_num);
         async_fence();
       }
+
+      auto remaster_time = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - r_now)
+                    .count();
+      VLOG_IF(DEBUG_V, id==0) << "remaster_time: " << remaster_time * 1.0 / 1000;
 
       VLOG_IF(DEBUG_V, id==0) << "[C-PHASE] do remaster "
               << std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -469,6 +476,10 @@ public:
 
     std::vector<int> why(20, 0);
 
+    int cross_num = 0;
+    int single_num = 0;
+    int trans_num = 0;
+
     // while(!cur_trans->empty()){ // 为什么不能这样？ 不是太懂
     // for (auto i = id; i < cur_queue_size; i += context.worker_num) {
     size_t i = 0;
@@ -539,19 +550,10 @@ public:
           //#####
 
           if(transaction->distributed_transaction){
-            if(i < 5){
-              // auto k = transaction->get_query();
-              // auto kc = transaction->get_query_master();
-              // // MoveRecord<WorkloadType> rec;
-              // // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
-              
-              // VLOG_IF(DEBUG_V, id==0) << "cross_txn_num ++ : " << " " << 
-              //                                " " << k[0] << " | "
-              //                                " " << k[1] << " | " 
-              //                                " " << k[2] << " | " 
-              //                                " " << k[3] << " | " 
-              //                                " " << k[4];
-            }
+
+            cross_num += 1;
+          } else {
+            single_num += 1;
           }
           
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
@@ -565,7 +567,7 @@ public:
           // #### 
           
           if(result != TransactionResult::READY_TO_COMMIT){
-            retry_transaction = false;
+            // retry_transaction = false;
             protocol->abort(*transaction, sync_messages);
             n_abort_no_retry.fetch_add(1);
             continue;
@@ -594,6 +596,22 @@ public:
               
               n_migrate.fetch_add(transaction->migrate_cnt);
               n_remaster.fetch_add(transaction->remaster_cnt);
+              if(transaction->migrate_cnt > 0){
+            // if(i < 5){
+                auto k = transaction->get_query();
+                auto kc = transaction->get_query_master();
+                // MoveRecord<WorkloadType> rec;
+                // rec.set_real_key(*(uint64_t*)readSet[0].get_key());
+                
+                VLOG_IF(DEBUG_V, id==0) << "cross_txn_num ++ : " << " " << 
+                                              " " << k[0] << " | "
+                                              " " << k[1] << " | " 
+                                              " " << k[2] << " | " 
+                                              " " << k[3] << " | " 
+                                              " " << k[4];
+                trans_num += 1;
+            // }
+              }
               if(transaction->migrate_cnt > 0 || transaction->remaster_cnt > 0){
                 distributed_num.fetch_add(1);
                 // VLOG_IF(DEBUG_V, id==0) << distributed_num.load();
@@ -659,6 +677,7 @@ public:
                      std::chrono::steady_clock::now() - begin)
                      .count() * 1.0;
     if(count > 0){
+      VLOG_IF(DEBUG_V, id==0) << "cross_num : " << cross_num << " single_num : " << single_num << " " << trans_num;
       VLOG_IF(DEBUG_V, id==0) << total_sec / 1000 / 1000 << " s, " << total_sec / count << " per/micros."
                 << txn_percentile.nth(10) << " " 
                 << txn_percentile.nth(50) << " "
@@ -736,6 +755,10 @@ public:
         // DCHECK(false) << i << " " << cur_trans.size();
         continue;
       }
+      // // debug
+      // txn_meta.c_txn_id_queue.push_no_wait(i);
+      // continue;
+      // // debug
       
       if(cur_trans[i]->distributed_transaction == false){
         txn_meta.c_txn_id_queue.push_no_wait(i);
@@ -771,7 +794,7 @@ public:
         auto result = cur_trans[i]->read_execute(id, ReadMethods::REMASTER_ONLY);
         
         if(result != TransactionResult::READY_TO_COMMIT){
-          retry_transaction = false;
+          // retry_transaction = false;
           protocol->abort(*cur_trans[i], async_messages);
           n_abort_no_retry.fetch_add(1);
         }
@@ -790,6 +813,7 @@ public:
 
       cur_trans[i]->reset();
       cur_trans[i]->remaster_cnt = remaster_num;
+      cur_trans[i]->distributed_transaction = false;
       
       if (i % context.batch_flush == 0) {
         flush_async_messages(); 
@@ -972,6 +996,35 @@ private:
           }
           // 
           txn.tids[key_offset] = &tid;
+
+
+          if(success){
+            // todo ycsb only
+            std::atomic<uint64_t> *lock_tid;
+            if(Workload::which_workload == myTestSet::YCSB){
+              ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+              ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+              lock_tid = &router_lock_table.search_metadata((void*) &k);
+            } else {
+              ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+              lock_tid = &router_lock_table.search_metadata((void*) key);
+            }
+            TwoPLHelper::write_lock(*lock_tid, success); // be locked 
+
+            if(!success){
+              // 
+              // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
+              if (readKey.get_write_lock_bit()) {
+                TwoPLHelper::write_lock_release(tid);
+              } else {
+                TwoPLHelper::read_lock_release(tid);
+              }
+            } else {
+              TwoPLHelper::write_lock_release(*lock_tid);
+            }
+            // 
+          }
+
 
           if(success){
             // VLOG(DEBUG_V14) << "LOCK-LOCAL. " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " tid:" << tid ;

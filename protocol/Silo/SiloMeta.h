@@ -15,7 +15,7 @@ namespace star {
 
 namespace silo {
 
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 struct ScheduleMeta {
   ScheduleMeta(int coordinator_num, int batch_size){
@@ -74,7 +74,7 @@ struct TransactionMeta {
   TransactionMeta(int coordinator_num, int batch_size){
     this->batch_size = batch_size;
     this->coordinator_num = coordinator_num;
-    storages.resize(batch_size * coordinator_num * 2);
+    storages.resize(batch_size * 2);
     transactions_prepared.store(0);
   }
   void clear(){

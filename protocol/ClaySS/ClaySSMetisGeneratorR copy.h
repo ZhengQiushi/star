@@ -199,7 +199,7 @@ public:
     return cur_move_size;
   }
 
-void migration(std::string file_name_){
+  void migration(std::string file_name_){
      
 
     LOG(INFO) << "start read from file";
@@ -237,68 +237,17 @@ void migration(std::string file_name_){
       // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
       
       int num = 0;
-      if(context.repartition_strategy == "lion"){
+      if(context.repartition_strategy == "clay"){
         num = router_transmit_request(rows);
-      } else if(context.repartition_strategy == "clay"){
-        num = clay_router_transmit_request(rows);
-      } else if(context.repartition_strategy == "metis"){
+      } else {
         DCHECK(false);
       }
       
-      
-
       if(num > 0){
         LOG(INFO) << "router transmit request " << num; 
       }    
     }
   }
-
-  // void migration(std::string file_name_){
-     
-
-  //   LOG(INFO) << "start read from file";
-    
-  //   if(context.repartition_strategy == "lion"){
-  //     my_clay->metis_partiion_read_from_file(file_name_.c_str());
-  //   } else if(context.repartition_strategy == "clay"){
-  //     my_clay->clay_partiion_read_from_file(file_name_.c_str());
-  //   } else if(context.repartition_strategy == "metis"){
-  //     DCHECK(false);
-  //   }
-
-    
-  //   LOG(INFO) << "read from file done";
-
-  //   auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-  //                           std::chrono::steady_clock::now() - begin)
-  //                           .count();
-  //   LOG(INFO) << "lion loading file" << file_name_ << ". Used " << latency << " ms.";
-
-
-  //   // my_clay->metis_partition_graph();
-
-  //   latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-  //                       std::chrono::steady_clock::now() - begin)
-  //                       .count();
-  //   LOG(INFO) << "lion with metis graph initialization finished. Used " << latency << " ms.";
-    
-  //   // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-    
-  //   int num = 0;
-  //   if(context.repartition_strategy == "lion"){
-  //     num = router_transmit_request(my_clay->move_plans);
-  //   } else if(context.repartition_strategy == "clay"){
-  //     num = clay_router_transmit_request(my_clay->move_plans);
-  //   } else if(context.repartition_strategy == "metis"){
-  //     DCHECK(false);
-  //   }
-    
-    
-
-  //   if(num > 0){
-  //     LOG(INFO) << "router transmit request " << num; 
-  //   }    
-  // }
 
   void txn_nodes_involved(simpleTransaction* t) {
       
@@ -1139,105 +1088,6 @@ void migration(std::string file_name_){
 
     return query_master;
   }
-
-  int clay_router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
-    // transmit_request_queue
-    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-
-    auto new_transmit_generate = [&](int idx){ // int n
-      simpleTransaction* s = new simpleTransaction();
-      s->idx_ = idx;
-      s->is_transmit_request = true;
-      s->is_distributed = true;
-      // s->partition_id = n;
-      return s;
-    };
-
-
-    // 一一对应
-    std::vector<simpleTransaction*> metis_txns;
-    std::vector<std::shared_ptr<myMove<WorkloadType>>> cur_moves;
-
-
-    static int transmit_idx = 0; // split into sub-transactions
-    static int metis_transmit_idx = 0;
-
-    const int transmit_block_size = 10;
-
-    int cur_move_size = move_plans.size();
-    // pack up move-steps to transmit request
-    double thresh_ratio = 1;
-    for(int i = 0 ; i < thresh_ratio * cur_move_size ; i ++ ){ // 
-      bool success = false;
-      std::shared_ptr<myMove<WorkloadType>> cur_move;
-      
-      success = move_plans.pop_no_wait(cur_move);
-      DCHECK(success == true);
-      
-      
-      auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
-      metis_new_txn->access_frequency = cur_move->access_frequency;
-      metis_new_txn->destination_coordinator = cur_move->dest_coordinator_id;
-
-      for(auto move_record: cur_move->records){
-          metis_new_txn->keys.push_back(move_record.record_key_);
-          metis_new_txn->update.push_back(true);
-      }
-      //
-
-      metis_txns.push_back(metis_new_txn);
-      cur_moves.push_back(cur_move);
-      
-    }
-
-    // scheduler_transactions(metis_txns, router_send_txn_cnt);
-
-    // pull request
-    std::vector<simpleTransaction*> transmit_requests;
-    // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
-    for(size_t i = 0 ; i < metis_txns.size(); i ++ ){
-      // split into sub_transactions
-      auto new_txn = new_transmit_generate(transmit_idx ++ );
-
-      for(auto move_record: cur_moves[i]->records){
-          new_txn->keys.push_back(move_record.record_key_);
-          new_txn->update.push_back(true);
-          new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
-          new_txn->is_real_distributed = true; // metis_txns[i]->is_real_distributed;
-          new_txn->is_distributed = true;
-          new_txn->metis_idx_ = metis_txns[i]->idx_;
-
-          if(new_txn->keys.size() > transmit_block_size){
-            // added to the router
-            transmit_requests.push_back(new_txn);
-            new_txn = new_transmit_generate(transmit_idx ++ );
-          }
-      }
-
-      if(new_txn->keys.size() > 0){
-        transmit_requests.push_back(new_txn);
-      }
-    }
-
-
-    move_plans.clear();
-    
-    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
-      // transmit_request_queue.push_no_wait(transmit_requests[i]);
-      // int64_t coordinator_id_dst = select_best_node(transmit_requests[i]);      
-      // LOG(INFO) << "Send MyClay Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " <<  transmit_requests[i]->is_distributed << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
-
-      router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::TRANSFER);
-      // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
-      // if(i > 5){ // debug
-      //   break;
-      // }
-    }
-    LOG(INFO) << "OMG!! transmit_requests.size() : " << transmit_requests.size();
-
-    return cur_move_size;
-  }
-
 
   void start() override {
 

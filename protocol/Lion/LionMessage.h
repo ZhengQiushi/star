@@ -365,7 +365,11 @@ public:
       for (auto i = 0u; i < context.n_nop * 2; i++) {
         asm("nop");
       }
-    }
+    } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
 
     // lock the router_table 
     if(partitioner->is_dynamic()){
@@ -544,7 +548,11 @@ public:
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
           }
-        } 
+        } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
 
         // lock the respond tid and key
         bool success = false;

@@ -21,7 +21,7 @@
 
 namespace star {
 namespace group_commit {
-
+#define LAG_NUM 1000
 template <class Workload, class Protocol> class LionSSGenerator : public Worker {
 public:
   using WorkloadType = Workload;
@@ -226,7 +226,7 @@ public:
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
 
-      messages_mutex.emplace_back(std::make_unique<std::mutex>());
+      // messages_mutex.emplace_back(std::make_unique<std::mutex>());
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
@@ -235,26 +235,25 @@ public:
     message_stats.resize(messageHandlers.size(), 0);
     message_sizes.resize(messageHandlers.size(), 0);
 
+    txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
+
     for(int i = 0 ; i < 20 ; i ++ ){
       is_full_signal_self[i].store(0);
     }
 
-    txns_coord_cost.resize(context.batch_size, std::vector<int>(context.coordinator_num, 0));
-
     generator_num = 1;
 
-    generator_core_id.resize(context.coordinator_num);
     dispatcher_core_id.resize(context.coordinator_num);
 
     pin_thread_id_ = 3 + 2 * 2 + context.worker_num;
 
-    for(size_t i = 0 ; i < generator_num; i ++ ){
-      generator_core_id[i] = pin_thread_id_ ++ ;
-    }
-
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
     }
+    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    //   // dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
+    //   dispatcher_core_id[i] = pin_thread_id_ + id + context.worker_num * i;
+    // }
     dispatcher_num = context.worker_num * context.coordinator_num;
     cur_txn_num = context.batch_size / dispatcher_num ; // * context.coordinator_num
     
@@ -329,7 +328,7 @@ public:
   };
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 1000>& transactions_queue_self_,
+      ShareQueue<simpleTransaction*, LAG_NUM>& transactions_queue_self_,
       int dispatcher_id){
     /** 
      * @brief 准备需要的txns
@@ -370,7 +369,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -387,29 +385,26 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
-    // LOG(INFO) << txn->partition_id << " " 
+    // LOG(INFO) << dispatcher_id << " " 
+    //           << txn->partition_id << " " 
     //           << partition_id_ << " " 
     //           << partition_id << " " 
-    //           << dispatcher_id << " " 
-    //           << txn->keys[0] << " " << txn->keys[1];
+    //           << txn->keys[0] / 200000; //  << " " << txn->keys[1] / 200000 % contex;
 
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
 
   void txn_nodes_involved(simpleTransaction* t) {
       
-      auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
+      // auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
 
-      std::vector<int> busy_local(context.coordinator_num, 0);
-      std::vector<int> replicate_busy_local(context.coordinator_num, 0);
-
-
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
       // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
+      int max_cnt = INT_MIN;
+      int max_real_cnt = INT_MIN;
+      int max_node = -1;
 
-      
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
@@ -426,14 +421,7 @@ public:
 
         cur_c_id = tab->get_dynamic_coordinator_id();
         secondary_c_ids = tab->get_secondary_coordinator_id();
-
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
+        from_nodes_id[cur_c_id] += 1;
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
@@ -442,30 +430,15 @@ public:
             }
             secondary_c_ids = secondary_c_ids >> 1;
         }
-      }
-
-      int max_cnt = INT_MIN;
-      int max_real_cnt = INT_MIN;
-      int max_node = -1;
-
-      int replica_most_cnt = INT_MIN;
-      int replica_max_node = -1;
-
-      // routerClumps.addTxn(t);
-      int clump_coordinator_id = -1; // routerClumps.searchTxn(t);
-
-      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
-        int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
-        int other_cur_score = 0;
 
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
+        int cur_score = 0;
+        int other_cur_score = 0;
+
         if(context.migration_only){
           cur_score += 100 * cnt_master;
         } else {
-          if(clump_coordinator_id == cur_c_id && context.migration_only == 0){
-            other_cur_score += 100 * (int)query_keys.size();
-          } 
           if(cnt_master == query_keys.size()){
             cur_score += 100 * (int)query_keys.size();
           } else if(cnt_secondary + cnt_master == query_keys.size()){
@@ -474,22 +447,12 @@ public:
             cur_score += 25 * cnt_master + 15 * cnt_secondary;
           }
         }
-
         if(cur_score + other_cur_score > max_cnt){
           max_node = cur_c_id;
           max_cnt = cur_score + other_cur_score;
           max_real_cnt = cur_score;
         }
-
-        if(cnt_secondary > replica_most_cnt){
-          replica_max_node = cur_c_id;
-          replica_most_cnt = cnt_secondary;
-        }
-
-        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
-        replicate_busy_local[cur_c_id] += cnt_secondary;
       }
-
 
       if(context.random_router > 0){
         // 
@@ -500,15 +463,14 @@ public:
 
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
-      if(clump_coordinator_id != -1 && clump_coordinator_id != max_node){
-        t->is_real_distributed = true;
-      } else if(max_real_cnt == 100 * (int)query_keys.size()){
+      
+      if(max_real_cnt == 100 * (int)query_keys.size()){
         t->is_real_distributed = false;
       } else {
         t->is_real_distributed = true;
       }
 
-      t->replica_heavy_node = replica_max_node;
+      // t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){
       //   std::string debug = "";
       //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
@@ -516,8 +478,8 @@ public:
       //   }
       //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
       // }
-      size_t cnt_master = from_nodes_id[max_node];
-      size_t cnt_secondary = from_nodes_id_secondary[max_node];
+      // size_t cnt_master = from_nodes_id[max_node];
+      // size_t cnt_secondary = from_nodes_id_secondary[max_node];
 
       // if(cnt_secondary + cnt_master != query_keys.size()){
       //   distributed_outfile_excel << t->keys[0] << "\t" << t->keys[1] << "\t" << max_node << "\n";
@@ -533,7 +495,7 @@ public:
 
   void txn_nodes_involved_tpcc(simpleTransaction* t) {
 
-      auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
+      // auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
 
       std::vector<int> busy_local(context.coordinator_num, 0);
       std::vector<int> replicate_busy_local(context.coordinator_num, 0);
@@ -619,7 +581,7 @@ public:
           replica_most_cnt = cnt_secondary;
         }
 
-        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)weight_sum - cur_score;
+        // txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)weight_sum - cur_score;
         replicate_busy_local[cur_c_id] += cnt_secondary;
       }
 
@@ -698,6 +660,7 @@ public:
       n_started_workers.fetch_add(1);
       
       auto t = std::chrono::steady_clock::now();
+      long long sum_search = 0;
 
       std::vector<int> send_num(context.coordinator_num, 0);
 
@@ -717,13 +680,18 @@ public:
           simpleTransaction* new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
 
           if(!success) continue;
-
+          auto tt = std::chrono::steady_clock::now();
+          
           // determine its ideal destination
           if(WorkloadType::which_workload == myTestSet::YCSB){
             txn_nodes_involved(new_txn);
           } else {
             txn_nodes_involved_tpcc(new_txn);
           }
+
+          auto tt_now = std::chrono::steady_clock::now();
+          sum_search += std::chrono::duration_cast<std::chrono::nanoseconds>(tt_now - tt).count();
+
           // router the transaction
           router_request(router_send_txn_cnt, new_txn);   
           send_num[new_txn->destination_coordinator] += 1;
@@ -731,14 +699,12 @@ public:
           // add to metis generator for schedule
           bool ss = schedule_meta.transactions_queue_self.push_no_wait(new_txn);
           // if(ss){
-          //   LOG(INFO) << dispatcher_id <<
+          //   LOG(INFO) << dispatcher_id << "for c[" << i << "] " << cur <<
           //                " " << new_txn->keys[0] << 
           //                " " << new_txn->keys[1] << 
           //                " " << new_txn->destination_coordinator << 
           //                " ";
           // }
-
-
           // inform generator to create new transactions
           is_full_signal_self[dispatcher_id].store(false);
           schedule_meta.router_transaction_done[i].fetch_add(1);
@@ -751,6 +717,8 @@ public:
             LOG(INFO) << " coord[" << i << "]" << send_num[i];
             send_num[i] = 0;
           }
+          LOG(INFO) << sum_search * 1.0 / 1000;
+          sum_search = 0;
         }
         status = static_cast<ExecutorStatus>(worker_status.load());
       } while (status != ExecutorStatus::STOP);
@@ -912,7 +880,7 @@ protected:
       if (i == coordinator_id) {
         continue;
       }
-      std::lock_guard<std::mutex> l(*messages_mutex[i].get()); // ]->lock();
+      // std::lock_guard<std::mutex> l(*messages_mutex[i].get()); // ]->lock();
       if (messages[i]->get_message_count() == 0) {
         continue;
       }
@@ -959,7 +927,6 @@ protected:
   size_t generator_num;
   
 
-  std::vector<int> generator_core_id;
   std::vector<int> dispatcher_core_id;
 
   std::vector<std::thread> dispatcher;
@@ -973,7 +940,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   lionss::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 1000> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, LAG_NUM> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
 
@@ -991,7 +958,7 @@ protected:
   Percentile<int64_t> dist_latency, local_latency;
   std::unique_ptr<TransactionType> transaction;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
-  std::vector<std::unique_ptr<std::mutex>> messages_mutex;
+  // std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   // std::deque<simpleTransaction> transmit_request_queue;

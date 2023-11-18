@@ -83,7 +83,7 @@ namespace star
   std::vector<uint64_t> record_keys; // for migration
 };
 
-    #define MAX_COORDINATOR_NUM 20
+    #define MAX_COORDINATOR_NUM 80
     struct Clump {
         using T = u_int64_t;
     public:
@@ -785,115 +785,7 @@ namespace star
 
 
         void start(){
-            // main loop
-            LOG(INFO) << "ClayGeneratorGenerator " << " starts.";
-            auto start_time = std::chrono::steady_clock::now();
-            // workload.start_time = start_time;
-            
-            // StorageType storage;
-            uint64_t last_seed = 0;
-
-            // transaction only commit in a single group
-
-            // std::queue<std::unique_ptr<TransactionType>> q;
-            std::size_t count = 0;
-
-            // 
-            auto trace_log = std::chrono::steady_clock::now();
-
-            std::unordered_map<int, std::string> map_;
-            map_[0] = context.data_src_path_dir + "clay_resultss_partition_0_30.xls";
-            map_[1] = context.data_src_path_dir + "clay_resultss_partition_30_60.xls";
-            map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls";
-            map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls";
-
-            // transmiter: do the transfer for the clay and whole system
-            // std::vector<std::thread> transmiter;
-            // transmiter.emplace_back([&]() {
-            // my_clay = std::make_unique<Clay<WorkloadType>>(context, db, worker_status);
-
-            ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
-
-            int last_timestamp_int = 0;
-            int workload_num = 4;
-            int total_time = workload_num * context.workload_time;
-
-            auto last_timestamp_ = start_time;
-            int trigger_time_interval = context.workload_time * 1000; // unit sec.
-
-            int start_offset = 10 * 1000;
-            // 
-            int cur_workload = 0;
-
-            while(status != ExecutorStatus::EXIT){
-                // process_request();
-                status = static_cast<ExecutorStatus>(worker_status.load());
-                auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                        std::chrono::steady_clock::now() - last_timestamp_)
-                                        .count();
-                if(latency > start_offset){
-                    break;
-                }
-            }
-            // 
-            last_timestamp_ = std::chrono::steady_clock::now();
-            // 
-
-            while(status != ExecutorStatus::EXIT){
-                // process_request();
-                status = static_cast<ExecutorStatus>(worker_status.load());
-
-                auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                        std::chrono::steady_clock::now() - last_timestamp_)
-                                        .count();
-                if(last_timestamp_int != 0 && latency < trigger_time_interval){
-                    std::this_thread::sleep_for(std::chrono::microseconds(5));
-                    continue;
-                }
-                
-                // directly jump into first phase
-                auto begin = std::chrono::steady_clock::now();
-                
-                std::string file_name_ = map_[cur_workload];
-
-                LOG(INFO) << "start read from file";
-                clay_partiion_read_from_file(file_name_.c_str());
-
-                
-                LOG(INFO) << "read from file done";
-
-                latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                        std::chrono::steady_clock::now() - begin)
-                                        .count();
-                LOG(INFO) << "myclay loading file" << file_name_ << ". Used " << latency << " ms.";
-
-                last_timestamp_ = begin;
-                last_timestamp_int += trigger_time_interval;
-                begin = std::chrono::steady_clock::now();
-                // my_clay->metis_partition_graph();
-
-                latency = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    std::chrono::steady_clock::now() - begin)
-                                    .count();
-                LOG(INFO) << "myclay with metis graph initialization finished. Used " << latency << " ms.";
-                
-                // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
-                // int num = router_transmit_request(my_clay->move_plans);
-                
-
-                // if(num > 0){
-                //     LOG(INFO) << "router transmit request " << num; 
-                // }
-                cur_workload = (cur_workload + 1) % workload_num;
-                break; // debug
-            }
-            LOG(INFO) << "transmiter " << " exits.";
-            // });
-            while(status != ExecutorStatus::EXIT){
-                // process_request();
-                status = static_cast<ExecutorStatus>(worker_status.load());
-            }
-            // not end here!
+            DCHECK(false);
         }
 
 
@@ -952,6 +844,7 @@ namespace star
             // int num_samples = 250000;
             // std::string input_path = "/home/star/data/result_test.xls";
             // std::string output_path = "/home/star/data/my_graph";
+            int file_row_cnt_ = 0;
             int txn_sz = 10;
             if(WorkloadType::which_workload == myTestSet::TPCC){
                 txn_sz = 13;
@@ -1119,10 +1012,114 @@ namespace star
         }
         
 
+         void metis_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+            /***
+             * 
+            */
+           int file_row_cnt_ = 0;
+            // generate move plans
+            // myMove [source][destination]
+            if(batch_size == -1){
+                if(init_partition_file_ != nullptr){
+                    delete init_partition_file_;
+                    init_partition_file_ = nullptr;
+                }
+                partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                if(init_partition_file_ == nullptr){
+                    LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                    return ;
+                }
+                partition_file_read_ptr_ = init_partition_file_;
+            } else {
+                if(init_partition_file_ == nullptr){
+                    partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                    if(init_partition_file_ == nullptr){
+                        LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                        return ;
+                    }
+                    partition_file_read_ptr_ = init_partition_file_;
+                }
+            }
+
+            
+
+
+            std::size_t nParts = context.coordinator_num * 1000;
+            // std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move(nParts);
+            // metis_move.clear();
+            // metis_move.resize(nParts);
+            
+            // for(size_t j = 0; j < nParts; j ++ ){
+            //     metis_move[j] = std::make_shared<myMove<WorkloadType>>();
+            //     metis_move[j]->metis_dest_coordinator_id = j;
+            // }
+
+            
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
+                }
+                
+                int col_cnt_ = 0;
+                // int row_id = 0;
+                int access_frequency = 0;
+                            char * pEnd;
+                            
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        // row_id = atoll(per_key_);
+                    } else if(col_cnt_ == 1){
+                        metis_move->access_frequency = strtoull(per_key_, &pEnd, 10);
+                    } else {
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    cur_move_plans.push_no_wait(metis_move);
+                    file_row_cnt_ ++ ;
+                    partition_file_read_ptr_ = line_end_ + 1;
+                    if(file_row_cnt_ > batch_size){
+                        return ;
+                    }
+                }
+                
+
+            }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
+
+            movable_flag.store(false);
+
+            return ;
+        }
+
         void metis_partiion_read_from_file(const std::string& partition_filename){
             /***
              * 
             */
+           int file_row_cnt_ = 0;
             // generate move plans
             // myMove [source][destination]
 
@@ -1204,7 +1201,99 @@ namespace star
 
             return;
         }
-        
+
+
+        void clay_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+            /***
+             * 
+            */
+            // generate move plans
+            // myMove [source][destination]
+
+           int file_row_cnt_ = 0;
+            // generate move plans
+            // myMove [source][destination]
+            if(batch_size == -1){
+                if(init_partition_file_ != nullptr){
+                    delete init_partition_file_;
+                    init_partition_file_ = nullptr;
+                }
+                partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                if(init_partition_file_ == nullptr){
+                    LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                    return ;
+                }
+                partition_file_read_ptr_ = init_partition_file_;
+            } else {
+                if(init_partition_file_ == nullptr){
+                    partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                    if(init_partition_file_ == nullptr){
+                        LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                        return ;
+                    }
+                    partition_file_read_ptr_ = init_partition_file_;
+                }
+            }
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
+                }
+                
+                int col_cnt_ = 0;
+                // int row_id = 0;
+                int access_frequency = 0;
+                char* pEnd;
+
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        // row_id = atoll(per_key_);
+                    } else if(col_cnt_ == 1){
+                        metis_move->dest_coordinator_id = strtoull(per_key_, &pEnd, 10);;
+                    } else {
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);;
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    cur_move_plans.push_no_wait(metis_move);
+                    file_row_cnt_ ++ ;
+                    partition_file_read_ptr_ = line_end_ + 1;
+                    if(file_row_cnt_ > batch_size){
+                        return ;
+                    }
+                }
+                
+
+            }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
+
+            movable_flag.store(true);
+
+            return ;
+        }
+
 
         void clay_partiion_read_from_file(const std::string& partition_filename){
             /***
@@ -1212,7 +1301,7 @@ namespace star
             */
             // generate move plans
             // myMove [source][destination]
-
+            int file_row_cnt_ = 0;
             if(init_partition_file_ != nullptr){
                 delete init_partition_file_;
                 init_partition_file_ = nullptr;
@@ -1278,8 +1367,6 @@ namespace star
 
             return;
         }
-
-
 
 
         
@@ -1511,7 +1598,7 @@ namespace star
             std::lock_guard<std::mutex> l(mm);
             
             
-            while(true){
+            for(int i = 0 ; i < 10000; i ++ ) {
             // for(auto& i : node_load){
                 average_load = 0;
                 int32_t overloaded_coordinator_id = find_overloaded_node(average_load);
@@ -1801,7 +1888,9 @@ namespace star
             mm.unlock();
 
             init_metis_file_ = nullptr;
-            file_row_cnt_ = 0;
+            init_partition_file_ = nullptr;
+            partition_file_read_ptr_ = nullptr;
+            // file_row_cnt_ = 0;
             test_debug ++ ;
 
             distributed_edges = 0;
@@ -2243,13 +2332,13 @@ namespace star
         char* init_metis_file_;
         char* metis_file_read_ptr_;
         int file_size_;
-        int file_row_cnt_;
+        // int file_row_cnt_;
         char *saveptr_;
 
 
         // 
-        char* init_partition_file_;
-        char* partition_file_read_ptr_;
+        char* init_partition_file_ = nullptr;
+        char* partition_file_read_ptr_ = nullptr;
         int partition_file_size_;
         int partition_file_row_cnt_;
         char *partition_saveptr_;

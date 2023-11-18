@@ -158,14 +158,14 @@ public:
 
                   schedule_meta.done_schedule.fetch_add(1);
                   status = static_cast<ExecutorStatus>(worker_status.load());
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
                   // wait for end
                   while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
                     auto i = schedule_meta.done_schedule.load();
                     std::this_thread::sleep_for(std::chrono::microseconds(5));
                     status = static_cast<ExecutorStatus>(worker_status.load());
                   }
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
 
                   is_full_signal_self[dispatcher_id].store(false);
 
@@ -335,7 +335,7 @@ public:
                  .count() * 1.0 / 1000 / 1000;
     int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<int> busy_local(context.coordinator_num, 0);
     int real_distribute_num = 0;
@@ -384,11 +384,11 @@ public:
 
 
               
-    if(real_distribute_num > 0){
-      LOG(INFO) << "real_distribute_num = " << real_distribute_num;
-    }
+    // if(real_distribute_num > 0){
+    //   LOG(INFO) << "real_distribute_num = " << real_distribute_num;
+    // }
 
-    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
+    // LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
     while((int)schedule_meta.txn_id.load() < dispatcher_num){
       auto i = schedule_meta.txn_id.load();
       std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -532,27 +532,27 @@ public:
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "send : " << cur_timestamp__;
+      // LOG(INFO) << "send : " << cur_timestamp__;
 
       // 
       for (auto l = 0u; l < context.coordinator_num; l++){
         if(l == context.coordinator_id){
           continue;
         }
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+        // LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
         messages_mutex[l]->lock();
         ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
         flush_message(async_messages, l);
         messages_mutex[l]->unlock();
       }
 
-      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-      }
+      // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      //   LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
+      // }
 
-      LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count() * 1.0 / 1000 / 1000;
+      // LOG(INFO) << "router_transaction_to_coordinator: " << std::chrono::duration_cast<std::chrono::microseconds>(
+      //                      std::chrono::steady_clock::now() - test)
+      //                      .count() * 1.0 / 1000 / 1000;
       // test = std::chrono::steady_clock::now();
 
       n_complete_workers.fetch_add(1);

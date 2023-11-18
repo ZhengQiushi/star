@@ -57,6 +57,7 @@ public:
 
   std::size_t nop_prob = 0; // out of 10000
   std::size_t n_nop = 10000;
+  std::size_t rn_nop = 10000;
 
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;

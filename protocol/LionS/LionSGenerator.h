@@ -143,20 +143,14 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -178,7 +172,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -224,15 +217,14 @@ public:
                           std::vector<int>& busy_local,
                           std::vector<int>& replicate_busy_local) {
     
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
-
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
       
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
+      int max_cnt = INT_MIN;
+      int max_node = -1;
 
       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
         // LOG(INFO) << "query_keys[j] : " << query_keys[j];
@@ -247,13 +239,7 @@ public:
         cur_c_id = tab->get_dynamic_coordinator_id();
         secondary_c_ids = tab->get_secondary_coordinator_id();
 
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
+        from_nodes_id[cur_c_id] += 1;
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
@@ -262,15 +248,6 @@ public:
             }
             secondary_c_ids = secondary_c_ids >> 1;
         }
-      }
-
-      int max_cnt = INT_MIN;
-      int max_node = -1;
-
-      int replica_most_cnt = INT_MIN;
-      int replica_max_node = -1;
-
-      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
 
         size_t cnt_master = from_nodes_id[cur_c_id];
@@ -291,16 +268,7 @@ public:
           max_node = cur_c_id;
           max_cnt = cur_score;
         }
-
-        if(cnt_secondary > replica_most_cnt){
-          replica_max_node = cur_c_id;
-          replica_most_cnt = cnt_secondary;
-        }
-
-        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
-        replicate_busy_local[cur_c_id] += cnt_secondary;
       }
-
 
       if(context.random_router > 0){
         // 
@@ -313,7 +281,6 @@ public:
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
       t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
 
-      t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){
       //   std::string debug = "";
       //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
@@ -321,8 +288,6 @@ public:
       //   }
       //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
       // }
-      size_t cnt_master = from_nodes_id[max_node];
-      size_t cnt_secondary = from_nodes_id_secondary[max_node];
 
       // if(cnt_secondary + cnt_master != query_keys.size()){
       //   distributed_outfile_excel << t->keys[0] << "\t" << t->keys[1] << "\t" << max_node << "\n";

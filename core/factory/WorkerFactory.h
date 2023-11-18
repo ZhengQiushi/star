@@ -291,7 +291,7 @@ public:
           typename WorkloadType::DatabaseType;
 
       int manager_thread_id = context.worker_num;
-      manager_thread_id += 1;
+      // manager_thread_id += 1;
 
       auto manager = std::make_shared<LionSManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
@@ -304,10 +304,10 @@ public:
             manager->n_started_workers));
       }
       // 
-      workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
-            coordinator_id, workers.size(), db, context,
-            manager->worker_status, manager->n_completed_workers,
-            manager->n_started_workers));
+      // workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
+      //       coordinator_id, workers.size(), db, context,
+      //       manager->worker_status, manager->n_completed_workers,
+      //       manager->n_started_workers));
 
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -675,7 +675,7 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
-      int manager_thread_id = context.worker_num + 1;
+      int manager_thread_id = context.worker_num;// + 1;
 
       auto manager = std::make_shared<LionSManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
@@ -688,9 +688,9 @@ public:
       }
       // 
       // if(context.lion_with_metis_init){
-        workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
-              coordinator_id, workers.size(), db, context, manager->worker_status,
-              manager->n_completed_workers, manager->n_started_workers));
+        // workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
+        //       coordinator_id, workers.size(), db, context, manager->worker_status,
+        //       manager->n_completed_workers, manager->n_started_workers));
       // }
       workers.push_back(manager);
       // workers.push_back(recorder);  

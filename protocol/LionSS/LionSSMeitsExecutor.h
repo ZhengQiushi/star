@@ -157,6 +157,8 @@ public:
     WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner.get(), start_time);
 
     uint64_t last_seed = 0;
+    int remaster_num = 0;
+    int remaster_time = 0;
 
     int single_txn_num = 0;
     int cross_txn_num = 0;
@@ -223,7 +225,8 @@ public:
 
         // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
         //                         << debug[1] << " " << debug_master[1]; 
-                                    
+        auto r_satrt = std::chrono::steady_clock::now();
+
         auto result = transaction->transmit_execute(id);
 
         auto status = static_cast<ExecutorStatus>(worker_status.load());
@@ -281,6 +284,12 @@ public:
 
         n_migrate.fetch_add(transaction->migrate_cnt);
         n_remaster.fetch_add(transaction->remaster_cnt);
+        if(transaction->remaster_cnt > 0){
+          remaster_num += 1;
+          remaster_time += std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                                std::chrono::steady_clock::now() - r_satrt)
+              .count();
+        }
         // if(transaction->migrate_cnt + transaction->remaster_cnt > 0){
         //   LOG(INFO) << "n_migrate: " << n_migrate.load() << " " 
         //             << "n_remaster: " << n_remaster.load();
@@ -328,7 +337,9 @@ public:
       LOG(INFO) << "Metis cur_queue_size: " << cur_queue_size << " " << cnt << " "
                 << time_before_prepare_set * 1.0 / cur_queue_size << " "
                 << time_read_remote * 1.0 / cur_queue_size << " "
-                << time3 * 1.0 / cur_queue_size;
+                << time3 * 1.0 / cur_queue_size << " "
+                << "r_num : " << remaster_num << " "
+                << "r_num/per: " << 1.0 * remaster_time / remaster_num / 1000; // ms
     }
   }
 

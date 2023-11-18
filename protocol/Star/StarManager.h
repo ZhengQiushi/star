@@ -12,7 +12,7 @@
 namespace star {
 
 namespace mystar {
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 struct ScheduleMeta {
   ScheduleMeta(int coordinator_num, int batch_size){
@@ -155,7 +155,7 @@ public:
       if (i == coordinator_id) {
         continue;
       }
-      LOG(INFO) << " new_signal_message from " << coordinator_id << " -> " << i;
+      // LOG(INFO) << " new_signal_message from " << coordinator_id << " -> " << i;
       ControlMessageFactory::new_signal_message(*messages[i],
                                                 static_cast<uint32_t>(status));
     }

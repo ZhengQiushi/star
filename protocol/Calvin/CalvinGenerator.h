@@ -312,20 +312,14 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -347,7 +341,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -400,12 +393,12 @@ public:
   void txn_nodes_involved(simpleTransaction* t, 
                           std::vector<std::vector<int>>& txns_coord_cost) {
     
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
 
-      
+      int max_cnt = INT_MIN;
+      int max_node = -1;
+
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
@@ -418,14 +411,8 @@ public:
 
           // cal the partition to figure out the coordinator-id
         cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        from_nodes_id[cur_c_id] += 1;
 
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
@@ -434,12 +421,7 @@ public:
             }
             secondary_c_ids = secondary_c_ids >> 1;
         }
-      }
 
-      int max_cnt = INT_MIN;
-      int max_node = -1;
-
-      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0;
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
@@ -460,15 +442,15 @@ public:
 
       // if(context.random_router > 0){
         // 
-        int coords_num = (int)coordi_nums_.size();
-        size_t random_value = random.uniform_dist(0, 100);
-        if(random_value > context.random_router){
-          size_t random_coord_id = random.uniform_dist(0, coords_num - 1);
-          if(random_coord_id > context.coordinator_num){
-            VLOG(DEBUG_V8) << "bad  " << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << coordi_nums_[random_coord_id] << " " << from_nodes_id[coordi_nums_[random_coord_id]];
-          }
-          max_node = coordi_nums_[random_coord_id];
-        }
+        // int coords_num = (int)coordi_nums_.size();
+        // size_t random_value = random.uniform_dist(0, 100);
+        // if(random_value > context.random_router){
+        //   size_t random_coord_id = random.uniform_dist(0, coords_num - 1);
+        //   if(random_coord_id > context.coordinator_num){
+        //     VLOG(DEBUG_V8) << "bad  " << t->keys[0] << " " << t->keys[1] << " router to -> " << max_node << " " << from_nodes_id[max_node] << " " << coordi_nums_[random_coord_id] << " " << from_nodes_id[coordi_nums_[random_coord_id]];
+        //   }
+        //   max_node = coordi_nums_[random_coord_id];
+        // }
       // } 
 
       // max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;

@@ -87,7 +87,7 @@ public:
       // merges two clumps
       bool has_add = false;
 
-      int clumps_ids[20] = {0};
+      int clumps_ids[MAX_COORDINATOR_NUM] = {0};
       int clumps_cnt = 0;
 
       for(int kk = t->keys.size() - 1; kk >= 0 ; kk -- ){
@@ -235,7 +235,7 @@ public:
     message_stats.resize(messageHandlers.size(), 0);
     message_sizes.resize(messageHandlers.size(), 0);
 
-    for(int i = 0 ; i < 20 ; i ++ ){
+    for(int i = 0 ; i < MAX_COORDINATOR_NUM ; i ++ ){
       is_full_signal_self[i].store(0);
     }
 
@@ -335,20 +335,14 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -370,7 +364,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -397,19 +390,10 @@ public:
   }
 
   void txn_nodes_involved(simpleTransaction* t) {
-      
-      auto & txns_coord_cost_ = schedule_meta.txns_coord_cost;
+    
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
 
-      std::vector<int> busy_local(context.coordinator_num, 0);
-      std::vector<int> replicate_busy_local(context.coordinator_num, 0);
-
-
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
-
-      
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
@@ -426,18 +410,11 @@ public:
 
         cur_c_id = tab->get_dynamic_coordinator_id();
         secondary_c_ids = tab->get_secondary_coordinator_id();
-
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
+        from_nodes_id[cur_c_id] += 1;
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
-            if((secondary_c_ids & 1) && i != cur_c_id){
+            if(secondary_c_ids & 1 && i != cur_c_id){
                 from_nodes_id_secondary[i] += 1;
             }
             secondary_c_ids = secondary_c_ids >> 1;
@@ -445,27 +422,19 @@ public:
       }
 
       int max_cnt = INT_MIN;
-      int max_real_cnt = INT_MIN;
       int max_node = -1;
 
       int replica_most_cnt = INT_MIN;
       int replica_max_node = -1;
 
-      // routerClumps.addTxn(t);
-      int clump_coordinator_id = -1; // routerClumps.searchTxn(t);
-
       for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
-        int other_cur_score = 0;
 
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
         if(context.migration_only){
           cur_score += 100 * cnt_master;
         } else {
-          if(clump_coordinator_id == cur_c_id && context.migration_only == 0){
-            other_cur_score += 100 * (int)query_keys.size();
-          } 
           if(cnt_master == query_keys.size()){
             cur_score += 100 * (int)query_keys.size();
           } else if(cnt_secondary + cnt_master == query_keys.size()){
@@ -475,10 +444,9 @@ public:
           }
         }
 
-        if(cur_score + other_cur_score > max_cnt){
+        if(cur_score > max_cnt){
           max_node = cur_c_id;
-          max_cnt = cur_score + other_cur_score;
-          max_real_cnt = cur_score;
+          max_cnt = cur_score;
         }
 
         if(cnt_secondary > replica_most_cnt){
@@ -486,8 +454,6 @@ public:
           replica_most_cnt = cnt_secondary;
         }
 
-        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
-        replicate_busy_local[cur_c_id] += cnt_secondary;
       }
 
 
@@ -500,13 +466,7 @@ public:
 
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
-      if(clump_coordinator_id != -1 && clump_coordinator_id != max_node){
-        t->is_real_distributed = true;
-      } else if(max_real_cnt == 100 * (int)query_keys.size()){
-        t->is_real_distributed = false;
-      } else {
-        t->is_real_distributed = true;
-      }
+      t->is_real_distributed = (max_cnt == 100 * (int)query_keys.size()) ? false : true;
 
       t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){
@@ -523,12 +483,9 @@ public:
       //   distributed_outfile_excel << t->keys[0] << "\t" << t->keys[1] << "\t" << max_node << "\n";
       // }
 
-    // LOG(INFO) << t->keys[0] << " " << t->keys[1] << " : " << t->destination_coordinator;
-    // routerClumps.updateDest(t);
-
-
      return;
    }
+
 
 
   void txn_nodes_involved_tpcc(simpleTransaction* t) {

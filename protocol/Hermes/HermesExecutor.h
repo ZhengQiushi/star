@@ -227,8 +227,8 @@ public:
       if(cur_time > 40)
       execute_latency.add(execution_schedule_time);
 
-      LOG(INFO) << "done, send: " << router_recv_txn_num << " " << 
-                                     need_transfer_num   << " " << need_remote_read_num;
+      // LOG(INFO) << "done, send: " << router_recv_txn_num << " " << 
+      //                                need_transfer_num   << " " << need_remote_read_num;
 
       n_complete_workers.fetch_add(1);
 
@@ -254,7 +254,7 @@ public:
 
       // time_total.add(batch_time * 1000.0 / commit_num);
       
-      LOG(INFO) << " commit_num : " << commit_num << " " << batch_time * 1000.0 / commit_num;
+      // LOG(INFO) << " commit_num : " << commit_num << " " << batch_time * 1000.0 / commit_num;
 
       if(id == 0){
         txn_meta.clear();
@@ -673,17 +673,17 @@ public:
                                                             std::chrono::steady_clock::now() - begin)
                                                             .count();
 
-    LOG(INFO) << " transaction recv : " << transactions.size() << " " 
-              << real_num << " " << skip_num << " "
-              << time_transfer_read * 1.0 / real_num << " " << time_locking * 1.0 / real_num << " "
-              << last * 1.0 / real_num << " " 
-              << distributed_num;
+    // LOG(INFO) << " transaction recv : " << transactions.size() << " " 
+    //           << real_num << " " << skip_num << " "
+    //           << time_transfer_read * 1.0 / real_num << " " << time_locking * 1.0 / real_num << " "
+    //           << last * 1.0 / real_num << " " 
+    //           << distributed_num;
 
     
 
-    for(size_t i = 0 ; i < context.worker_num; i ++ ){
-      LOG(INFO) << i << " : " << worker_execution_num[i]; 
-    }
+    // for(size_t i = 0 ; i < context.worker_num; i ++ ){
+    //   LOG(INFO) << i << " : " << worker_execution_num[i]; 
+    // }
     set_lock_manager_bit(id);
   }
 
@@ -852,12 +852,12 @@ public:
       // // LOG(INFO) << "router_transaction_response_message :" << *(int*)transaction->readSet[0].get_key() << " " << *(int*)transaction->readSet[1].get_key();
       // flush_messages();
     }
-    if(cnt > 0){
-      LOG(INFO) << "total: " << cnt << " " 
-                << idle_time / cnt  << " "
-                << execution_time / cnt << " "
-                << commit_time / cnt;
-    }
+    // if(cnt > 0){
+    //   LOG(INFO) << "total: " << cnt << " " 
+    //             << idle_time / cnt  << " "
+    //             << execution_time / cnt << " "
+    //             << commit_time / cnt;
+    // }
   }
 
   void setup_execute_handlers(TransactionType &txn) {

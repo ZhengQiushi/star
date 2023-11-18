@@ -499,7 +499,11 @@ public:
         for (auto i = 0u; i < context.n_nop * 2; i++) {
           asm("nop");
         }
-      } 
+      } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
     }
 
 
@@ -669,8 +673,12 @@ public:
           // simulate cost of transmit data
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
+          } 
+        } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
           }
-        } 
+        }
       }
       // else {
       //   for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
@@ -909,7 +917,11 @@ public:
         for (auto i = 0u; i < context.n_nop * 2; i++) {
           asm("nop");
         }
-      } 
+      } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
     }
 
 
@@ -1036,7 +1048,11 @@ public:
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
           }
-        } 
+        } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
       }
       if(!remaster){
         // read value message piece

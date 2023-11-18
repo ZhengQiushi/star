@@ -98,7 +98,6 @@ public:
 
   ImyRouterTable *find_router_table(std::size_t table_id, int replica_id) { // , std::size_t coordinator_id
     // 找某个节点的路由表
-    DCHECK(false);
     DCHECK(isolation_replica == true && replica_id != -1);
     return tbl_vecs_router_[replica_id][table_id]; 
   }
@@ -112,7 +111,9 @@ public:
     auto partitionNum = context.partition_num;
     std::size_t totalKeys = keysPerPartition * partitionNum;
     std::vector<std::thread> v;
-    DCHECK(partitionNum % threadsNum == 0);
+    while(partitionNum % threadsNum != 0){
+      threadsNum /= 2;
+    }
     for (auto threadID = 0u; threadID < threadsNum; threadID++) {
       v.emplace_back([&](int thread_id) {
         for (auto j = thread_id; j < partitionNum; j += threadsNum) {
@@ -553,7 +554,7 @@ private:
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_router_lock; // key
 
 
-  bool isolation_replica;
+  bool isolation_replica = false;
 
   std::vector<std::vector<ITable *>> tbl_vecs_[2];
   std::vector<std::unique_ptr<ITable>> tbl_ycsb_vec_[2]; // partition -> table

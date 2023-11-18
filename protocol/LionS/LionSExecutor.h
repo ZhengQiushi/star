@@ -84,6 +84,7 @@ public:
           std::lock_guard<std::mutex> l(txn_meta.c_l);
           txn_id = txn_meta.c_transactions_queue.size();
           if(txn_id >= txn_meta.storages.size()){
+            break;
             DCHECK(false);
           }
           txn_meta.c_transactions_queue.push_back(std::move(null_txn));

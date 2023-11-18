@@ -59,7 +59,7 @@ public:
       async_messages.emplace_back(std::make_unique<Message>());
       init_message(async_messages[i].get(), i);
 
-      messages_mutex.emplace_back(std::make_unique<std::mutex>());
+      // messages_mutex.emplace_back(std::make_unique<std::mutex>());
     }
 
     messageHandlers = MessageHandlerType::get_message_handlers();
@@ -87,10 +87,13 @@ public:
     for(size_t i = 0 ; i < generator_num; i ++ ){
       generator_core_id[i] = pin_thread_id_ ++ ;
     }
-
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
+      // dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
+      dispatcher_core_id[i] = pin_thread_id_ + id + context.worker_num * i;
     }
+    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    //   dispatcher_core_id[i] = pin_thread_id_ + id * context.coordinator_num + i;
+    // }
     dispatcher_num = context.worker_num * context.coordinator_num;
     cur_txn_num = context.batch_size / dispatcher_num ; // * context.coordinator_num
 
@@ -99,9 +102,11 @@ public:
       dispatcher.emplace_back([&](int n, int worker_id) {
         ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
         int dispatcher_id  = worker_id * context.coordinator_num + n;
+        LOG(INFO) << n << " " << worker_id * context.coordinator_num;
         while(is_full_signal_self[dispatcher_id].load() == false){
             bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-                                  transactions_queue_self[dispatcher_id]);
+                                  transactions_queue_self[dispatcher_id],
+                                  dispatcher_id);
 
             if(!success){ // full
                 is_full_signal_self[dispatcher_id].store(true);
@@ -121,7 +126,8 @@ public:
           }
 
           bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-            transactions_queue_self[dispatcher_id]);
+            transactions_queue_self[dispatcher_id], 
+            dispatcher_id);
           if(!success){ // full
             is_full_signal_self[dispatcher_id].store(true);
           }                    
@@ -137,12 +143,13 @@ public:
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_){
+      ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_, 
+      int dispatcher_id){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+      std::size_t hot_area_size = context.coordinator_num;
 
       if(WorkloadType::which_workload == myTestSet::YCSB){
 
@@ -177,7 +184,7 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-      partition_id_ %= context.partition_num;
+      // partition_id_ %= context.partition_num;
 
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
@@ -194,7 +201,11 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
-
+    // LOG(INFO) << txn->partition_id << " " 
+    //           << partition_id_ << " " 
+    //           << partition_id << " " 
+    //           << dispatcher_id << " ";
+              // << txn->
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
 
@@ -224,15 +235,15 @@ public:
   void txn_nodes_involved(simpleTransaction* t, 
                           std::vector<std::vector<int>>& txns_coord_cost) {
     
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
 
       
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
+      int max_cnt = INT_MIN;
+      int max_node = -1;
 
       for (size_t j = 0 ; j < query_keys.size(); j ++ ){
         // LOG(INFO) << "query_keys[j] : " << query_keys[j];
@@ -240,13 +251,7 @@ public:
         size_t cur_c_id = -1;
         size_t secondary_c_ids;
         cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
+        from_nodes_id[cur_c_id] += 1;
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
@@ -255,12 +260,7 @@ public:
             }
             secondary_c_ids = secondary_c_ids >> 1;
         }
-      }
 
-      int max_cnt = INT_MIN;
-      int max_node = -1;
-
-      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
         int cur_score = 0;
         size_t cnt_master = from_nodes_id[cur_c_id];
         size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
@@ -275,13 +275,18 @@ public:
           max_node = cur_c_id;
           max_cnt = cur_score;
         }
-        txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
       }
+
+
+      // for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
+
+      //   // txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
+      // }
 
 
       max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
 
-
+      // LOG(INFO) << max_node << " " << query_keys[0];
       t->destination_coordinator = max_node;
       t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
 
@@ -485,7 +490,10 @@ public:
       }
 
       n_started_workers.fetch_add(1);
-      
+
+      auto t = std::chrono::steady_clock::now();
+      std::vector<int> send_num(context.coordinator_num, 0);
+
       do {
         process_request();
         for(int i = 0 ; i < context.coordinator_num; i ++ ){
@@ -514,10 +522,20 @@ public:
 
           // router the transaction
           router_request(router_send_txn_cnt, new_txn);   
+          send_num[new_txn->destination_coordinator] += 1;
 
           // inform generator to create new transactions
           is_full_signal_self[dispatcher_id].store(false);
           schedule_meta.router_transaction_done[i].fetch_add(1);
+        }
+        auto now = std::chrono::steady_clock::now();
+        if(std::chrono::duration_cast<std::chrono::seconds>(now - t).count() > 3){
+          t = now;
+          LOG(INFO) << "SEND OUT";
+          for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) << " coord[" << i << "]" << send_num[i];
+            send_num[i] = 0;
+          }
         }
         status = static_cast<ExecutorStatus>(worker_status.load());
       } while (status != ExecutorStatus::STOP);
@@ -752,7 +770,7 @@ protected:
   Percentile<int64_t> dist_latency, local_latency;
   std::unique_ptr<TransactionType> transaction;
   std::vector<std::unique_ptr<Message>> sync_messages, async_messages;
-  std::vector<std::unique_ptr<std::mutex>> messages_mutex;
+  // std::vector<std::unique_ptr<std::mutex>> messages_mutex;
 
   ShareQueue<simpleTransaction> router_transactions_queue;
   std::deque<int> router_stop_queue;

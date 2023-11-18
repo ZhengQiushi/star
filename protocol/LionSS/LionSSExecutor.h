@@ -471,7 +471,14 @@ public:
             total_span += std::chrono::duration_cast<std::chrono::microseconds>(
                           std::chrono::steady_clock::now() - transaction->startTime)
                           .count();
-                          
+            
+            if(transaction->migrate_cnt > 0 || transaction->remaster_cnt > 0){
+              distributed_num.fetch_add(1);
+              // VLOG_IF(DEBUG_V, id==0) << distributed_num.load();
+            } else {
+              singled_num.fetch_add(1);
+            }
+
             q.push(std::move(cur_txns[i]));
           } else {
             if (transaction->abort_lock) {

@@ -173,7 +173,7 @@ public:
     std::size_t n_coordinators = context.coordinator_num;
 
     for (auto i = 0u; i <= n_coordinators - 1; i++) {
-      LOG(INFO) << "consume ACK " << ack_in_queue.size();
+      // LOG(INFO) << "consume ACK " << ack_in_queue.size();
       ack_in_queue.wait_till_non_empty();
       std::unique_ptr<Message> message(ack_in_queue.front());
       bool ok = ack_in_queue.pop();

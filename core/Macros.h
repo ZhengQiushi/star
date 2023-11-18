@@ -24,6 +24,7 @@ DEFINE_string(replica_group, "1,3", "calvin replica group");
 
 DEFINE_int32(nop_prob, 0, "prob of transactions having nop, out of 10000");
 DEFINE_int64(n_nop, 10000, "total number of nop");
+DEFINE_int64(rn_nop, 10000, "total number of nop for remaster");
 
 // 哪几个coordinator组成一个replica group
 // sum() = coordinator_num
@@ -115,6 +116,7 @@ DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
   context.migration_only = FLAGS_migration_only;                               \
   context.nop_prob = FLAGS_nop_prob;                                           \
   context.n_nop = FLAGS_n_nop;                                                 \
+  context.rn_nop = FLAGS_rn_nop;                                               \  
   context.time_to_run = FLAGS_time_to_run;                                     \
   context.workload_time = FLAGS_workload_time;                                 \
   context.init_time = FLAGS_init_time;                                         \

@@ -642,7 +642,16 @@ public:
                  " " << *(int*) readKey.get_key() << 
                  " " << responseMessage.get_dest_node_id() << "->" << responseMessage.get_source_node_id() << 
                  " new: " << coordinator_id_new;
-
+      if(true) {
+        // simulate cost of transmit data
+        for (auto i = 0u; i < context.n_nop * 2; i++) {
+          asm("nop");
+        }
+      } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
     // need check
     // txns[txn_id]->remote_read.fetch_add(-1);
     // txns[txn_id]->local_read.fetch_add(1);

@@ -309,13 +309,13 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
       value_size = 0;
     }
 
-    // WorkloadType::which_workload == myTestSet::TPCC
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
-      // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop * 2; i++) {
-        asm("nop");
-      }
-    }
+    // // WorkloadType::which_workload == myTestSet::TPCC
+    // if(remaster == false || (remaster == true && context.migration_only > 0)) {
+    //   // simulate cost of transmit data
+    //   for (auto i = 0u; i < context.n_nop * 2; i++) {
+    //     asm("nop");
+    //   }
+    // }
     //TODO: add transmit length with longer transaction
 
     // prepare response message header
@@ -387,7 +387,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
             // LOG(INFO) << table_id <<" " << *(int*) key << " request switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid.load() << " " << latest_tid << " static: " << static_coordinator_id << " remaster: " << remaster;
             
             // if(!is_metis){
-              router_val->set_dynamic_coordinator_id(coordinator_id_new);
+              // router_val->set_dynamic_coordinator_id(coordinator_id_new);
             // }
             router_val->set_secondary_coordinator_id(coordinator_id_new);
 
@@ -540,12 +540,12 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         }
 
         // simulate migrations with receiver 
-        if(remaster == false || (remaster == true && context.migration_only > 0)) {
-          // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
-            asm("nop");
-          }
-        } 
+        // if(remaster == false || (remaster == true && context.migration_only > 0)) {
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2; i++) {
+        //     asm("nop");
+        //   }
+        // } 
 
         // lock the respond tid and key
         bool success = false;
@@ -586,10 +586,10 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
 
           // if(!is_metis){
             // update router
-            router_val->set_dynamic_coordinator_id(coordinator_id_new);
+            // router_val->set_dynamic_coordinator_id(coordinator_id_new);
           // }
           router_val->set_secondary_coordinator_id(coordinator_id_new);
-          readKey.set_dynamic_coordinator_id(coordinator_id_new);
+          // readKey.set_dynamic_coordinator_id(coordinator_id_new);
           readKey.set_router_value(router_val->get_dynamic_coordinator_id(), router_val->get_secondary_coordinator_id());
           readKey.set_read_respond_bit();
           readKey.set_tid(tid); // original tid for lock release
@@ -695,7 +695,7 @@ ShareQueue<simpleTransaction>* metis_router_transactions_queue
         auto router_val = (RouterValue*)router_table->search_value(key);
 
         // if(!is_metis){
-          router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
+          // router_val->set_dynamic_coordinator_id(coordinator_id_new);// (key, &coordinator_id_new);
         // }
         router_val->set_secondary_coordinator_id(coordinator_id_new);
 

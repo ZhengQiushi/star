@@ -12,31 +12,31 @@
 #include "core/Worker.h"
 #include "glog/logging.h"
 
-#include "protocol/LionSS/LionSSMessage.h"
-#include "protocol/LionSS/LionSSMeta.h"
+#include "protocol/ClaySS/ClaySSMessage.h"
+#include "protocol/ClaySS/ClaySSMeta.h"
 #include <chrono>
 
 namespace star {
-template <class Workload> class LionSSMetisExecutor : public Worker {
+template <class Workload> class ClaySSMetisExecutor : public Worker {
 public:
   using WorkloadType = Workload;
   using DatabaseType = typename WorkloadType::DatabaseType;
   using StorageType = typename WorkloadType::StorageType;
-  using TransactionType = LionSSTransaction;
+  using TransactionType = ClaySSTransaction;
   using ContextType = typename DatabaseType::ContextType;
   using RandomType = typename DatabaseType::RandomType;
 
-  using ProtocolType = LionSS<DatabaseType>;
+  using ProtocolType = ClaySS<DatabaseType>;
 
-  using MessageType = LionSSMessage;
-  using MessageFactoryType = LionSSMessageFactory;
-  using MessageHandlerType = LionSSMessageHandler<DatabaseType>;
+  using MessageType = ClaySSMessage;
+  using MessageFactoryType = ClaySSMessageFactory;
+  using MessageHandlerType = ClaySSMessageHandler<DatabaseType>;
 
-  LionSSMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  ClaySSMetisExecutor(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers, 
-           lionss::TransactionMeta<WorkloadType> &txn_meta)
+           clayss::TransactionMeta<WorkloadType> &txn_meta)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -157,8 +157,6 @@ public:
     WorkloadType workload(coordinator_id, worker_status, db, random, *partitioner.get(), start_time);
 
     uint64_t last_seed = 0;
-    int remaster_num = 0;
-    int remaster_time = 0;
 
     int single_txn_num = 0;
     int cross_txn_num = 0;
@@ -225,8 +223,7 @@ public:
 
         // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
         //                         << debug[1] << " " << debug_master[1]; 
-        auto r_satrt = std::chrono::steady_clock::now();
-
+                                    
         auto result = transaction->transmit_execute(id);
 
         auto status = static_cast<ExecutorStatus>(worker_status.load());
@@ -284,12 +281,6 @@ public:
 
         n_migrate.fetch_add(transaction->migrate_cnt);
         n_remaster.fetch_add(transaction->remaster_cnt);
-        if(transaction->remaster_cnt > 0){
-          remaster_num += 1;
-          remaster_time += std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                                                std::chrono::steady_clock::now() - r_satrt)
-              .count();
-        }
         // if(transaction->migrate_cnt + transaction->remaster_cnt > 0){
         //   LOG(INFO) << "n_migrate: " << n_migrate.load() << " " 
         //             << "n_remaster: " << n_remaster.load();
@@ -337,9 +328,7 @@ public:
       LOG(INFO) << "Metis cur_queue_size: " << cur_queue_size << " " << cnt << " "
                 << time_before_prepare_set * 1.0 / cur_queue_size << " "
                 << time_read_remote * 1.0 / cur_queue_size << " "
-                << time3 * 1.0 / cur_queue_size << " "
-                << "r_num : " << remaster_num << " "
-                << "r_num/per: " << 1.0 * remaster_time / remaster_num / 1000; // ms
+                << time3 * 1.0 / cur_queue_size;
     }
   }
 
@@ -372,10 +361,7 @@ public:
     // C-Phase to S-Phase, to C-phase ...
     int times = 0;
     ExecutorStatus status;
-    while ((status = static_cast<ExecutorStatus>(worker_status.load())) !=
-           ExecutorStatus::START) {
-      std::this_thread::yield();
-    }
+
     // simpleTransaction t;
     while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
       status = static_cast<ExecutorStatus>(worker_status.load());
@@ -405,7 +391,7 @@ public:
 
       txn_meta.clear();
     }
-    LOG(INFO) << "transmiter " << " exits." << " " << static_cast<int>(status);
+    LOG(INFO) << "transmiter " << " exits.";
   }
 
   void onExit() override {
@@ -561,7 +547,7 @@ public:
         if(success){
           // todo ycsb only
           std::atomic<uint64_t> *lock_tid;
-          if(Workload::which_workload == myTestSet::YCSB){
+          if(WorkloadType::which_workload == myTestSet::YCSB){
             ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
             ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
             lock_tid = &router_lock_table.search_metadata((void*) &k);
@@ -614,7 +600,7 @@ public:
               txn.network_size += MessageFactoryType::new_transmit_message(
                   *(this->sync_messages[coordinatorID]), *table, key, key_offset, 
                   remaster, txn.op_);
-              //  txn.pendingResponses++; already added at myclayTransactions
+              txn.pendingResponses++;
           } else {
               // others, only change the router
               // if(i == context.coordinator_num){
@@ -674,7 +660,7 @@ protected:
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;
   // Partitioner* partitioner_ptr;
-  lionss::TransactionMeta<WorkloadType> &txn_meta;
+  clayss::TransactionMeta<WorkloadType> &txn_meta;
 
   RandomType random;
   ProtocolType protocol;

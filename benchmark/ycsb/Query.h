@@ -40,9 +40,22 @@ public:
       return 0.05;
     }
   }
+  static int get_workload_type(const Context &context, double cur_timestamp){
+    int workload_type_num = 3;
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// 
+    return workload_type;
+  }
+  static int round(int a, int b){
+    return a / b * b;
+  }
+  
   using DatabaseType = Database;
-  YCSBQuery operator()(const Context &context, uint32_t partitionID,// uint32_t hot_area_size,
-                          Random &random, DatabaseType &db, double cur_timestamp, size_t query_size) const {
+  YCSBQuery operator()(const Context &context, 
+                       uint32_t partitionID,// uint32_t hot_area_size,
+                       Random &random, 
+                       DatabaseType &db, 
+                       double cur_timestamp, 
+                       size_t query_size) const {
     // 
     DCHECK(context.partition_num > partitionID);
 
@@ -56,15 +69,34 @@ public:
     int32_t first_key; // 一开始的key
     // 
     int32_t key_range = partitionID;
+    int factor = 10;
 
-    int workload_type_num = 3;
-    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
-    if(workload_type == 3){
-      workload_type = -2;
-    } else if(workload_type == 4){
-      workload_type = -3;
-    }
     
+    int workload_type = get_workload_type(context, cur_timestamp);
+    int last_workload_type = get_workload_type(context, 
+                                      std::max(0.0, cur_timestamp - 1.0 * context.workload_time / factor));
+    static int tests = 0;
+    bool show = false;
+    // if(tests ++ % 10000 == 0){
+    //   LOG(INFO) << tests << " " << cur_timestamp << " " <<  cur_timestamp - 1.0 * context.workload_time / factor <<  " "  << workload_type << " " << last_workload_type;
+    //   show = true;
+    // }
+    if(workload_type != last_workload_type){
+      int last_type_ratio = 30 * 
+      (context.workload_time - (int)cur_timestamp % context.workload_time) / 
+      context.workload_time;
+
+      int lastWorkload = random.uniform_dist(1, 100);
+      if(lastWorkload <= last_type_ratio){
+        workload_type = last_workload_type;
+      } else {
+        workload_type = workload_type + 0;
+      }
+      if(show){
+        LOG(INFO) << last_type_ratio << " " << context.workload_time << "-" << (int)cur_timestamp % context.workload_time;
+      }
+    }
+
     int cross_partition_probalility = context.crossPartitionProbability ; 
     if(cur_timestamp < context.init_time){
       cross_partition_probalility = 0;

@@ -25,11 +25,242 @@
 #include <unistd.h>
 #include <metis.h>
 #include <map>
+#include <limits.h>
 
 #include <glog/logging.h>
 
+#define TOP_SIZE 10000000
 namespace star
 {
+    struct TPCCdebug {
+  bool isRemote() {
+    for (auto i = 0; i < O_OL_CNT; i++) {
+      if (INFO[i].OL_SUPPLY_W_ID != W_ID) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void unpack_transaction(const simpleTransaction& t){
+    auto record_key = t.keys[2];
+    this->W_ID = (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+    this->D_ID = (record_key & RECORD_COUNT_D_ID_VALID) >>  RECORD_COUNT_D_ID_OFFSET;
+    DCHECK(this->D_ID >= 1);
+    this->C_ID = (record_key & RECORD_COUNT_C_ID_VALID) >>  RECORD_COUNT_C_ID_OFFSET;
+    DCHECK(this->C_ID >= 1);
+
+    for(size_t i = 0 ; i < t.keys.size(); i ++ ){
+      auto record_key = t.keys[i];
+      if(i >= 3){
+        INFO[i - 3].OL_I_ID = (record_key & RECORD_COUNT_OL_ID_VALID);
+        INFO[i - 3].OL_SUPPLY_W_ID = 
+          (record_key & RECORD_COUNT_W_ID_VALID) >>  RECORD_COUNT_W_ID_OFFSET;
+      }
+    }
+  }
+  void print(){
+    LOG(INFO) << this->W_ID << " " << this->D_ID << " " << this->C_ID;
+  }
+  std::string print_str(){
+    return std::to_string(this->W_ID) + " " + 
+           std::to_string(this->D_ID) + " " + 
+           std::to_string(this->C_ID) ;
+  }
+
+  int32_t W_ID;
+  int32_t D_ID;
+  int32_t C_ID;
+  int8_t O_OL_CNT;
+
+  struct NewOrderQueryInfo {
+    int32_t OL_I_ID;
+    int32_t OL_SUPPLY_W_ID;
+    int8_t OL_QUANTITY;
+  };
+
+  NewOrderQueryInfo INFO[15];
+  std::vector<uint64_t> record_keys; // for migration
+};
+
+    #define MAX_COORDINATOR_NUM 80
+    struct Clump {
+        using T = u_int64_t;
+    public:
+        int hot;
+        std::vector<simpleTransaction*> txns;
+        std::unordered_map<T, int> keys;
+        int dest;
+
+        int move_cost[MAX_COORDINATOR_NUM] = {0};
+        std::vector<std::vector<int>>& cost;
+
+        Clump(simpleTransaction* txn, std::vector<std::vector<int>>& cost)
+        : cost(cost){
+            hot = 0;
+            dest = -1;
+            memset(move_cost, 0, sizeof(move_cost));
+            
+            AddTxn(txn);
+        }
+        // 
+        bool CountTxn(simpleTransaction* txn){
+            for(auto& i : txn->keys){
+            if(keys.count(i)){
+                return true;
+            }
+            }
+            return false;
+        }
+        void AddTxn(simpleTransaction* txn){
+            for(auto& i : txn->keys){
+                keys[i] += 1;
+            }
+            auto& costs = cost[txn->idx_];
+
+            int min_cost = INT_MAX;
+            int idx = -1;
+
+            for(size_t i = 0 ; i < costs.size(); i ++ ){
+                move_cost[i] += costs[i];
+                if(min_cost > move_cost[i]){
+                    min_cost = move_cost[i];
+                    idx = i;
+                }
+            }
+
+            this->dest = idx;
+            txns.push_back(txn);
+            hot += 1;
+        }
+
+        std::pair<int, int> CalIdleNode(const std::unordered_map<size_t, int>& idle_node,
+                                        bool is_init){
+            int idle_coord_id = -1;                        
+            int min_cost = INT_MAX;
+            // int idle_coord_id = -1;
+            for(auto& idle: idle_node){
+                // 
+                if(is_init){
+                    if(min_cost > move_cost[idle.first]){
+                        min_cost = move_cost[idle.first];
+                        idle_coord_id = idle.first;
+                    }
+                } else {
+                    if(move_cost[idle.first] <= -150){
+                        idle_coord_id = idle.first;
+                    }
+                }
+            }
+            return std::make_pair(idle_coord_id, min_cost);
+        }
+
+        std::pair<int, int> CalIdleNodes(const std::unordered_map<size_t, int>& idle_node, 
+                                         bool migrate_only){
+            int idle_coord_id = -1;                        
+            int min_cost = INT_MAX;
+            // int idle_coord_id = -1;
+            for(auto& idle: idle_node){
+                int cur_min_cost = 0;
+                for(int i = 0 ; i < txns.size(); i ++ ){
+                    cur_min_cost += cost[txns[i]->idx_][idle.first];
+                }
+                if(min_cost > cur_min_cost && (migrate_only || true)){
+                    min_cost = cur_min_cost;// move_cost[idle.first];
+                    idle_coord_id = idle.first;
+                }
+            }
+            return std::make_pair(idle_coord_id, min_cost);
+        }
+
+        void UpdateDest(int new_dest){
+            move_cost[dest] -= this->hot;
+            move_cost[new_dest] += this->hot;
+            dest = new_dest;
+
+            // std::string print = "";
+            for(auto& t : txns){
+                t->is_distributed = true;
+                // add dest busy
+                t->is_real_distributed = true;
+                // t->keys
+
+                // TPCCdebug debug;
+                // debug.unpack_transaction(*t);
+                // print += debug.print_str();
+                // print += " -> " + std::to_string(t->destination_coordinator) + " " 
+                //                 + std::to_string(new_dest) + "     ";
+
+                t->destination_coordinator = new_dest;
+                t->access_frequency = this->hot;
+            }
+
+            
+            // LOG(INFO) << print;
+        }
+
+    };
+
+    struct Clumps {
+    public:
+        std::vector<Clump> clumps;
+        std::vector<std::vector<int>>& cost;
+
+        std::unordered_map<uint64_t, int> key_clumps_idx;
+
+        Clumps(std::vector<std::vector<int>>& cost):cost(cost){
+
+        }
+        void AddTxn(simpleTransaction* txn){
+            bool need_new_clump = true;
+
+            for(int i = 0; i < txn->keys.size(); i ++ ){
+                if(!key_clumps_idx.count(txn->keys[i])) continue;
+                // LOG(INFO) << "ADD TO " << key_clumps_idx[txn->keys[i]] << " " << txn->keys[0] << " " << txn->keys[1] << " " << txn->keys[4];
+                need_new_clump = false;
+                clumps[key_clumps_idx[txn->keys[i]]].AddTxn(txn);
+                break;
+            }
+            if(need_new_clump){
+                for(int i = 0; i < txn->keys.size(); i ++ ){
+                    key_clumps_idx[txn->keys[i]] = clumps.size();
+                }
+                // LOG(INFO) << "ADD TO " << clumps.size() << " " << txn->keys[0] << " " << txn->keys[1] << " " << txn->keys[4];
+                clumps.push_back(Clump(txn, cost));
+            }
+        }
+        size_t Size(){
+        return clumps.size();
+        }
+        Clump& At(int i){
+        return clumps[i];
+        }
+        std::vector<int> Sort(){
+            std::vector<int> ret;
+
+            for(size_t i = 0 ; i < clumps.size(); i ++ ){
+                ret.push_back(i);
+            }
+            std::sort(ret.begin(), ret.end(), [&](int a, int b){
+                return clumps[a].hot < clumps[b].hot;
+            });
+            
+            updateTxnHot();
+
+            return ret;
+        }
+        void updateTxnHot(){
+            for(auto& c : clumps){
+                // std::string print = "";
+                for(auto& t : c.txns){
+                    t->access_frequency = c.hot;
+                }
+                // LOG(INFO) << print;
+            }
+        }
+    };
+
+
     template <class Workload>
     struct MoveRecord{
         using myKeyType = uint64_t;
@@ -163,7 +394,47 @@ namespace star
             return;
 
         }
-    
+        
+        RouterValue* get_router_val(ITable* router_table){
+            RouterValue* router_val;
+
+            switch (this->table_id)
+            {
+            case tpcc::warehouse::tableID:{
+                router_val = (RouterValue*)router_table->search_value((void*) &key.w_key);
+                break;
+            }
+            case tpcc::district::tableID:{
+                router_val = (RouterValue*)router_table->search_value((void*) &key.d_key);
+                break;
+            }
+            case tpcc::customer::tableID:{
+                router_val = (RouterValue*)router_table->search_value((void*) &key.c_key);
+                break;
+            }
+            case tpcc::stock::tableID:{
+                router_val = (RouterValue*)router_table->search_value((void*) &key.s_key);
+                break;
+            }
+            default:
+                DCHECK(false);
+                break;
+            }
+            return router_val;
+        }
+        RouterValue* get_router_val(ImyRouterTable* router_table){
+            RouterValue* router_val;
+            DCHECK(false);
+            return router_val;
+        }
+        void reset(){
+            table_id = 0;
+            key_size = 0;
+            field_size = 0;
+            src_coordinator_id = 0;
+            record_key_ = 0;
+            access_frequency = 0;
+        }
     };
 
     template <class Workload>
@@ -306,7 +577,7 @@ namespace star
     };
 
     typedef typename goodliffe::skip_list<myTuple, std::greater<myTuple>> my_skip_list;
-    template<std::size_t N>
+    template<long long N>
     class top_frequency_key: public my_skip_list {
         public:
             // void push_back(const myTuple& tuple){
@@ -373,8 +644,95 @@ namespace star
         int64_t get_edge_num(){
             return edge_nums;
         }
-        
-        void start(){
+        void my_run_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
+            // LOG(INFO) << "start";
+            LOG(INFO) << "history init done";
+            auto start_time = std::chrono::steady_clock::now();
+            init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts - 1);
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
+
+            auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+
+            LOG(INFO) << "[done] init time: " << latency * 1.0 / 1000 << " s";
+
+            // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
+            my_find_clump(context.data_src_path_dir + dst_file);
+            LOG(INFO) << "done";
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+
+            LOG(INFO) << "[done] take time: " << latency * 1.0 / 1000 << " s";
+
+            clear_graph();
+        }
+
+        void run_clay_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
+            
+            LOG(INFO) << "history init done";
+
+            auto start_time = std::chrono::steady_clock::now();
+            init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts);
+            auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
+            LOG(INFO) << "  load : ";
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+                LOG(INFO) << i << " : " << node_load[i];
+            }
+            LOG(INFO) << "[done] init time: " << latency * 1.0 / 1000 << " s";
+
+
+            start_time = std::chrono::steady_clock::now();
+            find_clump();
+            implement_clump();
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+            LOG(INFO) << "[done] take time: " << latency * 1.0 / 1000 << " s";
+            save_clay_moves(context.data_src_path_dir + dst_file + "_0");
+            
+            LOG(INFO) << "first round done";
+            clear_graph();
+
+            start_time = std::chrono::steady_clock::now();
+            init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts);
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
+            LOG(INFO) << "  load : ";
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+                LOG(INFO) << i << " : " << node_load[i];
+            }
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+            LOG(INFO) << "[done] init time: " << latency * 1.0 / 1000 << " s";
+
+            start_time = std::chrono::steady_clock::now();
+            find_clump();
+            implement_clump();
+            
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+
+            LOG(INFO) << "[done] take time: " << latency * 1.0 / 1000 << " s";
+            save_clay_moves(context.data_src_path_dir + dst_file + "_1");
+            clear_graph();
+        }
+
+        void start_runtime(){
             // main loop
             ExecutorStatus status;
             size_t batch_size = 50;
@@ -408,16 +766,32 @@ namespace star
                         movable_flag.store(true);
                     }
                     transactions_queue.clear();
+                    clear_graph();
+                    node_load.clear();
                 }
+
+                // if( (cnt + 1) % (batch_size * 10) != 0){
+                    
+                // }
 
                 
             }
             // not end here!
         }
+
+
+        
+
+
+
+        void start(){
+            DCHECK(false);
+        }
+
+
         bool push_txn(std::shared_ptr<simpleTransaction> txn){
             return transactions_queue.push_no_wait(txn);
         }
-
         size_t get_file_size(const char* file_name) {
             struct stat st;
             stat(file_name, &st);
@@ -463,11 +837,19 @@ namespace star
             
             return file_size;
         }
-        
-        void init_with_history(const std::string& workload_path, int start_timestamp, int end_timestamp){
+        void reset_init_file(){
+            init_metis_file_ = nullptr;
+        }
+        void init_with_history(const std::string& workload_path, int start_timestamp, double end_timestamp){
             // int num_samples = 250000;
             // std::string input_path = "/home/star/data/result_test.xls";
             // std::string output_path = "/home/star/data/my_graph";
+            int file_row_cnt_ = 0;
+            int txn_sz = 10;
+            if(WorkloadType::which_workload == myTestSet::TPCC){
+                txn_sz = 13;
+            }
+
             if(init_metis_file_ == nullptr){
                 file_size_ = read_file_from_mmap(workload_path.c_str(), &init_metis_file_);
                 metis_file_read_ptr_ = init_metis_file_;
@@ -496,7 +878,7 @@ namespace star
                     char *per_key_ = strtok_r(metis_file_read_ptr_, "\t", &saveptr_);
                     while(per_key_ != NULL){
                         if(col_cnt_ == 0){
-                            int64_t ts_ = atof(per_key_);
+                            double ts_ = atof(per_key_);
                             if(ts_ > end_timestamp){
                                 is_break = true;
                             }
@@ -506,11 +888,12 @@ namespace star
                             } 
                             is_in_range_ = true;
                         } else {
-                            int64_t key_ = atoi(per_key_);
+                            char * pEnd;
+                            uint64_t key_ = strtoull(per_key_, &pEnd, 10);
                             keys.push_back(key_);
                         }
                         col_cnt_ ++ ;
-                        if(col_cnt_ > 10){
+                        if(col_cnt_ > txn_sz){
                             break;
                         }
                         per_key_ = strtok_r(NULL, "\t", &saveptr_);
@@ -523,6 +906,9 @@ namespace star
                 }
                 
                 file_row_cnt_ ++ ;
+                // if(file_row_cnt_ > 2){ // debug
+                //     break;
+                // }
                 
                 metis_file_read_ptr_ = line_end_ + 1;
                 if(metis_file_read_ptr_ == NULL){
@@ -549,10 +935,10 @@ namespace star
             std::vector<idx_t> vwgt(0);   // 点权重
             
 
-            std::unordered_map<int64_t, int32_t> key_coordinator_cache;
+            std::unordered_map<uint64_t, int32_t> key_coordinator_cache;
 
             for(size_t i = 0 ; i < hottest_tuple_index_seq.size(); i ++ ){                
-                int64_t key = hottest_tuple_index_seq[i];
+                uint64_t key = hottest_tuple_index_seq[i];
 
                 xadj.push_back(adjncy.size()); // 
                 vwgt.push_back(hottest_tuple[key]);
@@ -595,7 +981,7 @@ namespace star
             }
 
             for(size_t i = 0 ; i < parts.size(); i ++ ){
-                int64_t key_ = hottest_tuple_index_seq[i];
+                uint64_t key_ = hottest_tuple_index_seq[i];
                 int32_t source_c_id = key_coordinator_cache[key_];
                 int32_t dest_c_id = parts[i];
 
@@ -626,10 +1012,114 @@ namespace star
         }
         
 
+         void metis_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+            /***
+             * 
+            */
+           int file_row_cnt_ = 0;
+            // generate move plans
+            // myMove [source][destination]
+            if(batch_size == -1){
+                if(init_partition_file_ != nullptr){
+                    delete init_partition_file_;
+                    init_partition_file_ = nullptr;
+                }
+                partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                if(init_partition_file_ == nullptr){
+                    LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                    return ;
+                }
+                partition_file_read_ptr_ = init_partition_file_;
+            } else {
+                if(init_partition_file_ == nullptr){
+                    partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                    if(init_partition_file_ == nullptr){
+                        LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                        return ;
+                    }
+                    partition_file_read_ptr_ = init_partition_file_;
+                }
+            }
+
+            
+
+
+            std::size_t nParts = context.coordinator_num * 1000;
+            // std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move(nParts);
+            // metis_move.clear();
+            // metis_move.resize(nParts);
+            
+            // for(size_t j = 0; j < nParts; j ++ ){
+            //     metis_move[j] = std::make_shared<myMove<WorkloadType>>();
+            //     metis_move[j]->metis_dest_coordinator_id = j;
+            // }
+
+            
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
+                }
+                
+                int col_cnt_ = 0;
+                // int row_id = 0;
+                int access_frequency = 0;
+                            char * pEnd;
+                            
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        // row_id = atoll(per_key_);
+                    } else if(col_cnt_ == 1){
+                        metis_move->access_frequency = strtoull(per_key_, &pEnd, 10);
+                    } else {
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    cur_move_plans.push_no_wait(metis_move);
+                    file_row_cnt_ ++ ;
+                    partition_file_read_ptr_ = line_end_ + 1;
+                    if(file_row_cnt_ > batch_size){
+                        return ;
+                    }
+                }
+                
+
+            }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
+
+            movable_flag.store(false);
+
+            return ;
+        }
+
         void metis_partiion_read_from_file(const std::string& partition_filename){
             /***
              * 
             */
+           int file_row_cnt_ = 0;
             // generate move plans
             // myMove [source][destination]
 
@@ -674,18 +1164,19 @@ namespace star
                 }
                 
                 int col_cnt_ = 0;
-                int row_id = 0;
+                // int row_id = 0;
                 int access_frequency = 0;
-
+                            char * pEnd;
+                            
                 auto metis_move = std::make_shared<myMove<WorkloadType>>();
                 char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
                 while(per_key_ != NULL){
                     if(col_cnt_ == 0){
-                        row_id = atoi(per_key_);
+                        // row_id = atoll(per_key_);
                     } else if(col_cnt_ == 1){
-                        metis_move->access_frequency = atoi(per_key_);
+                        metis_move->access_frequency = strtoull(per_key_, &pEnd, 10);
                     } else {
-                        int64_t key_ = atoi(per_key_);
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);
 
                         MoveRecord<WorkloadType> new_move_rec;
                         new_move_rec.set_real_key(key_);
@@ -710,7 +1201,174 @@ namespace star
 
             return;
         }
-        
+
+
+        void clay_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+            /***
+             * 
+            */
+            // generate move plans
+            // myMove [source][destination]
+
+           int file_row_cnt_ = 0;
+            // generate move plans
+            // myMove [source][destination]
+            if(batch_size == -1){
+                if(init_partition_file_ != nullptr){
+                    delete init_partition_file_;
+                    init_partition_file_ = nullptr;
+                }
+                partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                if(init_partition_file_ == nullptr){
+                    LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                    return ;
+                }
+                partition_file_read_ptr_ = init_partition_file_;
+            } else {
+                if(init_partition_file_ == nullptr){
+                    partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                    if(init_partition_file_ == nullptr){
+                        LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                        return ;
+                    }
+                    partition_file_read_ptr_ = init_partition_file_;
+                }
+            }
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
+                }
+                
+                int col_cnt_ = 0;
+                // int row_id = 0;
+                int access_frequency = 0;
+                char* pEnd;
+
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        // row_id = atoll(per_key_);
+                    } else if(col_cnt_ == 1){
+                        metis_move->dest_coordinator_id = strtoull(per_key_, &pEnd, 10);;
+                    } else {
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);;
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    cur_move_plans.push_no_wait(metis_move);
+                    file_row_cnt_ ++ ;
+                    partition_file_read_ptr_ = line_end_ + 1;
+                    if(file_row_cnt_ > batch_size){
+                        return ;
+                    }
+                }
+                
+
+            }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
+
+            movable_flag.store(true);
+
+            return ;
+        }
+
+
+        void clay_partiion_read_from_file(const std::string& partition_filename){
+            /***
+             * 
+            */
+            // generate move plans
+            // myMove [source][destination]
+            int file_row_cnt_ = 0;
+            if(init_partition_file_ != nullptr){
+                delete init_partition_file_;
+                init_partition_file_ = nullptr;
+            }
+            partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+            if(init_partition_file_ == nullptr){
+                LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                return;
+            }
+            partition_file_read_ptr_ = init_partition_file_;
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
+                }
+                
+                int col_cnt_ = 0;
+                // int row_id = 0;
+                int access_frequency = 0;
+                char* pEnd;
+
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        // row_id = atoll(per_key_);
+                    } else if(col_cnt_ == 1){
+                        metis_move->dest_coordinator_id = strtoull(per_key_, &pEnd, 10);;
+                    } else {
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);;
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    move_plans.push_no_wait(metis_move);
+                }
+                
+                file_row_cnt_ ++ ;
+                partition_file_read_ptr_ = line_end_ + 1;
+            }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
+
+            movable_flag.store(true);
+
+            return;
+        }
+
+
         
         void trace_graph(const std::string& path){
 
@@ -721,14 +1379,14 @@ namespace star
             std::ofstream outfile_excel;
             outfile_excel.open(path, std::ios::trunc); // ios::trunc
             
-            // int64_t key = context.partition_num * context.keysPerPartition;
+            // uint64_t key = context.partition_num * context.keysPerPartition;
             int64_t vertex_num = hottest_tuple.size();
 
             outfile_excel << vertex_num << " " << edge_nums << "                        \n";
 
             for(int i = 0 ; i < hottest_tuple_index_seq.size(); i ++ ){
-                int64_t key = hottest_tuple_index_seq[i];
-                int64_t key_index = i + 1;
+                uint64_t key = hottest_tuple_index_seq[i];
+                uint64_t key_index = i + 1;
 
                 myValueType* it = (myValueType*)record_degree.search_value(&key);
                 
@@ -744,53 +1402,14 @@ namespace star
             outfile_excel_index.close();
         }
 
-        void update_load(const std::shared_ptr<myMove<WorkloadType>> &move){
-            std::unordered_set<int> s_;
-            for(size_t i = 0 ; i < move->records.size(); i ++ ){
-                const MoveRecord<WorkloadType>& cur = move->records[i]; 
-                auto key = cur.record_key_;
-                // 点权重
-                if(cur.src_coordinator_id != move->dest_coordinator_id){
-                    node_load[cur.src_coordinator_id] -= hottest_tuple[key];
-                    node_load[move->dest_coordinator_id] += hottest_tuple[key];
-                }
-                
-                s_.insert(cur.src_coordinator_id);
-                myValueType* all_edges = (myValueType*)record_degree.search_value(&key);
-                // 边权重
-                // for(auto it = all_edges->begin(); it != all_edges->end(); it ++ ) {
-                //     if(it->second.to_c_id != move->dest_coordinator_id){
-                //     //     node_load[cur.src_coordinator_id] -= it->second.degree; // * cross_txn_weight;
-                //     //     node_load[move->dest_coordinator_id] -= it->second.degree;
-                //     // } else {
-                //         node_load[cur.src_coordinator_id] += it->second.degree; // * cross_txn_weight;
-                //         node_load[move->dest_coordinator_id] += it->second.degree;
-                //     }
-                // }
-            }
-            for(auto&i : s_){
-                node_load[i] -= cross_txn_weight;
-            }
-        }
-        
-        void find_clump() // std::vector<myMove<WorkloadType>> &moves
-        {
-            /***
-             * @brief find all the records to move
-             *        each moves is the set of records which may from different 
-             *        partition but will be transformed to the same destination
-            */
-            std::lock_guard<std::mutex> l(mm);
-            average_load = 0;
-            int32_t overloaded_coordinator_id = find_overloaded_node(average_load);
-            if(overloaded_coordinator_id == -1){
-                return;
-            }
-            // check if there is the hottest tuple on this partition
+        int find_clump_main(int32_t overloaded_coordinator_id){
+            int new_plans_cnt = 0;
+
             if (big_node_heap.find(overloaded_coordinator_id) == big_node_heap.end()){
-                return;
+                return new_plans_cnt;
             }
-            int32_t& cur_load = node_load[overloaded_coordinator_id];
+
+            auto& cur_load = node_load[overloaded_coordinator_id];
 
             //
             std::shared_ptr<myMove<WorkloadType>> C_move(new myMove<WorkloadType>()); 
@@ -798,91 +1417,92 @@ namespace star
             
             // 
             auto tuple_ptr = big_node_heap[overloaded_coordinator_id].begin();
+            int big_node_size = big_node_heap[overloaded_coordinator_id].size();
+            int cur_node_used_size = 0;
+
+            // LOG(INFO) << "BEFORE SIZE: " << big_node_heap[overloaded_coordinator_id].size();
+
             int32_t look_ahead = find_clump_look_ahead;
 
             // the cur_load will change as the clump keeps expand
-            while (cur_load + cost_delta_for_sender(C_move, overloaded_coordinator_id) > average_load){
+            while (cur_load > average_load){
                 
                 if (tmp_move->records.empty()){
                     // hottest tuple
-                    if (tuple_ptr == big_node_heap[overloaded_coordinator_id].end()){ 
-                        // overloaded_coordinator_id 上面的内容
-                        break;
-                    }
-
-                    myTuple cur_node = *tuple_ptr;
-                    do {
-                        cur_node = *tuple_ptr;
-                        tuple_ptr++;
-                        if(move_tuple_id.find(cur_node.key) == move_tuple_id.end()){
+                    
+                    bool new_rec = false;
+                    while(cur_node_used_size < big_node_size) {
+                        if(!move_tuple_id.count(tuple_ptr.get_node()->value.key)){
                             // have not moved yet
+                            new_rec = true;
                             break;
                         }
-                    } while(tuple_ptr != big_node_heap[overloaded_coordinator_id].end());
+                        auto old_tuple_ptr = tuple_ptr;
+                        tuple_ptr++;
+                        cur_node_used_size ++ ;
+                        big_node_heap[overloaded_coordinator_id].erase(old_tuple_ptr);
+                    }
 
-                    if(move_tuple_id.find(cur_node.key) != move_tuple_id.end()){
+                    if(!new_rec){
                         // all heap has been used 
-                        // if(moves.size() == 0){
-                        //     LOG(INFO) << "why none";
-                        // }
                         break;
                     }
+                    const myTuple* cur_node = &*tuple_ptr;
 
-                    MoveRecord<WorkloadType> rec;
-                    if (cur_node.c_id == overloaded_coordinator_id){
-                        rec.set_real_key(cur_node.key);
-                        rec.src_coordinator_id = cur_node.c_id;
-                    }
-                    tmp_move->records.push_back(rec);
+                    DCHECK(cur_node->c_id == overloaded_coordinator_id);
+                    new_move_rec.reset();
+                    new_move_rec.set_real_key(cur_node->key);
+                    new_move_rec.src_coordinator_id = cur_node->c_id;
+
+                    tmp_move->records.emplace_back(new_move_rec);
                     tmp_move->dest_coordinator_id = overloaded_coordinator_id;
-
                     // dest-partition
                     tmp_move->dest_coordinator_id = initial_dest_partition(tmp_move);// tmp_move->dest_coordinator_id = rec.src_coordinator_id == cur_node.from_c_id ? cur_node.to_c_id : cur_node.from_c_id;
                     DCHECK(tmp_move->dest_coordinator_id != -1);
 
                     // get its neighbor cached
-                    get_neighbor_cached(cur_node.key);
+                    get_neighbor_cached(cur_node->key);
                     // 当前move的tuple_id
-                    move_tuple_id.insert(cur_node.key);
+                    
                 }
-                else if (move_has_neighbor(tmp_move))
+                else if (!q_.empty())// move_has_neighbor(tmp_move))
                 {
                     // continue to expand the clump until it is offload underneath the average level
-                    MoveRecord<WorkloadType> new_move_rec;
-                    get_most_co_accessed_neighbor(new_move_rec);
+                    auto node = q_.top();
+                    q_.pop();
+                    
+                    new_move_rec.reset();
+                    new_move_rec.set_real_key(node.to);
+                    new_move_rec.src_coordinator_id = node.to_c_id;
                     tmp_move->records.push_back(new_move_rec);
 
                     // after add new tuple, the dest may change
                     update_dest(tmp_move);
 
                     get_neighbor_cached(new_move_rec.record_key_);
-                    move_tuple_id.insert(new_move_rec.record_key_);
                 }
                 else
                 {
-                    if (C_move->records.empty())
-                    {
+                    if (C_move->records.empty()){
                         // something was wrong
                         break;
                     }
-                    else
-                    {
+                    else{
                         // start to move
                         //!TODO 先只move一次
                         move_plans.push_no_wait(C_move);
-                        // 
-                        int& dest_load = node_load[C_move->dest_coordinator_id];
+                        new_plans_cnt ++ ;
+                        cur_load += cost_delta_for_sender(C_move, overloaded_coordinator_id);
+                        auto& dest_load = node_load[C_move->dest_coordinator_id];
+                        dest_load += cost_delta_for_receiver(C_move, C_move->dest_coordinator_id);
 
-                        update_load(C_move);
-                        // dest_load += cost_delta_for_receiver(C_move, C_move->dest_coordinator_id);
-                        // cur_load += cost_delta_for_sender(C_move, overloaded_coordinator_id);
-                        // 
                         C_move.reset(new myMove<WorkloadType>());
                         tmp_move.reset(new myMove<WorkloadType>());
                         look_ahead = find_clump_look_ahead;
                         continue;
                     }
                 }
+
                 // if feasible continue to expand
                 if(feasible(tmp_move, tmp_move->dest_coordinator_id)){
                     C_move->copy(tmp_move);
@@ -893,19 +1513,117 @@ namespace star
 
                 if(look_ahead == 0){
                     // fail to expand
-                    move_plans.push_no_wait(C_move);
-                    // 
-                    int& dest_load = node_load[C_move->dest_coordinator_id];
-                    // dest_load += cost_delta_for_receiver(C_move, C_move->dest_coordinator_id);
-                    // cur_load  += cost_delta_for_sender(C_move, overloaded_coordinator_id);
-                    update_load(C_move);
+                    move_plans.push_no_wait(C_move); // 
+                    new_plans_cnt ++ ;
+
+                    cur_load += cost_delta_for_sender(C_move, overloaded_coordinator_id);
+                    auto& dest_load = node_load[C_move->dest_coordinator_id];
+                    dest_load += cost_delta_for_receiver(C_move, C_move->dest_coordinator_id);
+
                     C_move.reset(new myMove<WorkloadType>());
                     tmp_move.reset(new myMove<WorkloadType>());
                     look_ahead = find_clump_look_ahead;
                     continue;
                 }
             }
-                        
+
+            // LOG(INFO) << "AFTER SIZE: " << big_node_heap[overloaded_coordinator_id].size();
+
+            return new_plans_cnt;
+        }
+
+        long long cal_load_distribute(long long aver_val, 
+                                const std::map<int32_t, long long>& busy_){
+            long long cur_val = 0;
+            for(auto& i : busy_){
+            // 
+            cur_val += (aver_val - i.second) * (aver_val - i.second);
+            }
+            cur_val /= busy_.size();
+
+            return cur_val;
+        }
+
+        void implement_clump(){
+
+            int size_ = move_plans.size();
+            LOG(INFO) << " this round: " << size_;
+            while(size_ > 0){
+                size_ -- ;
+                bool success = true;
+                auto move_step = move_plans.pop_no_wait(success);
+
+                if(!success){
+                    LOG(INFO) << " fail to pop ";
+                    break;
+                }
+
+                // implement
+                for(auto& i : move_step->records){
+                    if(WorkloadType::which_workload == myTestSet::YCSB){
+                        int table_id = ycsb::ycsb::tableID;
+                        auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
+
+                        auto router_val = (RouterValue*)router_table->search_value((void*) &i.record_key_);
+                        router_val->set_dynamic_coordinator_id(move_step->dest_coordinator_id);
+                    } else {
+                        MoveRecord<WorkloadType> rec;
+                        rec.set_real_key(i.record_key_);
+                        auto router_table = db.find_router_table(rec.table_id); // , 
+                        auto router_val = rec.get_router_val(router_table);
+                        router_val->set_dynamic_coordinator_id(move_step->dest_coordinator_id);
+                    }
+
+                }
+                // LOG(INFO) << " implement_clump : " << move_step->records[0].record_key_ << " " << move_step->records[1].record_key_ << " -> " << move_step->dest_coordinator_id;
+                total_move_plans.push_no_wait(move_step);
+            }
+            
+            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+                LOG(INFO) << i << " : " << node_load[i];
+            }
+            
+        }
+
+
+
+
+        void find_clump() // std::vector<myMove<WorkloadType>> &moves
+        {
+            /***
+             * @brief find all the records to move
+             *        each moves is the set of records which may from different 
+             *        partition but will be transformed to the same destination
+            */
+            std::lock_guard<std::mutex> l(mm);
+            
+            
+            while(true){
+            // for(auto& i : node_load){
+                average_load = 0;
+                int32_t overloaded_coordinator_id = find_overloaded_node(average_load);
+                if(overloaded_coordinator_id == -1){
+                    return;
+                }
+                // 方差
+                // long long cur_val = cal_load_distribute(average_load, node_load);
+                // long long threshold = 100 / (context.coordinator_num / 2) * 100 / (context.coordinator_num / 2); // 2200 - 2800
+                // if(cur_val < threshold){
+                //     break;
+                // }
+
+                // check if there is the hottest tuple on this partition
+                // while(true){
+                int new_plans_cnt = find_clump_main(overloaded_coordinator_id);
+                
+                if(new_plans_cnt == 0){
+                    // break;
+                    // LOG(INFO) << "overloaded_coordinator_id : " << overloaded_coordinator_id << " DONE ";
+                }
+                // }
+            }
+
+
             return;
         }
 
@@ -917,21 +1635,21 @@ namespace star
              *        each moves is the set of records which may from different 
              *        partition but will be transformed to the same destination
             */
-            std::unordered_set<int64_t> used;
+            std::unordered_set<uint64_t> used;
             std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_moves;
             
 
             for(size_t i = 0 ; i < hottest_tuple_index_seq.size(); i ++ ){                
                 auto metis_move = std::make_shared<myMove<WorkloadType>>();
-                int64_t key = hottest_tuple_index_seq[i];                
+                uint64_t key = hottest_tuple_index_seq[i];                
                 // xadj.push_back(adjncy.size()); // 
                 // vwgt.push_back(hottest_tuple[key]);
 
-                std::queue<int64_t> q_;
+                std::queue<uint64_t> q_;
                 q_.push(key);
 
                 while(!q_.empty()){
-                    int64_t c_key = q_.front();
+                    uint64_t c_key = q_.front();
                     q_.pop();
                     if(used.count(c_key)){
                         continue;
@@ -942,6 +1660,7 @@ namespace star
                     new_move_rec.access_frequency = hottest_tuple[c_key];
 
                     metis_move->records.push_back(new_move_rec);
+
                     metis_move->access_frequency += new_move_rec.access_frequency;
 
                     myValueType* it = (myValueType*)record_degree.search_value(&c_key);
@@ -951,12 +1670,21 @@ namespace star
                         if(used.count(edge.second.to)){
                             continue;
                         }
+                        // if(c_key == 4573){
+                        //     LOG(INFO) << "wooo";
+                        // }
+                        // if(metis_move->records.size() > 15){
+                        //     LOG(INFO) << edge.second.degree;
+                        // }
+                        // if(edge.second.degree < 50 * 20){
+                        //     continue;
+                        // }
                         q_.push(edge.second.to);
                     }
 
                 }
 
-                if(metis_move->records.size() > 0){
+                if(metis_move->records.size() > 1){
                     metis_moves.push_back(metis_move);
                 }
             }
@@ -970,7 +1698,7 @@ namespace star
                     outpartition << j << "\t"; // id
                     outpartition << metis_moves[j]->access_frequency << "\t"; // weight
 
-                    for(int i = 0 ; i < metis_moves[j]->records.size(); i ++ ){
+                    for(size_t i = 0 ; i < metis_moves[j]->records.size(); i ++ ){
                         outpartition << metis_moves[j]->records[i].record_key_ << "\t";
                     }
                     outpartition << "\n";
@@ -982,6 +1710,34 @@ namespace star
             return;
         }
 
+        void save_clay_moves(std::string output_path_){
+            // 
+            std::ofstream outpartition(output_path_);
+            size_t move_plans_num = total_move_plans.size();
+            int j = 0;
+            while(move_plans_num > 0){
+                bool success = false;
+                std::shared_ptr<myMove<WorkloadType>> cur_move;
+                success = total_move_plans.pop_no_wait(cur_move);
+                if(!success) break;
+
+                if(cur_move->records.size() > 0){
+                    outpartition << j << "\t"; // id
+                    outpartition << cur_move->dest_coordinator_id << "\t"; // 
+                    // outpartition << cur_move->access_frequency << "\t";    // weight
+                    for(size_t i = 0 ; i < cur_move->records.size(); i ++ ){
+                        outpartition << cur_move->records[i].record_key_ << "\t";
+                    }
+                    outpartition << "\n";
+                    // total_move_plans.push_no_wait(cur_move);
+                }   
+                move_plans_num -- ;
+                j ++ ;
+            }
+            outpartition.close();
+
+            return;
+        }
 
 
         template<typename T = myKeyType> 
@@ -991,29 +1747,29 @@ namespace star
              * @param record_keys 递增的key
              * @note 双向图
             */
-            auto select_tpcc = [&](myKeyType key){
-                // only transform STOCK_TABLE
-                bool is_jumped = false;
-                if(WorkloadType::which_workload == myTestSet::TPCC){
-                    int32_t table_id = key >> RECORD_COUNT_TABLE_ID_OFFSET;
-                    if(table_id != tpcc::stock::tableID){
-                    is_jumped = true;
-                    }
-                }
-                return is_jumped;
-            };
+           
+            // auto select_tpcc = [&](myKeyType key){
+            //     // only transform STOCK_TABLE
+            //     bool is_jumped = false;
+            //     if(WorkloadType::which_workload == myTestSet::TPCC){
+            //         uint64_t table_id = key >> RECORD_COUNT_TABLE_ID_OFFSET;
+            //         if(table_id != tpcc::stock::tableID){
+            //         is_jumped = true;
+            //         }
+            //     }
+            //     return is_jumped;
+            // };
             
             mm.lock();
             std::unordered_map<ycsb::ycsb::key, size_t> cache_key_coordinator_id;
-            std::unordered_set<size_t> coordinator_id_involved;
-            bool is_distributed = false;
+            // std::unordered_set<std::pair<int, int>> remote_edges;
 
             for(size_t i = 0; i < record_keys.size(); i ++ ){
                 // 
                 auto key_one = record_keys[i];
-                if(select_tpcc(key_one)){
-                    continue;
-                }
+                // if(select_tpcc(key_one)){
+                //     continue;
+                // }
 
                 if (!record_degree.contains(&key_one)){
                     // [key_one -> [key_two, Node]]
@@ -1022,14 +1778,15 @@ namespace star
                 }
                 myValueType* it = (myValueType*)record_degree.search_value(&key_one);
 
+                bool is_distributed = false;
                 for(size_t j = 0; j < record_keys.size(); j ++ ){
                     if(j == i)
                         continue;
 
                     auto key_two = record_keys[j];
-                    if(select_tpcc(key_two)){
-                        continue;
-                    }
+                    // if(select_tpcc(key_two)){
+                    //     continue;
+                    // }
                     
                     if (!it->count(key_two)){
                         // [key_one -> [key_two, Node]]
@@ -1038,8 +1795,8 @@ namespace star
                         n.to = key_two;
                         n.degree = 0; 
 
-                        int32_t key_one_table_id = key_one >> RECORD_COUNT_TABLE_ID_OFFSET;
-                        int32_t key_two_table_id = key_two >> RECORD_COUNT_TABLE_ID_OFFSET;
+                        uint64_t key_one_table_id = key_one >> RECORD_COUNT_TABLE_ID_OFFSET;
+                        uint64_t key_two_table_id = key_two >> RECORD_COUNT_TABLE_ID_OFFSET;
 
                         if(WorkloadType::which_workload == myTestSet::YCSB){
                             ycsb::ycsb::key key_one_real = key_one;
@@ -1047,18 +1804,13 @@ namespace star
                             if(cache_key_coordinator_id.count(key_one_real)){
                                 n.from_c_id = cache_key_coordinator_id[key_one_real];
                             } else {
-                                size_t coordinator_id_ = db.get_dynamic_coordinator_id(context.coordinator_num, key_one_table_id, &key_one_real);
-                                cache_key_coordinator_id[key_one_real] = coordinator_id_;
-                                n.from_c_id = coordinator_id_;
-                                coordinator_id_involved.insert(coordinator_id_);
+                                n.from_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, key_one_table_id, &key_one_real);
                             }
                             
                             if(cache_key_coordinator_id.count(key_two_real)){
                                 n.to_c_id = cache_key_coordinator_id[key_two_real];
                             } else {
-                                size_t coordinator_id_ = db.get_dynamic_coordinator_id(context.coordinator_num, key_two_table_id, &key_two_real);
-                                cache_key_coordinator_id[key_two_real] = coordinator_id_;
-                                n.to_c_id = coordinator_id_;
+                                n.to_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, key_two_table_id, &key_two_real);
                             }
                         } else if(WorkloadType::which_workload == myTestSet::TPCC){
                             MoveRecord<WorkloadType> key_one_real;        
@@ -1077,33 +1829,48 @@ namespace star
 
                         it->insert(std::pair<T, Node>(key_two, n));
                         edge_nums ++ ;
-                    }
+                    } 
 
-                    // auto itt = it->find(key_two);
-
-                    // myValueType* val = (myValueType*)record_degree.search_value(&key_one);
                     Node& cur_node = (*it)[key_two];
 //                    VLOG(DEBUG_V12) <<"   CLAY UPDATE: " << cur_node.from << " " << cur_node.to << " " << cur_node.degree;
-                    cur_node.degree += (cur_node.on_same_coordi == 1? 1: cross_txn_weight);
-                    if(!cur_node.on_same_coordi){
-                        is_distributed = true;
-                    }
+                    cur_node.degree += (cur_node.on_same_coordi == 1? 0: cross_txn_weight);
+                    
+
+                    // if(cur_node.on_same_coordi == 0 && test_debug == 1){
+                    //     LOG(INFO) << " TEST distributed " << key_one << " " << key_two;
+                    // }
                     update_hottest_edge(myTuple(cur_node.from, cur_node.from_c_id, cur_node.degree));
                     update_hottest_edge(myTuple(cur_node.to, cur_node.to_c_id, cur_node.degree));
+                    
 
+                    cache_key_coordinator_id[key_one] = cur_node.from_c_id;
+                    cache_key_coordinator_id[key_two] = cur_node.to_c_id;
+
+                    if(j > i){
+                        update_node_load(cur_node);
+                        if(cur_node.on_same_coordi == 0){
+                            distributed_edges ++;
+                            distributed_edges_on_coord[cur_node.from_c_id] ++ ;
+                            distributed_edges_on_coord[cur_node.to_c_id] ++ ;
+                        }
+                    }
                 }
-                update_hottest_tuple(key_one);            
+
+                update_hottest_tuple(key_one);
+                node_load[cache_key_coordinator_id[key_one]] ++;
+                // if(cache_key_coordinator_id[key_one] == 0 && test_debug == 1){
+                //     LOG(INFO) << " TEST " << key_one ;
+                // }
+                // with_coordinator_id.insert(cache_key_coordinator_id[key_one]);
+
+
             }
-            if(is_distributed){
-                for(auto& i: coordinator_id_involved){
-                    node_load[i] += cross_txn_weight;    
-                }
-            }
-            // update point
-            for(auto& i: cache_key_coordinator_id){
-                node_load[i.second] += 1;
-            }
-            
+
+            // if(is_distributed){
+            //     for(auto& i : with_coordinator_id){
+            //         node_load[i] += cross_txn_weight;
+            //     }
+            // }            
             mm.unlock();
             return ;
         }
@@ -1121,7 +1888,14 @@ namespace star
             mm.unlock();
 
             init_metis_file_ = nullptr;
-            file_row_cnt_ = 0;
+            init_partition_file_ = nullptr;
+            partition_file_read_ptr_ = nullptr;
+            // file_row_cnt_ = 0;
+            test_debug ++ ;
+
+            distributed_edges = 0;
+            distributed_edges_on_coord.clear();
+            edge_nums = 0;
         }
     
     private:
@@ -1167,7 +1941,7 @@ namespace star
             auto cur_partition_heap = big_node_heap.find(cur_node.c_id);
             if(cur_partition_heap == big_node_heap.end()){
                 // 
-                top_frequency_key<100000> new_big_heap;
+                top_frequency_key<TOP_SIZE> new_big_heap;
                 new_big_heap.push_back(cur_node);
                 big_node_heap.insert(std::make_pair(cur_node.c_id, new_big_heap));
             } else {
@@ -1181,7 +1955,7 @@ namespace star
 
             }
         }
-        void update_hottest_tuple(int32_t key_one){
+        void update_hottest_tuple(uint64_t key_one){
             // hottest tuple
             if(!hottest_tuple.count(key_one)){
                 hottest_tuple.insert(std::make_pair(key_one, 1));
@@ -1196,11 +1970,11 @@ namespace star
         }
         void update_node_load(const Node& cur_node){
             // partition load increase
-            if(!cur_node.on_same_coordi){
-                // 
-                node_load[cur_node.from_c_id] += cur_node.degree;
-                node_load[cur_node.to_c_id] += cur_node.degree;
-            }
+            // 
+            int32_t cur_weight = cur_node.on_same_coordi ? 0 : cross_txn_weight;
+            // 
+            node_load[cur_node.from_c_id] += cur_weight;
+            node_load[cur_node.to_c_id] += cur_weight;
         }
         
         int32_t initial_dest_partition(const std::shared_ptr<myMove<WorkloadType>> &move) {
@@ -1235,19 +2009,31 @@ namespace star
              * @brief get the neighbor of tuple [key] in degree DESC sequence
              * @param key description
              */
-            if (record_for_neighbor.find(key) == record_for_neighbor.end())
-            {
-                //
-                myValueType* val = (myValueType*)record_degree.search_value(&key);
-                std::vector<std::pair<myKeyType, Node> > name_score_vec(val->begin(), val->end());
-                std::sort(name_score_vec.begin(), name_score_vec.end(), 
-                        [=](const std::pair<myKeyType, Node> &p1, const std::pair<myKeyType, Node> &p2)
-                          {
-                              return p1.second.degree > p2.second.degree;
-                          });
 
-                record_for_neighbor[key] = name_score_vec;
+            // if (record_for_neighbor.find(key) == record_for_neighbor.end())
+            // {
+            //     //
+            if(move_tuple_id.count(key)){
+                return;
             }
+            move_tuple_id.insert(key);
+            myValueType* val = (myValueType*)record_degree.search_value(&key);
+            std::vector<std::pair<myKeyType, Node> > name_score_vec(val->begin(), val->end());
+
+            for(auto& i : name_score_vec){
+                if(!move_tuple_id.count(i.second.to)){
+                    move_tuple_id.insert(i.second.to);
+                    q_.push(i.second);
+                }
+            }
+            //     std::sort(name_score_vec.begin(), name_score_vec.end(), 
+            //             [=](const std::pair<myKeyType, Node> &p1, const std::pair<myKeyType, Node> &p2)
+            //               {
+            //                   return p1.second.degree > p2.second.degree;
+            //               });
+
+            //     record_for_neighbor[key] = name_score_vec;
+            // }
         }
         int32_t get_most_related_coordinator(const std::shared_ptr<myMove<WorkloadType>> &move){
             /**
@@ -1287,19 +2073,6 @@ namespace star
 
             return coordinator_id;
         }
-
-        long long cal_load_distribute(int aver_val, 
-                                std::map<int32_t, int32_t>& busy_){
-            int cur_val = 0;
-            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-            // 
-            cur_val += (aver_val - busy_[i]) * (aver_val - busy_[i]);
-            }
-            cur_val /= context.coordinator_num;
-
-            return cur_val;
-        }
-
         int32_t find_overloaded_node(int32_t &average_load){
             /**
              * @brief 根据平均值，找到overloaded的partition
@@ -1313,9 +2086,9 @@ namespace star
             if(node_load.size() <= 0){
                 return overloaded_coordinator_id;
             }
-            std::vector<std::pair<int32_t, int32_t>> name_score_vec(node_load.begin(), node_load.end());
+            std::vector<std::pair<uint64_t, uint64_t>> name_score_vec(node_load.begin(), node_load.end());
             std::sort(name_score_vec.begin(), name_score_vec.end(),
-                      [=](const std::pair<int32_t, int32_t> &p1, const std::pair<int32_t, int32_t> &p2)
+                      [=](const std::pair<uint64_t, uint64_t> &p1, const std::pair<uint64_t, uint64_t> &p2)
                       {
                           return p1.second > p2.second;
                       });
@@ -1329,18 +2102,11 @@ namespace star
 
 
             for (auto it = name_score_vec.begin(); it != name_score_vec.end(); it++){
-                if (it->second > average_load){
+                if (it->second > average_load && big_node_heap[it->first].size() > 0){
                     overloaded_coordinator_id = it->first;
                     break;
                 }
             }
-
-            long long threshold = 500 / (context.coordinator_num / 2) * 500 / (context.coordinator_num / 2); // 2200 - 2800
-
-            // long long cur_val = cal_load_distribute(average_load, node_load);
-            // if(cur_val < threshold){
-            //     return -1;
-            // }
 
             return overloaded_coordinator_id;
         }
@@ -1351,30 +2117,30 @@ namespace star
              * @brief 找node中与 M 权重最大的边
              * 
              */
-            Node node;
-            node.degree = -1;
-
-            for (auto it = record_for_neighbor.begin(); it != record_for_neighbor.end(); it++)
-            {
-                // 遍历每一条 move_rec
-                const std::vector<std::pair<myKeyType, Node> > &cur = it->second;
-                for (auto itt = cur.begin(); itt != cur.end(); itt++)
-                {
-                    // 遍历tuple的所有neighbor
-                    const Node &cur_node = itt->second;
-                    if(cur_node.degree <= node.degree)
-                    {
-                        break;
-                    }
-                    else if (move_tuple_id.find(cur_node.to) == move_tuple_id.end())
-                    {
-                        // 没有找到 因为cur 已经降序排过了，所以错了就直接退出
-                        node = cur_node;
-                        break;
-                    }
-                }
-            }
+            // for (auto it = record_for_neighbor.begin(); it != record_for_neighbor.end(); it++)
+            // {
+            //     // 遍历每一条 move_rec
+            //     const std::vector<std::pair<myKeyType, Node> > &cur = it->second;
+            //     for (auto itt = cur.begin(); itt != cur.end(); itt++)
+            //     {
+            //         // 遍历tuple的所有neighbor
+            //         const Node &cur_node = itt->second;
+            //         if(cur_node.degree <= node.degree)
+            //         {
+            //             break;
+            //         }
+            //         else if (move_tuple_id.find(cur_node.to) == move_tuple_id.end())
+            //         {
+            //             // 没有找到 因为cur 已经降序排过了，所以错了就直接退出
+            //             node = cur_node;
+            //             break;
+            //         }
+            //     }
+            // }
             
+            auto node = q_.top();
+            q_.pop();
+
             new_move_rec.set_real_key(node.to);
             new_move_rec.src_coordinator_id = node.to_c_id;
 
@@ -1388,27 +2154,30 @@ namespace star
              * 
              */
             bool ret = false;
-            for (auto it = move->records.begin(); it != move->records.end(); it++)
-            {
-                // 遍历每一条record
-                const MoveRecord<WorkloadType> &cur_rec = *it;
-                auto key = cur_rec.record_key_;
-
-                std::vector<std::pair<myKeyType, Node> > &all_neighbors = record_for_neighbor[key];
-                for (auto itt = all_neighbors.begin(); itt != all_neighbors.end(); itt++)
-                {
-                    if (move_tuple_id.find(itt->first) == move_tuple_id.end())
-                    {
-                        // 当前的值不在move里，说明还有neighbor
-                        ret = true;
-                        break;
-                    }
-                }
-                if (ret)
-                {
-                    break;
-                }
+            while(!q_.empty()){
+                
             }
+            // for (auto it = move->records.begin(); it != move->records.end(); it++)
+            // {
+            //     // 遍历每一条record
+            //     const MoveRecord<WorkloadType> &cur_rec = *it;
+            //     auto key = cur_rec.record_key_;
+
+            //     std::vector<std::pair<myKeyType, Node> > &all_neighbors = record_for_neighbor[key];
+            //     for (auto itt = all_neighbors.begin(); itt != all_neighbors.end(); itt++)
+            //     {
+            //         if (move_tuple_id.find(itt->first) == move_tuple_id.end())
+            //         {
+            //             // 当前的值不在move里，说明还有neighbor
+            //             ret = true;
+            //             break;
+            //         }
+            //     }
+            //     if (ret)
+            //     {
+            //         break;
+            //     }
+            // }
             return ret;
         }
 
@@ -1418,7 +2187,7 @@ namespace star
             int32_t delta = cost_delta_for_receiver(move, dest_coordinator_id);
             int32_t dest_new_load = node_load[dest_coordinator_id] + delta;
             bool  not_overload = ( dest_new_load < average_load );
-            bool  minus_delta  = ( delta <= 0 );
+            bool  minus_delta  = ( delta < 0 );
             return not_overload || minus_delta;
             // true;
         }
@@ -1429,16 +2198,17 @@ namespace star
                 const MoveRecord<WorkloadType>& cur = move->records[i]; 
                 auto key = cur.record_key_;
                 // 点权重
+                if(cur.src_coordinator_id == dest_coordinator_id) continue;
                 cost += hottest_tuple[key];
                 myValueType* all_edges = (myValueType*)record_degree.search_value(&key);
-                // // 边权重
-                // for(auto it = all_edges->begin(); it != all_edges->end(); it ++ ) {
-                //     if(it->second.to_c_id == dest_coordinator_id){
-                //         cost -= it->second.degree; // * cross_txn_weight;
-                //     } else {
-                //         cost += it->second.degree; //  * cross_txn_weight;
-                //     }
-                // }
+                // 边权重
+                for(auto it = all_edges->begin(); it != all_edges->end(); it ++ ) {
+                    if(it->second.to_c_id == dest_coordinator_id){
+                        cost -= it->second.degree; // * cross_txn_weight;
+                    } else {
+                        cost += it->second.degree; //  * cross_txn_weight;
+                    }
+                }
             }
             return cost;
         }
@@ -1461,14 +2231,14 @@ namespace star
                 cost -= hottest_tuple[key];
                 myValueType* all_edges = (myValueType*)record_degree.search_value(&key);
                 // 边权重
-                // for(auto it = all_edges->begin(); it != all_edges->end(); it ++ ) {
-                //     // 
-                //     if(it->second.from_c_id == src_coordinator_id){
-                //         cost -= it->second.degree;//  * cross_txn_weight;
-                //     } else {
-                //         cost += it->second.degree;// * cross_txn_weight;
-                //     }
-                // }
+                for(auto it = all_edges->begin(); it != all_edges->end(); it ++ ) {
+                    // 
+                    if(it->second.from_c_id == src_coordinator_id){
+                        cost -= it->second.degree;//  * cross_txn_weight;
+                    } else {
+                        cost += it->second.degree;// * cross_txn_weight;
+                    }
+                }
             }
             return cost;
         }
@@ -1519,7 +2289,7 @@ namespace star
         }
 
         int32_t average_load;
-
+        int32_t cur_load;
 
         const Context &context;
         DatabaseType& db;
@@ -1528,39 +2298,54 @@ namespace star
         ShareQueue<std::shared_ptr<simpleTransaction>, 4096> transactions_queue;
     public:
         ShareQueue<std::shared_ptr<myMove<WorkloadType>>> move_plans;
+
+        ShareQueue<std::shared_ptr<myMove<WorkloadType>>> total_move_plans;
         
         std::atomic<bool> movable_flag;
 
-        std::unordered_map<int32_t, top_frequency_key<100000>> big_node_heap; // <coordinator_id, big_heap>
-        // std::unordered_map<int32_t, fixed_priority_queue> big_node_heap; // <coordinator_id, big_heap>
+        std::unordered_map<uint64_t, top_frequency_key<TOP_SIZE>> big_node_heap; // <coordinator_id, big_heap>
+        // std::unordered_map<uint64_t, fixed_priority_queue> big_node_heap; // <coordinator_id, big_heap>
         std::unordered_map<myKeyType, std::vector<std::pair<myKeyType, Node> > > record_for_neighbor;
         std::unordered_set<myKeyType> move_tuple_id;
-        std::unordered_map<myKeyType, int32_t> hottest_tuple; // <key, frequency>
+        std::unordered_map<myKeyType, uint64_t> hottest_tuple; // <key, frequency>
 
 
-        std::unordered_map<myKeyType, int32_t> hottest_tuple_index_;
+        std::unordered_map<myKeyType, uint64_t> hottest_tuple_index_;
         std::vector<myKeyType> hottest_tuple_index_seq;
 
-        std::map<int32_t, int32_t> node_load; // <coordinator_id, load>
+        std::map<int32_t, long long> node_load; // <coordinator_id, load>
+        std::map<int32_t, long long> node_load_test; // <coordinator_id, load>
         Table<100860, myKeyType, myValueType> record_degree; // unordered_ unordered_
 
+        int test_debug = 0;
+        MoveRecord<WorkloadType> new_move_rec;
+
+        struct Cmp{
+            bool operator()(Node& a, Node& b){
+                return a.degree < b.degree;
+            }
+        };
+
+        std::priority_queue<Node, std::vector<Node>, Cmp> q_;
 
         // 
         char* init_metis_file_;
         char* metis_file_read_ptr_;
         int file_size_;
-        int file_row_cnt_;
+        // int file_row_cnt_;
         char *saveptr_;
 
 
         // 
-        char* init_partition_file_;
-        char* partition_file_read_ptr_;
+        char* init_partition_file_ = nullptr;
+        char* partition_file_read_ptr_ = nullptr;
         int partition_file_size_;
         int partition_file_row_cnt_;
         char *partition_saveptr_;
 
         // std::set<uint64_t> record_key_set_;
-        int64_t edge_nums;
+        uint64_t edge_nums;
+        int distributed_edges = 0;
+        std::map<int, int> distributed_edges_on_coord;
     };
 }

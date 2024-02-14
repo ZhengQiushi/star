@@ -57,6 +57,7 @@ public:
 
   std::size_t nop_prob = 0; // out of 10000
   std::size_t n_nop = 10000;
+  std::size_t rn_nop = 10000;
 
   bool tcp_no_delay = true;
   bool tcp_quick_ack = false;
@@ -71,6 +72,7 @@ public:
   bool sleep_on_retry = false;
 
   bool read_on_replica = false;
+  bool lion_self_remaster = false;
   bool local_validation = false;
   bool rts_sync = false;
   bool star_sync_in_single_master_phase = false;

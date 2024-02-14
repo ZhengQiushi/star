@@ -463,11 +463,11 @@ public:
           txn.network_size += MessageFactoryType::new_async_search_message(
               *(this->messages[i]), *table, key, txn.id, key_offset, replica_id);
 
-          VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
-                    << txn.readSet.size() << " on replica " << replica_id;      
+          // VLOG(DEBUG_V8) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
+          //           << txn.readSet.size() << " on replica " << replica_id;      
           if(WorkloadType::which_workload == myTestSet::YCSB){
-            LOG(INFO) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
-                    << txn.readSet.size() << " on replica " << replica_id << " " << *(int*)key;     
+            // LOG(INFO) << "ASYNC MIGRATE " << table_id << " ASK " << i << " " 
+            //         << txn.readSet.size() << " on replica " << replica_id << " " << *(int*)key;     
             is_migrate = true;
           } else {
             show_key(key, table_id);
@@ -480,7 +480,7 @@ public:
           txn.network_size += MessageFactoryType::transfer_request_router_only_message(
               *worker->messages[i], 
               *table, txn, key_offset);
-          VLOG(DEBUG_V8) << "ASYNC ROUTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size() << " on replica " << replica_id;
+          // VLOG(DEBUG_V8) << "ASYNC ROUTER " << table_id << " ASK " << i << " " << *(int*)key << " " << txn.readSet.size() << " on replica " << replica_id;
         } 
         txn.pendingResponses++;
       }
@@ -493,7 +493,7 @@ public:
         auto key = readKey.get_key();
         strstr += std::to_string(*(int*)key) + " ";
       }
-      LOG(INFO) << "ASYNC MIGRATE " << " on replica "   << replica_id << " " << strstr;        
+      // LOG(INFO) << "ASYNC MIGRATE " << " on replica "   << replica_id << " " << strstr;        
     }
 
     txn.message_flusher(id);

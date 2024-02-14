@@ -12,7 +12,7 @@
 namespace star {
 
 namespace mystar {
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 struct ScheduleMeta {
   ScheduleMeta(int coordinator_num, int batch_size){

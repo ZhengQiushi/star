@@ -17,7 +17,7 @@
 #include "core/Coordinator.h"
 #include <mutex>          // std::mutex, std::lock_guard
 
-#include "protocol/LionSS/LionSSMeta.h"
+#include "protocol/ClaySS/ClaySSMeta.h"
 
 namespace star {
 namespace group_commit {
@@ -25,7 +25,7 @@ namespace group_commit {
 #define MAX_COORDINATOR_NUM 80
 
 
-template <class Workload, class Protocol> class LionSSMetisGeneratorR : public Worker {
+template <class Workload, class Protocol> class ClaySSMetisGeneratorR : public Worker {
 public:
   using WorkloadType = Workload;
   using ProtocolType = Protocol;
@@ -40,11 +40,11 @@ public:
   using StorageType = typename WorkloadType::StorageType;
 
 
-  LionSSMetisGeneratorR(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
+  ClaySSMetisGeneratorR(std::size_t coordinator_id, std::size_t id, DatabaseType &db,
            const ContextType &context, std::atomic<uint32_t> &worker_status,
            std::atomic<uint32_t> &n_complete_workers,
            std::atomic<uint32_t> &n_started_workers, 
-           lionss::ScheduleMeta &schedule_meta)
+           clayss::ScheduleMeta &schedule_meta)
       : Worker(coordinator_id, id), db(db), context(context),
         worker_status(worker_status), n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
@@ -173,18 +173,16 @@ public:
       if(new_txn->keys.size() > 0){
         transmit_requests.push_back(new_txn);
       }
-      delete metis_txns[i];
     }
 
 
-    my_clay->move_plans.clear();
+    move_plans.clear();
 
     
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
       // outfile_excel << "Send LION Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
       router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::ADD_REPLICA);
-      delete transmit_requests[i];
       // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
       // if(i > 5){ // debug
       //   break;
@@ -200,7 +198,6 @@ public:
 
     return cur_move_size;
   }
-
 
   void migration(std::string file_name_){
      
@@ -240,7 +237,7 @@ public:
       // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
       
       int num = 0;
-      if(context.repartition_strategy == "lion"){
+      if(context.repartition_strategy == "clay"){
         num = router_transmit_request(rows);
       } else {
         DCHECK(false);
@@ -669,8 +666,13 @@ public:
       // LOG(INFO) << txns[i]->idx_ << "\t" << txns[i]->destination_coordinator << "\t" << txns[i]->access_frequency << "\n";
     }
   }
-  int router_fence(){
-    process_request();
+  
+  int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
+
+    if(schedule_meta.transactions_queue_self.size() < context.batch_size){
+      return -1;
+    }
+
     if(router_transaction_done.load() != router_transactions_send.load()){
       int a = router_transaction_done.load();
       int b = router_transactions_send.load();
@@ -679,18 +681,6 @@ public:
 
     router_transaction_done.store(0);
     router_transactions_send.store(0);
-    return 0;
-  }
-  
-  int scheduler_transactions(int dispatcher_num, int dispatcher_id){    
-
-    if(schedule_meta.transactions_queue_self.size() < context.batch_size){
-      // LOG(INFO) << schedule_meta.transactions_queue_self.size();
-      return -1;
-    }
-    if(router_fence() == -1){
-      return -1;
-    }
 
     int idx_offset = dispatcher_id * cur_txn_num;
 
@@ -725,7 +715,6 @@ public:
       int idx = cnt + idx_offset;
 
       txns[idx] = std::make_shared<simpleTransaction>(*new_txn);
-      delete new_txn;
       // if(i < 2){
       //   LOG(INFO) << i << " " << txns[idx]->is_distributed;
       // }
@@ -743,7 +732,6 @@ public:
       if(txn->is_real_distributed){
         real_distribute_num += 1;
       }
-      // LOG(INFO) << txn->keys[0] << " " << txn->keys[1] << " " << txn->is_real_distributed << " " << txn->destination_coordinator;
       busy_local[txn->destination_coordinator] += 1;
       cnt += 1;
     }
@@ -768,7 +756,7 @@ public:
     }
 
 
-    long long threshold = (0.1 * context.batch_size / context.coordinator_num) * (0.1 * context.batch_size / context.coordinator_num); //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    long long threshold = 200 * 200; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
     if(WorkloadType::which_workload == myTestSet::TPCC){
       threshold = 300 * 300;
     }
@@ -790,7 +778,6 @@ public:
     // }
 
     if(cur_val > threshold && context.random_router == 0){ 
-      LOG(INFO) << "real_distribute_num: " << real_distribute_num;
       LOG(INFO) << "busy: ";
       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
@@ -800,7 +787,7 @@ public:
       // if(WorkloadType::which_workload == myTestSet::YCSB){
       //   balance_master(aver_val, threshold);  
       // } else {
-        balance_master_tpcc(aver_val, threshold);  
+        // balance_master_tpcc(aver_val, threshold);  
       // }
       LOG(INFO) << " after: ";
       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
@@ -809,7 +796,6 @@ public:
     } else if(real_distribute_num > 0) {
       // pass
     } else {
-      LOG(INFO) << "NO DISTRIBUTED TXN";
       return -1;
     }
 
@@ -951,7 +937,7 @@ public:
 
           if(overload_node.count(cur.dest)){
             // find minial cost in idle_node
-            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node, context.migration_only);
+            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node, 1);
             if(idle_coord_id == -1){
               continue;
             }
@@ -1103,78 +1089,9 @@ public:
     return query_master;
   }
 
-  void func(){
-      // return;
-      if(context.repartition_strategy != "lion") return;
-
-      std::vector<std::shared_ptr<simpleTransaction>> &txns =schedule_meta.node_txns;
-      auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
-
-      std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
-      int ret_cnt = scheduler_transactions(dispatcher_num, dispatcher_id);
-      if(ret_cnt > 0){
-        int idx_offset = dispatcher_id * ret_cnt;
-        int send_migrate_request = 0;
-        for(int j = 0; j < ret_cnt; j ++ ){
-
-          process_request();
-
-          int idx = idx_offset + j;
-          // LOG(INFO) << txns[idx]->keys[0] << " " << 
-          //              txns[idx]->keys[1] << " " << 
-          //              txns[idx]->is_real_distributed << " | " << 
-          //              txns_coord_cost[idx][0] << " "     << 
-          //              txns_coord_cost[idx][1] << " "     << 
-          //              txns_coord_cost[idx][2] << " "     << 
-          //              txns_coord_cost[idx][3] << " | "   << 
-          //              txns[idx]->destination_coordinator; 
-
-          if(!txns[idx]->is_real_distributed) continue;
-
-          send_migrate_request += 1;
-          txns[idx]->global_id_ = ++global_id;
-
-          // auto debug_master = debug_record_keys_master(txns[idx]->keys);
-
-          // LOG(INFO) << j << " " << txns[idx]->global_id_ 
-          //           << " router to [" << txns[idx]->destination_coordinator
-          //           << "] : " << txns[idx]->keys[0] << " " << debug_master[0] << " | "
-          //           << txns[idx]->keys[1] << " " << debug_master[1] << " w="
-          //           << txns[idx]->access_frequency << " change=" 
-          //           << (txns[idx]->destination_coordinator != txns[idx]->old_dest) << " "
-          //           << txns[idx]->old_dest << "->" << txns[idx]->destination_coordinator; 
-
-
-          
-
-          // coordinator_send[txns[idx]->destination_coordinator] ++ ;
-          
-
-          router_request(router_send_txn_cnt, txns[idx].get(), RouterTxnOps::TRANSFER);   
-
-          if(j % context.batch_flush == 0){
-            for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-              messages_mutex[i]->lock();
-              flush_message(async_messages, i);
-              messages_mutex[i]->unlock();
-            }
-          }
-        }
-        for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-          messages_mutex[i]->lock();
-          flush_message(async_messages, i);
-          messages_mutex[i]->unlock();
-        }
-        LOG(INFO) << "send_migrate_request: " << send_migrate_request << " global_id: " << global_id;
-      }
-      for(int i = 0 ; i < context.coordinator_num; i ++ ){
-        schedule_meta.node_busy[i] = 0;
-      }
-      
-  }
   void start() override {
 
-    LOG(INFO) << "LionSSMetisGeneratorR " << id << " starts.";
+    LOG(INFO) << "ClaySSMetisGeneratorR " << id << " starts.";
     start_time = std::chrono::steady_clock::now();
     workload.start_time = start_time;
     
@@ -1233,17 +1150,9 @@ public:
     int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
     // 
     if(context.repartition_strategy == "clay"){
-      start_offset = 0 * 1000 ;
+      start_offset = 0; // 30 * 1000 ;
     }
 
-    if(context.lion_with_metis_init){
-      LOG(INFO) << "START INIT!";
-      migration(map_[3]);
-      while(router_fence() == -1){
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-      }
-      LOG(INFO) << "INIT DONE!";
-    }
     int cur_workload = 0;
 
     while(status != ExecutorStatus::EXIT){
@@ -1252,8 +1161,6 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-      func();
-      std::this_thread::sleep_for(std::chrono::microseconds(5));
       if(latency > start_offset){
         break;
       }
@@ -1272,7 +1179,6 @@ public:
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
 
-      func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -1307,8 +1213,6 @@ public:
       auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                               std::chrono::steady_clock::now() - last_timestamp_)
                               .count();
-
-      func();
 
       if(last_timestamp_int != 0 && latency < trigger_time_interval){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -1532,7 +1436,7 @@ protected:
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
 
-  lionss::ScheduleMeta &schedule_meta;
+  clayss::ScheduleMeta &schedule_meta;
 
   std::unique_ptr<Partitioner> partitioner;
   RandomType random;

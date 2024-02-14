@@ -10,15 +10,20 @@
 #include "core/Delay.h"
 #include "core/Worker.h"
 
+#include "protocol/ClaySS/ClaySSMeta.h"
 #include <thread>
 
 namespace star {
-
-class Manager : public Worker {
+template <class Workload>
+class ClaySSManager : public Worker {
 public:
-  Manager(std::size_t coordinator_id, std::size_t id, const Context &context,
+  using WorkloadType = Workload;
+
+  ClaySSManager(std::size_t coordinator_id, std::size_t id, const Context &context,
           std::atomic<bool> &stopFlag)
       : Worker(coordinator_id, id), context(context), stopFlag(stopFlag),
+        schedule_meta(context.coordinator_num, context.batch_size),
+        txn_meta(context.coordinator_num, context.batch_size),
         delay(std::make_unique<SameDelay>(
             coordinator_id, context.coordinator_num, context.delay_time)) {
 
@@ -173,7 +178,7 @@ public:
     std::size_t n_coordinators = context.coordinator_num;
 
     for (auto i = 0u; i <= n_coordinators - 1; i++) {
-      // LOG(INFO) << "consume ACK " << ack_in_queue.size();
+      LOG(INFO) << "consume ACK " << ack_in_queue.size();
       ack_in_queue.wait_till_non_empty();
       std::unique_ptr<Message> message(ack_in_queue.front());
       bool ok = ack_in_queue.pop();
@@ -223,16 +228,16 @@ public:
   void start() override {
 
     if (coordinator_id == context.coordinator_num) {
-      LOG(INFO) << "Manager(worker id = " << id
+      LOG(INFO) << "ClaySSManager(worker id = " << id
                 << ") on the coordinator node started.";
       coordinator_start();
-      LOG(INFO) << "Manager(worker id = " << id
+      LOG(INFO) << "ClaySSManager(worker id = " << id
                 << ") on the coordinator node exits.";
     } else {
-      LOG(INFO) << "Manager(worker id = " << id
+      LOG(INFO) << "ClaySSManager(worker id = " << id
                 << ") on the non-coordinator node started.";
       non_coordinator_start();
-      LOG(INFO) << "Manager(worker id = " << id
+      LOG(INFO) << "ClaySSManager(worker id = " << id
                 << ") on the non-coordinator node exits.";
     }
   }
@@ -328,6 +333,10 @@ public:
   std::atomic<uint32_t> n_started_workers;
 
   std::unique_ptr<Delay> delay;
+  size_t batch_size;
+public:
+  clayss::ScheduleMeta schedule_meta;
+  clayss::TransactionMeta<WorkloadType> txn_meta;
 };
 
 } // namespace star

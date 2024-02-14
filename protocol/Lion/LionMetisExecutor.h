@@ -212,14 +212,19 @@ public:
     while(size > 0){
       bool success = metis_router_transactions_queue.pop_no_wait(t);
       if(success){
-        // LOG(INFO) << "Get Metis migration transaction ID(" << t.idx_ << ").";
+        
         size_t txn_id = m_transactions_queue.size();
         if(txn_id >= metis_storages.size()){
           DCHECK(false);
         }
         auto p = c_workload->unpack_transaction(context, 0, metis_storages[txn_id], t);
         p->set_id(txn_id);
+
+        // LOG(INFO) << "Get Metis migration transaction ID(" << t.idx_ << ")." 
+        //           << t.keys[0] << " " << t.keys[1];
+
         m_transactions_queue.push_back(std::move(p));
+        // p->op_ = t.op;
       }    
       size -- ;
     }
@@ -340,6 +345,7 @@ public:
             retry_transaction = false;
             // protocol->abort(*transaction, messages);
             n_abort_no_retry.fetch_add(1);
+            LOG(INFO) << "??abort";
             continue;
           } 
 
@@ -350,11 +356,11 @@ public:
             n_network_size.fetch_add(transaction->network_size);
             if (commit) {
               size_t ycsbTableID = ycsb::ycsb::tableID;
-              if(transaction->readSet.size() > 1)
-                VLOG(DEBUG_V9) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
-                         << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
-                         << "   " << *(int*)transaction->readSet[1].get_key() 
-                         << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
+              // if(transaction->readSet.size() > 1)
+              //   LOG(INFO) << " METIS COMMIT : " << *(int*)transaction->readSet[0].get_key() 
+              //            << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[0].get_key())
+              //            << "   " << *(int*)transaction->readSet[1].get_key() 
+              //            << " = " << db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, transaction->readSet[1].get_key()); 
 
               n_commit.fetch_add(1);
               

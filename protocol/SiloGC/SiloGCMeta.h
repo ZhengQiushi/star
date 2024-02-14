@@ -15,7 +15,7 @@ namespace star {
 
 namespace silogc {
 
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 struct ScheduleMeta {
   ScheduleMeta(int coordinator_num, int batch_size){
@@ -61,7 +61,7 @@ struct ScheduleMeta {
   std::atomic<uint32_t> done_schedule;
 
 
-  std::atomic<uint32_t> router_transaction_done[20]; // for single-execution
+  std::atomic<int> router_transaction_done[20]; // for single-execution
 };
 
 

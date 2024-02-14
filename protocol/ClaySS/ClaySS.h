@@ -11,24 +11,24 @@
 #include "core/Partitioner.h"
 #include "core/Table.h"
 #include "protocol/TwoPL/TwoPLHelper.h"
-#include "protocol/LionSS/LionSSTransaction.h"
-#include "protocol/LionSS/LionSSMessage.h"
+#include "protocol/ClaySS/ClaySSTransaction.h"
+#include "protocol/ClaySS/ClaySSMessage.h"
 #include <glog/logging.h>
 
 namespace star {
 
-template <class Database> class LionSS {
+template <class Database> class ClaySS {
 public:
   using DatabaseType = Database;
   using MetaDataType = std::atomic<uint64_t>;
   using ContextType = typename DatabaseType::ContextType;
-  using MessageType = LionSSMessage;
-  using TransactionType = LionSSTransaction;
+  using MessageType = ClaySSMessage;
+  using TransactionType = ClaySSTransaction;
 
-  using MessageFactoryType = LionSSMessageFactory;
-  using MessageHandlerType = LionSSMessageHandler<DatabaseType>;
+  using MessageFactoryType = ClaySSMessageFactory;
+  using MessageHandlerType = ClaySSMessageHandler<DatabaseType>;
 
-  LionSS(DatabaseType &db, const ContextType &context, Partitioner &partitioner)
+  ClaySS(DatabaseType &db, const ContextType &context, Partitioner &partitioner)
       : db(db), context(context), partitioner(partitioner) {}
 
   uint64_t search(std::size_t table_id, std::size_t partition_id,
@@ -281,6 +281,7 @@ private:
               readKey.get_value(), commit_tid);
         }
       }
+
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }
 

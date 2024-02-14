@@ -448,9 +448,34 @@ public:
      * @brief must be master and local 判断是不是跨节点事务
      * @return true/false
      */
-    std::set<int> from_nodes_id = std::move(txn_nodes_involved(is_dynamic));
-    // from_nodes_id.insert(context.coordinator_id);
-    return from_nodes_id.size() > 1; 
+      size_t ycsbTableID = ycsb::ycsb::tableID;
+      auto& query_keys = this->get_query();
+      int nodes[20] = {0};
+
+      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
+        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
+        // judge if is cross txn
+        size_t cur_c_id = -1;
+        if(is_dynamic){
+          // look-up the dynamic router to find-out where
+          cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
+        } else {
+          // cal the partition to figure out the coordinator-id
+          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        }
+        nodes[cur_c_id] += 1;
+      }
+      
+      int cnt = 0;
+      for(int i = 0 ; i < 20; i ++ ){
+        if(nodes[i] > 0){
+          cnt += 1;
+        }
+      }
+     return cnt > 1;
+    // std::set<int> from_nodes_id = std::move(txn_nodes_involved(is_dynamic));
+    // // from_nodes_id.insert(context.coordinator_id);
+    // return from_nodes_id.size() > 1; 
   }
   std::size_t get_partition_id(){
     return partition_id;
@@ -466,6 +491,7 @@ private:
   bool is_transmit_request;
   int on_replica_id;       // only for hermes
   int is_real_distributed; // only for hermes
+  
 };
 } // namespace ycsb
 

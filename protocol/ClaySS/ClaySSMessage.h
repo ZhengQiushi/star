@@ -10,12 +10,12 @@
 #include "core/ControlMessage.h"
 #include "core/Table.h"
 #include "protocol/TwoPL/TwoPLHelper.h"
-#include "protocol/LionSS/LionSSRWKey.h"
-#include "protocol/LionSS/LionSSTransaction.h"
+#include "protocol/ClaySS/ClaySSRWKey.h"
+#include "protocol/ClaySS/ClaySSTransaction.h"
 
 namespace star {
 
-enum class LionSSMessage {
+enum class ClaySSMessage {
   TRANSMIT_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
   TRANSMIT_RESPONSE,
   TRANSMIT_ROUTER_ONLY_REQUEST,
@@ -100,7 +100,7 @@ enum class LionSSMessage {
   //   return record_key;
   // }
 
-class LionSSMessageFactory {
+class ClaySSMessageFactory {
 
 public:
   static std::size_t new_read_lock_message(Message &message, ITable &table,
@@ -116,7 +116,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::READ_LOCK_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::READ_LOCK_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -140,7 +140,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::WRITE_LOCK_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -162,7 +162,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(bool);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::ABORT_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::ABORT_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -185,7 +185,7 @@ public:
 
     auto message_size = MessagePiece::get_header_size() + key_size + field_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::WRITE_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::WRITE_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -207,7 +207,7 @@ public:
 
     auto message_size = MessagePiece::get_header_size() + key_size;
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_REQUEST),
+        static_cast<uint32_t>(ClaySSMessage::RELEASE_READ_LOCK_REQUEST),
         message_size, table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -231,7 +231,7 @@ public:
     auto message_size =
         MessagePiece::get_header_size() + key_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_REQUEST),
+        static_cast<uint32_t>(ClaySSMessage::RELEASE_WRITE_LOCK_REQUEST),
         message_size, table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -258,7 +258,7 @@ public:
         sizeof(remaster) + 
         sizeof(op);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::TRANSMIT_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::TRANSMIT_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -287,7 +287,7 @@ public:
         sizeof(remaster) + 
         sizeof(op);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -315,7 +315,7 @@ public:
         MessagePiece::get_header_size() + key_size + 
         sizeof(key_offset) + sizeof(op);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::TRANSMIT_ROUTER_ONLY_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -341,7 +341,7 @@ public:
         MessagePiece::get_header_size() + key_size + 
         sizeof(key_offset) + sizeof(op) + sizeof(new_destination);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY), message_size,
+        static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -368,7 +368,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + key_size +
                         field_size + sizeof(commit_tid);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::REPLICATION_REQUEST), message_size,
+        static_cast<uint32_t>(ClaySSMessage::REPLICATION_REQUEST), message_size,
         table.tableID(), table.partitionID());
 
     Encoder encoder(message.data);
@@ -381,8 +381,8 @@ public:
   }
 };
 
-template <class Database> class LionSSMessageHandler {
-  using Transaction = LionSSTransaction;
+template <class Database> class ClaySSMessageHandler {
+  using Transaction = ClaySSTransaction;
   using Context = typename Database::ContextType;
 
 public:
@@ -391,7 +391,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::TRANSMIT_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::TRANSMIT_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -438,7 +438,7 @@ public:
                         value_size;
     
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::TRANSMIT_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::TRANSMIT_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -459,8 +459,8 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){ // VLOG(DEBUG_V12) 
-      auto test = my_debug_key(table_id, partition_id, key);
-      LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
+      // auto test = my_debug_key(table_id, partition_id, key);
+      // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock " << *(int*)key << " " <<  test; // << " " << tid_int;
       encoder << latest_tid << key_offset << success << remaster << op;
       responseMessage.data.append(value_size, 0);
       responseMessage.flush();
@@ -468,17 +468,17 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+    // simulate migrate latency
+    std::atomic<uint64_t> *lock_tid;
+    if(Database::which_workload() == myTestSet::YCSB){
+      ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) &k);
+    } else {
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) key);
+    }
 
-   std::atomic<uint64_t> *lock_tid;
-   if(Database::which_workload() == myTestSet::YCSB){
-     ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
-     ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-     lock_tid = &router_lock_table.search_metadata((void*) &k);
-   } else {
-     ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
-     lock_tid = &router_lock_table.search_metadata((void*) key);
-   }
-   
     if(op == RouterTxnOps::ADD_REPLICA){
       
     } else {
@@ -487,23 +487,14 @@ public:
       TwoPLHelper::write_lock(*lock_tid, success); // be locked 
       if(!success){
         TwoPLHelper::write_lock_release(tid);
-        auto test = my_debug_key(table_id, partition_id, key);
-        LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+        // auto test = my_debug_key(table_id, partition_id, key);
+        // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
         encoder << latest_tid << key_offset << success << remaster << op;
         responseMessage.data.append(value_size, 0);
         responseMessage.flush();
         return;
       }
-      if(remaster == false || context.migration_only > 0) {
-        // simulate cost of transmit data
-        for (auto i = 0u; i < context.n_nop * 2; i++) {
-          asm("nop");
-        }
-      } else {
-          for (auto i = 0u; i < context.rn_nop; i++) {
-            asm("nop");
-          }
-        }
+
     }
 
 
@@ -584,7 +575,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::TRANSMIT_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::TRANSMIT_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -619,8 +610,7 @@ public:
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
     
-    
-    LionSSRWKey &readKey = txn->readSet[key_offset];
+    ClaySSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
     // auto test = my_debug_key(table_id, partition_id, key);
@@ -665,21 +655,7 @@ public:
         txn->abort_lock = true;
         return;
       } 
-      if(op == RouterTxnOps::ADD_REPLICA){
-        txn->network_size += 50000 * (key_size + value_size);
-      } else {
-        if(remaster == false || context.migration_only > 0) {
-          txn->network_size += 50000 * (key_size + value_size);
-          // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
-            asm("nop");
-          } 
-        } else {
-          for (auto i = 0u; i < context.rn_nop; i++) {
-            asm("nop");
-          }
-        }
-      }
+
       // else {
       //   for (auto i = 0u; i < context.n_nop * 2 / 5; i++) {
       //     asm("nop");
@@ -725,7 +701,7 @@ public:
      * Transaction *txn unused
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::TRANSMIT_ROUTER_ONLY_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -762,7 +738,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + value_size +
                         sizeof(uint64_t) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::TRANSMIT_ROUTER_ONLY_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -797,7 +773,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::TRANSMIT_ROUTER_ONLY_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::TRANSMIT_ROUTER_ONLY_RESPONSE));
     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_RESPONSE";
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
@@ -808,7 +784,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -855,7 +831,7 @@ public:
                         value_size;
     
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -886,6 +862,7 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+
     std::atomic<uint64_t> *lock_tid;
     if(Database::which_workload() == myTestSet::YCSB){
       ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
@@ -895,8 +872,6 @@ public:
       ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
       lock_tid = &router_lock_table.search_metadata((void*) key);
     }
-      
-
 
     if(op == RouterTxnOps::ADD_REPLICA){
       
@@ -905,8 +880,8 @@ public:
       TwoPLHelper::write_lock(*lock_tid, success); // be locked 
       if(!success){
         TwoPLHelper::write_lock_release(tid);
-        auto test = my_debug_key(table_id, partition_id, key);
-        LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
+        // auto test = my_debug_key(table_id, partition_id, key);
+        // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key << " " <<  test; // << " " << tid_int;
         encoder << latest_tid << key_offset << success << remaster << op;
         responseMessage.data.append(value_size, 0);
         responseMessage.flush();
@@ -917,11 +892,7 @@ public:
         for (auto i = 0u; i < context.n_nop * 2; i++) {
           asm("nop");
         }
-      } else {
-          for (auto i = 0u; i < context.rn_nop; i++) {
-            asm("nop");
-          }
-        }
+      } 
     }
 
 
@@ -991,7 +962,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -1024,7 +995,7 @@ public:
                                                   value_size);
 
 
-    LionSSRWKey &readKey = txn->readSet[key_offset];
+    ClaySSRWKey &readKey = txn->readSet[key_offset];
     auto key = readKey.get_key();
 
     // auto test = my_debug_key(table_id, partition_id, key);
@@ -1048,11 +1019,7 @@ public:
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
           }
-        } else {
-          for (auto i = 0u; i < context.rn_nop; i++) {
-            asm("nop");
-          }
-        }
+        } 
       }
       if(!remaster){
         // read value message piece
@@ -1121,7 +1088,7 @@ public:
      * Transaction *txn unused
      */
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY));
+           static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_REQUEST_ROUTER_ONLY));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -1160,7 +1127,7 @@ public:
     auto message_size = MessagePiece::get_header_size() + value_size +
                         sizeof(uint64_t) + sizeof(key_offset);
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
+        static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -1193,7 +1160,7 @@ public:
                                       Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                       Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY));
+           static_cast<uint32_t>(ClaySSMessage::ASYNC_SEARCH_RESPONSE_ROUTER_ONLY));
     // LOG(INFO) << "TRANSMIT_ROUTER_ONLY_RESPONSE";
     txn->pendingResponses--;
     txn->network_size += inputPiece.get_message_length();
@@ -1206,7 +1173,7 @@ public:
                                         Message &responseMessage, Database &db, const Context &context,  Partitioner *partitioner,
                                         Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::READ_LOCK_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::READ_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
 
@@ -1257,7 +1224,6 @@ public:
           lock_tid = &router_lock_table.search_metadata((void*) key);
         }
         TwoPLHelper::write_lock(*lock_tid, success); // be locked 
-
         if(!success){
           // 
           // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
@@ -1278,7 +1244,7 @@ public:
     }
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::READ_LOCK_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::READ_LOCK_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -1303,7 +1269,7 @@ public:
                                          Message &responseMessage,
                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::READ_LOCK_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::READ_LOCK_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
 
@@ -1325,7 +1291,7 @@ public:
     StringPiece stringPiece = inputPiece.toStringPiece();
     Decoder dec(stringPiece);
     dec >> success >> key_offset;
-    LionSSRWKey &readKey = txn->readSet[key_offset];
+    ClaySSRWKey &readKey = txn->readSet[key_offset];
 
     VLOG(DEBUG_V16) << " READ_LOCK_RESPONSE  " << *(int*)readKey.get_key() << " " << success;
 
@@ -1357,7 +1323,7 @@ public:
                                          Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::WRITE_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
 
@@ -1410,6 +1376,7 @@ public:
           lock_tid = &router_lock_table.search_metadata((void*) key);
         }
         TwoPLHelper::write_lock(*lock_tid, success); // be locked 
+
         if(!success){
           // 
           // LOG(INFO) << " Failed to add write lock, since current is being migrated" << *(int*)key;
@@ -1428,7 +1395,7 @@ public:
     }
 
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::WRITE_LOCK_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -1455,7 +1422,7 @@ public:
                                           Message &responseMessage,
                                           Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::WRITE_LOCK_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::WRITE_LOCK_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     
@@ -1478,7 +1445,7 @@ public:
     Decoder dec(stringPiece);
     dec >> success >> key_offset;
 
-    LionSSRWKey &readKey = txn->readSet[key_offset];
+    ClaySSRWKey &readKey = txn->readSet[key_offset];
 
     VLOG(DEBUG_V16) << " WRITE_LOCK_RESPONSE  " << *(int*)readKey.get_key() << " " << success;
 
@@ -1510,7 +1477,7 @@ public:
                                     Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::ABORT_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::ABORT_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
 
@@ -1551,7 +1518,7 @@ public:
                                     Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::WRITE_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::WRITE_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);       
@@ -1578,7 +1545,7 @@ public:
     // prepare response message header
     auto message_size = MessagePiece::get_header_size();
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::WRITE_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::WRITE_RESPONSE), message_size,
         table_id, partition_id);
 
     star::Encoder encoder(responseMessage.data);
@@ -1593,7 +1560,7 @@ public:
                                      Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::WRITE_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::WRITE_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);   
@@ -1618,7 +1585,7 @@ public:
                                           Database &db, const Context &context,  Partitioner *partitioner, Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::REPLICATION_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::REPLICATION_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);    
@@ -1676,7 +1643,7 @@ public:
                         sizeof(debug_key);
                         
     auto message_piece_header = MessagePiece::construct_message_piece_header(
-        static_cast<uint32_t>(LionSSMessage::REPLICATION_RESPONSE), message_size,
+        static_cast<uint32_t>(ClaySSMessage::REPLICATION_RESPONSE), message_size,
         table_id, partition_id);
     star::Encoder encoder(responseMessage.data);
     encoder << message_piece_header 
@@ -1693,7 +1660,7 @@ public:
 ) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::REPLICATION_RESPONSE));
+           static_cast<uint32_t>(ClaySSMessage::REPLICATION_RESPONSE));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);
@@ -1725,7 +1692,7 @@ public:
                                                 Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::RELEASE_READ_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);   
@@ -1752,7 +1719,7 @@ public:
     // prepare response message header
     // auto message_size = MessagePiece::get_header_size();
     // auto message_piece_header = MessagePiece::construct_message_piece_header(
-    //     static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_RESPONSE),
+    //     static_cast<uint32_t>(ClaySSMessage::RELEASE_READ_LOCK_RESPONSE),
     //     message_size, table_id, partition_id);
 
     // star::Encoder encoder(responseMessage.data);
@@ -1769,7 +1736,7 @@ public:
   //                                                Transaction *txn) {
 
   //   DCHECK(inputPiece.get_message_type() ==
-  //          static_cast<uint32_t>(LionSSMessage::RELEASE_READ_LOCK_RESPONSE));
+  //          static_cast<uint32_t>(ClaySSMessage::RELEASE_READ_LOCK_RESPONSE));
   //   auto table_id = inputPiece.get_table_id();
   //   auto partition_id = inputPiece.get_partition_id();
 
@@ -1793,7 +1760,7 @@ public:
                                                  Transaction *txn) {
 
     DCHECK(inputPiece.get_message_type() ==
-           static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_REQUEST));
+           static_cast<uint32_t>(ClaySSMessage::RELEASE_WRITE_LOCK_REQUEST));
     auto table_id = inputPiece.get_table_id();
     auto partition_id = inputPiece.get_partition_id();
     ITable &table = *db.find_table(table_id, partition_id);   
@@ -1822,7 +1789,7 @@ public:
     // prepare response message header
     // auto message_size = MessagePiece::get_header_size();
     // auto message_piece_header = MessagePiece::construct_message_piece_header(
-    //     static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_RESPONSE),
+    //     static_cast<uint32_t>(ClaySSMessage::RELEASE_WRITE_LOCK_RESPONSE),
     //     message_size, table_id, partition_id);
 
     // star::Encoder encoder(responseMessage.data);
@@ -1837,7 +1804,7 @@ public:
   //                                                 Database &db, const Context &context,  Partitioner *partitioner,
   //                                                 Transaction *txn) {
   //   DCHECK(inputPiece.get_message_type() ==
-  //          static_cast<uint32_t>(LionSSMessage::RELEASE_WRITE_LOCK_RESPONSE));
+  //          static_cast<uint32_t>(ClaySSMessage::RELEASE_WRITE_LOCK_RESPONSE));
   //   auto table_id = inputPiece.get_table_id();
   //   auto partition_id = inputPiece.get_partition_id();
   //   ITable &table = *db.find_table(table_id, partition_id);   
@@ -1864,32 +1831,32 @@ public:
         std::function<void(MessagePiece, Message &, Database &, const Context &,  Partitioner *, Transaction *)>>
         v;
     v.resize(static_cast<int>(ControlMessage::NFIELDS));
-    v.push_back(LionSSMessageHandler::transmit_request_handler);
-    v.push_back(LionSSMessageHandler::transmit_response_handler);
-    v.push_back(LionSSMessageHandler::transmit_router_only_request_handler);
-    v.push_back(LionSSMessageHandler::transmit_router_only_response_handler);
+    v.push_back(ClaySSMessageHandler::transmit_request_handler);
+    v.push_back(ClaySSMessageHandler::transmit_response_handler);
+    v.push_back(ClaySSMessageHandler::transmit_router_only_request_handler);
+    v.push_back(ClaySSMessageHandler::transmit_router_only_response_handler);
     // 
 
-    v.push_back(LionSSMessageHandler::async_search_request_handler); // SEARCH_REQUEST
-    v.push_back(LionSSMessageHandler::async_search_response_handler); // SEARCH_RESPONSE
-    v.push_back(LionSSMessageHandler::async_search_request_router_only_handler); // SEARCH_REQUEST_ROUTER_ONLY
-    v.push_back(LionSSMessageHandler::async_search_response_router_only_handler); // SEARCH_RESPONSE_ROUTER_ONLY
+    v.push_back(ClaySSMessageHandler::async_search_request_handler); // SEARCH_REQUEST
+    v.push_back(ClaySSMessageHandler::async_search_response_handler); // SEARCH_RESPONSE
+    v.push_back(ClaySSMessageHandler::async_search_request_router_only_handler); // SEARCH_REQUEST_ROUTER_ONLY
+    v.push_back(ClaySSMessageHandler::async_search_response_router_only_handler); // SEARCH_RESPONSE_ROUTER_ONLY
 
-    v.push_back(LionSSMessageHandler::read_lock_request_handler);
-    v.push_back(LionSSMessageHandler::read_lock_response_handler);
-    v.push_back(LionSSMessageHandler::write_lock_request_handler);
-    v.push_back(LionSSMessageHandler::write_lock_response_handler);
-    v.push_back(LionSSMessageHandler::abort_request_handler);
-    v.push_back(LionSSMessageHandler::write_request_handler);
-    v.push_back(LionSSMessageHandler::write_response_handler);
+    v.push_back(ClaySSMessageHandler::read_lock_request_handler);
+    v.push_back(ClaySSMessageHandler::read_lock_response_handler);
+    v.push_back(ClaySSMessageHandler::write_lock_request_handler);
+    v.push_back(ClaySSMessageHandler::write_lock_response_handler);
+    v.push_back(ClaySSMessageHandler::abort_request_handler);
+    v.push_back(ClaySSMessageHandler::write_request_handler);
+    v.push_back(ClaySSMessageHandler::write_response_handler);
     // 
-    v.push_back(LionSSMessageHandler::replication_request_handler);
-    v.push_back(LionSSMessageHandler::replication_response_handler);
+    v.push_back(ClaySSMessageHandler::replication_request_handler);
+    v.push_back(ClaySSMessageHandler::replication_response_handler);
     //
-    v.push_back(LionSSMessageHandler::release_read_lock_request_handler);
-    // v.push_back(LionSSMessageHandler::release_read_lock_response_handler);
-    v.push_back(LionSSMessageHandler::release_write_lock_request_handler);
-    // v.push_back(LionSSMessageHandler::release_write_lock_response_handler);
+    v.push_back(ClaySSMessageHandler::release_read_lock_request_handler);
+    // v.push_back(ClaySSMessageHandler::release_read_lock_response_handler);
+    v.push_back(ClaySSMessageHandler::release_write_lock_request_handler);
+    // v.push_back(ClaySSMessageHandler::release_write_lock_response_handler);
 
     return v;
   }

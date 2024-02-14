@@ -80,7 +80,7 @@ public:
     replica_num = partitioner.replica_num();
     ycsbTableID = ycsb::ycsb::tableID;
 
-    for(int i = 0 ; i < 20 ; i ++ ){
+    for(int i = 0 ; i < MAX_COORDINATOR_NUM ; i ++ ){
       is_full_signal_self[i].store(0);
     }
     DCHECK(id < context.worker_num);
@@ -445,7 +445,7 @@ public:
                  .count() * 1.0 / 1000 / 1000;
     int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<std::vector<int>> busy_local(replica_num, std::vector<int>(context.coordinator_num, 0));
     int real_distribute_num = 0;
@@ -493,11 +493,12 @@ public:
       std::this_thread::sleep_for(std::chrono::microseconds(5));
     }
 
-    long long threshold = 400 * 400; //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    long long threshold = 400 * 400;
     if(WorkloadType::which_workload == myTestSet::YCSB){
-      threshold = 200 * 200;
+      long long threshold = (0.1 * context.batch_size / context.coordinator_num) * (0.1 * context.batch_size / context.coordinator_num); 
+
       if(cur_timestamp > 10){
-        threshold = 300 * 300;
+        threshold = (0.2 * context.batch_size / context.coordinator_num) * (0.2 * context.batch_size / context.coordinator_num); 
       }
     }
     int aver_val =  cur_txn_num * dispatcher_num / context.coordinator_num;
@@ -508,22 +509,25 @@ public:
       for(size_t r = 0 ; r < replica_num; r ++ ){
         long long cur_val = cal_load_distribute(aver_val, busy_[r]);
         if(cur_val > threshold && context.random_router == 0){ 
+
+
           if(WorkloadType::which_workload == myTestSet::YCSB){
             balance_master(r, aver_val, threshold);
           } else {
             balance_master_tpcc(r, aver_val, threshold);
           }
-        }
-        cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                    std::chrono::steady_clock::now() - staart)
-                    .count() * 1.0 / 1000 ;
-        LOG(INFO) << "scheduler + reorder : " << cur_timestamp__  << " " << cur_val << " " << aver_val << " " << threshold;
+          cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
+                      std::chrono::steady_clock::now() - staart)
+                      .count() * 1.0 / 1000 ;
+          LOG(INFO) << "scheduler + reorder : " << cur_timestamp__  << " " << cur_val << " " << aver_val << " " << threshold;
 
-        LOG(INFO) << " after: ";
-        auto& cur_busy = busy_[r];
-        for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-          LOG(INFO) <<" busy[" << i << "] = " << cur_busy[i];
+          LOG(INFO) << " after: ";
+          auto& cur_busy = busy_[r];
+          for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) <<" busy[" << i << "] = " << cur_busy[i];
+          }
         }
+
       }
 
     schedule_meta.reorder_done.store(true);
@@ -545,20 +549,14 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -628,7 +626,7 @@ public:
       size_t weight_sum = 0;
 
       // check master num at this replica on each node
-      size_t from_nodes_id[20] = {0};
+      size_t from_nodes_id[MAX_COORDINATOR_NUM] = {0};
       size_t master_max_cnt = 0;
 
       std::vector<int> query_keys;
@@ -725,7 +723,7 @@ public:
     int replica_destination = -1;
     
     // check master num at this replica on each node
-    size_t from_nodes_id[20] = {0};
+    size_t from_nodes_id[MAX_COORDINATOR_NUM] = {0};
     size_t master_max_cnt = 0;
     for (size_t j = 0 ; j < query_keys.size(); j ++ ){
       // LOG(INFO) << "query_keys[j] : " << query_keys[j];
@@ -855,14 +853,14 @@ public:
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "send : " << cur_timestamp__;
+      // LOG(INFO) << "send : " << cur_timestamp__;
 
       // 
       for (auto l = 0u; l < context.coordinator_num; l++){
         if(l == context.coordinator_id){
           continue;
         }
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+        // LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
         messages_mutex[l]->lock();
         ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
         flush_message(async_messages, l);

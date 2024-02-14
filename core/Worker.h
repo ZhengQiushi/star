@@ -73,6 +73,7 @@ public:
   std::atomic<uint64_t> n_commit, 
       n_remaster, n_migrate, // 
       n_abort_no_retry, n_abort_lock,
+      n_remaster_abort,
       n_abort_read_validation, n_local, n_si_in_serializable, n_network_size;
 
   int workload_type; // 0-5

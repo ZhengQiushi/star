@@ -57,12 +57,12 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
 # add_executable(bench_tpcc bench_tpcc.cpp)
 # target_link_libraries(bench_tpcc common)
 
-add_executable(zqs_laji bench_ycsb.cpp)
-target_link_libraries(zqs_laji common 
-                    ${jemalloc_lib} ${glog} ${gflags} 
-                    ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
-                    ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
-                    ${METIS_LIBRARIES}) # -static
+# add_executable(zqs_laji bench_ycsb.cpp)
+# target_link_libraries(zqs_laji common 
+#                     ${jemalloc_lib} ${glog} ${gflags} 
+#                     ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+#                     ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
+#                     ${METIS_LIBRARIES}) # -static
 
 
 
@@ -73,15 +73,22 @@ target_link_libraries(zqs_laji common
 #                     ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
 #                     ${METIS_LIBRARIES}) # -static
 
+add_executable(zqs_laji_metis metis_test.cpp)
+target_link_libraries(zqs_laji_metis common 
+                    ${jemalloc_lib} ${glog} ${gflags} 
+                    ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+                    ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
+                    ${METIS_LIBRARIES}) # -static
+
+# 
 
 
-
-# add_executable(zqs_laji_metis metis_test.cpp)
-# target_link_libraries(zqs_laji_metis common 
+# add_executable(zqs_laji_metis_tpcc metis_test_tpcc.cpp)
+# target_link_libraries(zqs_laji_metis_tpcc common 
 #                     ${jemalloc_lib} ${glog} ${gflags} 
 #                     ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
 #                     ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
 #                     ${METIS_LIBRARIES}) # -static
 
 # # 
-# add_subdirectory(test)
+add_subdirectory(test)

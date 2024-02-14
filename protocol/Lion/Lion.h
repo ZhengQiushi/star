@@ -240,7 +240,6 @@ private:
 
     auto &readSet = txn.readSet;
     size_t replica_num = partitioner.replica_num();
-
     for (auto i = 0u; i < readSet.size(); i++) {
       auto &readKey = readSet[i];
       if(!readKey.get_write_lock_bit()){
@@ -297,16 +296,14 @@ private:
           VLOG(DEBUG_V11) << " async_message_num: " << context.coordinator_id << " -> " << k << " " << async_message_num.load() << " " << *(int*)readKey.get_key() << " " << (char*)readKey.get_value();
           send_replica = true;
           replicate_count += 1;
-          if(context.migration_only){
-            if(replicate_count >= replica_num){
-              break;
-            }
-          }
+            // if(replicate_count >= replica_num){
+            //   break;
+            // }
         }
       }
 
       // if(replicate_count >= 2){
-      
+        
       //   // LOG(INFO) << "replicate_count : " << replicate_count;
       // }
 

@@ -293,7 +293,7 @@ I1225 00:39:11.193650 200063 LionExecutor.h:657] prepare: 5  execute: 935  commi
 I1225 00:39:11.193698 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:11.193737 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 27 milliseconds.
 I1225 00:39:11.193754 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
-I1225 00:39:11.193701 200064 StarManager.h:251] send_ack
+I1225 00:39:11.193701 200064 StarManager.h:117] send_ack
 I1225 00:39:11.193802 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.194372 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2805486 xRklqteLo3
 I1225 00:39:11.194393 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027431 CMOby4i1V6
@@ -579,7 +579,7 @@ I1225 00:39:11.270265 200063 Lion.h:280]  async_message_num: 0 -> 2 44 1632246 k
 I1225 00:39:11.270290 200063 Lion.h:280]  async_message_num: 0 -> 2 45 1632247 kWUnpNP0LB
 I1225 00:39:11.270310 200063 LionExecutor.h:657] prepare: 8  execute: 501  commit: 51  router : 0
 I1225 00:39:11.270359 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:11.270362 200064 StarManager.h:251] send_ack
+I1225 00:39:11.270362 200064 StarManager.h:117] send_ack
 I1225 00:39:11.270414 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.270473 200061 LionExecutor.h:812] async_message_respond_num : 45from 2 to 0 1632246
 I1225 00:39:11.270486 200061 LionExecutor.h:812] async_message_respond_num : 46from 2 to 0 1632247
@@ -904,7 +904,7 @@ I1225 00:39:11.337731 200063 Lion.h:280]  async_message_num: 0 -> 2 58 1604943 k
 I1225 00:39:11.337767 200063 Lion.h:280]  async_message_num: 0 -> 2 59 1604944 kWUnpNP0LB
 I1225 00:39:11.337787 200063 LionExecutor.h:657] prepare: 8  execute: 712  commit: 55  router : 0
 I1225 00:39:11.337850 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:11.337852 200064 StarManager.h:251] send_ack
+I1225 00:39:11.337852 200064 StarManager.h:117] send_ack
 I1225 00:39:11.337875 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 23 milliseconds.
 I1225 00:39:11.337908 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.337918 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
@@ -1189,7 +1189,7 @@ I1225 00:39:11.431967 200063 Lion.h:280]  async_message_num: 0 -> 2 48 1617932 k
 I1225 00:39:11.431991 200063 Lion.h:280]  async_message_num: 0 -> 2 49 1617934 kWUnpNP0LB
 I1225 00:39:11.432014 200063 LionExecutor.h:657] prepare: 8  execute: 958  commit: 51  router : 0
 I1225 00:39:11.432076 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:11.432078 200064 StarManager.h:251] send_ack
+I1225 00:39:11.432078 200064 StarManager.h:117] send_ack
 I1225 00:39:11.432096 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 27 milliseconds.
 I1225 00:39:11.432117 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.432129 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
@@ -1509,7 +1509,7 @@ I1225 00:39:11.488384 200063 Lion.h:280]  async_message_num: 0 -> 2 67 1628736 k
 I1225 00:39:11.488404 200063 Lion.h:280]  async_message_num: 0 -> 2 68 1628743 kWUnpNP0LB
 I1225 00:39:11.488421 200063 Lion.h:280]  async_message_num: 0 -> 2 69 1628744 kWUnpNP0LB
 I1225 00:39:11.488441 200063 LionExecutor.h:657] prepare: 8  execute: 490  commit: 642  router : 0
-I1225 00:39:11.488493 200064 StarManager.h:251] send_ack
+I1225 00:39:11.488493 200064 StarManager.h:117] send_ack
 I1225 00:39:11.488495 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:11.488538 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 25 milliseconds.
 I1225 00:39:11.488554 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
@@ -1902,7 +1902,7 @@ I1225 00:39:11.543121 200063 Lion.h:280]  async_message_num: 0 -> 2 84 1646115 k
 I1225 00:39:11.543145 200063 Lion.h:280]  async_message_num: 0 -> 2 85 1646116 kWUnpNP0LB
 I1225 00:39:11.543170 200063 Lion.h:280]  async_message_num: 0 -> 2 86 1646118 kWUnpNP0LB
 I1225 00:39:11.543201 200063 LionExecutor.h:657] prepare: 7  execute: 760  commit: 68  router : 0
-I1225 00:39:11.543256 200064 StarManager.h:251] send_ack
+I1225 00:39:11.543256 200064 StarManager.h:117] send_ack
 I1225 00:39:11.543258 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:11.543282 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.543295 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 26 milliseconds.
@@ -2262,7 +2262,7 @@ I1225 00:39:11.592921 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.592972 200063 LionMessage.h:520] 1405081 7D4YV5tBDi insert 
 I1225 00:39:11.593042 200063 Lion.h:280]  async_message_num: 0 -> 2 75 1625410 kWUnpNP0LB
 I1225 00:39:11.593070 200063 LionExecutor.h:657] prepare: 8  execute: 653  commit: 62  router : 0
-I1225 00:39:11.593139 200064 StarManager.h:251] send_ack
+I1225 00:39:11.593139 200064 StarManager.h:117] send_ack
 I1225 00:39:11.593144 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:11.593149 200061 LionExecutor.h:812] async_message_respond_num : 76from 2 to 0 1625410
 I1225 00:39:11.593160 200064 StarManager.h:256] start S-Phase
@@ -2672,7 +2672,7 @@ I1225 00:39:11.788192 200063 Lion.h:280]  async_message_num: 0 -> 2 87 1617714 k
 I1225 00:39:11.788215 200063 Lion.h:280]  async_message_num: 0 -> 2 88 1617716 kWUnpNP0LB
 I1225 00:39:11.788236 200063 LionExecutor.h:657] prepare: 8  execute: 5739  commit: 66  router : 0
 I1225 00:39:11.788295 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:11.788296 200064 StarManager.h:251] send_ack
+I1225 00:39:11.788296 200064 StarManager.h:117] send_ack
 I1225 00:39:11.788314 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 159 milliseconds.
 I1225 00:39:11.788348 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
 I1225 00:39:11.788333 200064 StarManager.h:256] start S-Phase
@@ -3038,7 +3038,7 @@ I1225 00:39:11.823473 200063 Lion.h:280]  async_message_num: 0 -> 2 77 1641192 k
 I1225 00:39:11.823487 200063 Lion.h:280]  async_message_num: 0 -> 2 78 1641193 kWUnpNP0LB
 I1225 00:39:11.823500 200063 LionExecutor.h:657] prepare: 5  execute: 803  commit: 40  router : 0
 I1225 00:39:11.823536 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:11.823537 200064 StarManager.h:251] send_ack
+I1225 00:39:11.823537 200064 StarManager.h:117] send_ack
 I1225 00:39:11.823549 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 23 milliseconds.
 I1225 00:39:11.823577 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
 I1225 00:39:11.823565 200064 StarManager.h:256] start S-Phase
@@ -3110,7 +3110,7 @@ I1225 00:39:11.868948 200063 LionExecutor.h:332] [C-PHASE] worker 0 c_phase
 I1225 00:39:11.868958 200064 StarManager.h:240] wait4_stop
 I1225 00:39:11.868963 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3038841 7SBtJ4SwWY
 I1225 00:39:11.868976 200064 StarManager.h:247] wait_all_workers_finish
-I1225 00:39:11.868999 200064 StarManager.h:251] send_ack
+I1225 00:39:11.868999 200064 StarManager.h:117] send_ack
 I1225 00:39:11.869011 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.869076 200063 Lion.h:280]  async_message_num: 0 -> 2 0 1610527 kWUnpNP0LB
 I1225 00:39:11.869096 200063 Lion.h:280]  async_message_num: 0 -> 2 1 1610532 kWUnpNP0LB
@@ -3691,7 +3691,7 @@ I1225 00:39:12.012014 200063 Lion.h:280]  async_message_num: 0 -> 2 63 1632203 k
 I1225 00:39:12.012028 200063 Lion.h:280]  async_message_num: 0 -> 2 64 1632205 kWUnpNP0LB
 I1225 00:39:12.012045 200063 LionExecutor.h:657] prepare: 5  execute: 2031  commit: 32  router : 0
 I1225 00:39:12.012081 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:12.012084 200064 StarManager.h:251] send_ack
+I1225 00:39:12.012084 200064 StarManager.h:117] send_ack
 I1225 00:39:12.012091 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 48 milliseconds.
 I1225 00:39:12.012126 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
 I1225 00:39:12.012122 200064 StarManager.h:256] start S-Phase
@@ -4011,7 +4011,7 @@ I1225 00:39:12.132959 200063 Lion.h:280]  async_message_num: 0 -> 2 68 1643547 k
 I1225 00:39:12.132974 200063 Lion.h:280]  async_message_num: 0 -> 2 69 1643549 kWUnpNP0LB
 I1225 00:39:12.132988 200063 LionExecutor.h:657] prepare: 5  execute: 815  commit: 700  router : 0
 I1225 00:39:12.133024 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:12.133028 200064 StarManager.h:251] send_ack
+I1225 00:39:12.133028 200064 StarManager.h:117] send_ack
 I1225 00:39:12.133037 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 31 milliseconds.
 I1225 00:39:12.133069 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
 I1225 00:39:12.133064 200064 StarManager.h:256] start S-Phase
@@ -4270,7 +4270,7 @@ I1225 00:39:12.208853 200063 LionMessage.h:520] 1402899 jjuOAwT2cw insert
 I1225 00:39:12.208882 200063 Lion.h:280]  async_message_num: 0 -> 2 51 1614501 kWUnpNP0LB
 I1225 00:39:12.208897 200063 LionExecutor.h:657] prepare: 5  execute: 522  commit: 33  router : 0
 I1225 00:39:12.208928 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
-I1225 00:39:12.208930 200064 StarManager.h:251] send_ack
+I1225 00:39:12.208930 200064 StarManager.h:117] send_ack
 I1225 00:39:12.208964 200064 StarManager.h:256] start S-Phase
 I1225 00:39:12.209159 200061 LionExecutor.h:812] async_message_respond_num : 52from 2 to 0 1614501
 I1225 00:39:12.208938 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 9 milliseconds.
@@ -4605,7 +4605,7 @@ I1225 00:39:12.322610 200063 Lion.h:280]  async_message_num: 0 -> 2 69 1407082 k
 I1225 00:39:12.322625 200063 Lion.h:280]  async_message_num: 0 -> 2 70 1635411 kWUnpNP0LB
 I1225 00:39:12.322639 200063 Lion.h:280]  async_message_num: 0 -> 2 71 1635418 kWUnpNP0LB
 I1225 00:39:12.322654 200063 LionExecutor.h:657] prepare: 5  execute: 1370  commit: 1189  router : 0
-I1225 00:39:12.322692 200064 StarManager.h:251] send_ack
+I1225 00:39:12.322692 200064 StarManager.h:117] send_ack
 I1225 00:39:12.322695 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:12.322715 200064 StarManager.h:256] start S-Phase
 I1225 00:39:12.322724 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 58 milliseconds.
@@ -4944,7 +4944,7 @@ I1225 00:39:12.414937 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.414953 200063 LionMessage.h:520] 1408282 D1CqNKbS3y insert 
 I1225 00:39:12.414994 200063 Lion.h:280]  async_message_num: 0 -> 2 66 1641416 kWUnpNP0LB
 I1225 00:39:12.415009 200063 LionExecutor.h:657] prepare: 5  execute: 431  commit: 36  router : 0
-I1225 00:39:12.415051 200064 StarManager.h:251] send_ack
+I1225 00:39:12.415051 200064 StarManager.h:117] send_ack
 I1225 00:39:12.415074 200064 StarManager.h:256] start S-Phase
 I1225 00:39:12.415115 200061 LionExecutor.h:812] async_message_respond_num : 67from 2 to 0 1641416
 I1225 00:39:12.415055 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
@@ -5271,7 +5271,7 @@ I1225 00:39:12.472230 200061 LionExecutor.h:812] async_message_respond_num : 71f
 I1225 00:39:12.472258 200063 LionMessage.h:846] replication_response_handler: 0->2 1638369
 I1225 00:39:12.472306 200063 LionMessage.h:520] 1406682 yNRU76cbC9 insert 
 I1225 00:39:12.472329 200063 LionExecutor.h:657] prepare: 5  execute: 1237  commit: 28  router : 0
-I1225 00:39:12.472389 200064 StarManager.h:251] send_ack
+I1225 00:39:12.472389 200064 StarManager.h:117] send_ack
 I1225 00:39:12.472391 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:12.472406 200064 StarManager.h:256] start S-Phase
 I1225 00:39:12.472416 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 23 milliseconds.

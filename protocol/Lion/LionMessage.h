@@ -280,15 +280,6 @@ public:
       value_size = 0;
     }
 
-    // WorkloadType::which_workload == myTestSet::TPCC
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
-      // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop * 2; i++) {
-        asm("nop");
-      }
-    }
-    //TODO: add transmit length with longer transaction
-
     // prepare response message header
     auto message_size = MessagePiece::get_header_size() + 
                         sizeof(uint64_t) + 
@@ -311,14 +302,14 @@ public:
     
     success = table.contains(key);
     if(!success){
-      VLOG(DEBUG_V12) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+      LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
       encoder << latest_tid 
               << key_offset 
               << txn_id
               << success 
               << remaster 
               << is_metis;
-      responseMessage.data.append(value_size, 0);
+      responseMessage.data.append(value_size, ' ');
       responseMessage.flush();
       return;
     }
@@ -328,20 +319,58 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
+      LOG(INFO) << "  can't Lock " << *(int*)key; // << " " << tid_int;
       encoder << latest_tid 
               << key_offset 
               << txn_id
               << success 
               << remaster 
               << is_metis;
-      responseMessage.data.append(value_size, 0);
+      responseMessage.data.append(value_size, ' ');
       responseMessage.flush();
       return;
     } else {
       VLOG(DEBUG_V12) << " Lock " << txn_id << " " 
                       << *(int*)key << " " << tid << " " << latest_tid;
     }
+
+    // simulate migrate latency
+    std::atomic<uint64_t> *lock_tid;
+    if(Database::which_workload() == myTestSet::YCSB){
+      ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) &k);
+    } else {
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) key);
+    }
+    TwoPLHelper::write_lock(*lock_tid, success); // be locked 
+    if(!success){
+      TwoPLHelper::write_lock_release(tid);
+      // auto test = my_debug_key(table_id, partition_id, key);
+      // LOG(INFO) << " TRANSMIT_REQUEST!!! can't Lock router table " << *(int*)key; //  << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid 
+              << key_offset 
+              << txn_id
+              << success 
+              << remaster 
+              << is_metis;
+      responseMessage.data.append(value_size, ' ');
+      responseMessage.flush();
+      return;
+    }
+
+    if(remaster == false || context.migration_only > 0) {
+      // simulate cost of transmit data
+      for (auto i = 0u; i < context.n_nop * 2; i++) {
+        asm("nop");
+      }
+    } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
+
     // lock the router_table 
     if(partitioner->is_dynamic()){
           // 数据所在节点的路由表
@@ -371,7 +400,7 @@ public:
                     << remaster 
                     << is_metis;
             // reserve size for read
-            responseMessage.data.append(value_size, 0);
+            responseMessage.data.append(value_size, ' ');
             
 //            auto value = table.search_value(key);
 //            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
@@ -386,15 +415,15 @@ public:
             responseMessage.flush();
 
           } else if(coordinator_id_new == coordinator_id_old) {
-            success = false;
-            VLOG(DEBUG_V12) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
+            success = true;
+            LOG(INFO) << " Same coordi : " << coordinator_id_new << " " <<coordinator_id_old << " " << *(int*)key << " " << tid;
             encoder << latest_tid 
                     << key_offset 
                     << txn_id
                     << success 
                     << remaster 
                     << is_metis;
-            responseMessage.data.append(value_size, 0);
+            responseMessage.data.append(value_size, ' ');
             responseMessage.flush();
           
           } else {
@@ -421,8 +450,14 @@ public:
       // LOG(INFO) << *(int*) key << "s-delete "; // coordinator_id_old << " --> " << coordinator_id_new;
     }
 
+    // for(auto& k: lock_){ 
+    //   std::atomic<uint64_t> &tid = table.search_metadata((void*) &k);
+    //   TwoPLHelper::write_lock_release(tid); // be locked 
+    // }
+
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
+    TwoPLHelper::write_lock_release(*lock_tid);
   }
 
   static void search_response_handler(MessagePiece inputPiece,
@@ -513,13 +548,17 @@ public:
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
           }
-        } 
+        } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        }
 
         // lock the respond tid and key
         bool success = false;
         std::atomic<uint64_t> &tid_ = table.search_metadata(key, success);
         if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+          LOG(INFO) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
           txn->abort_lock = true;
           return;
         } 
@@ -533,7 +572,7 @@ public:
         }
 
         if(!success){
-          VLOG(DEBUG_V14) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+          LOG(INFO) << "AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
           txn->abort_lock = true;
           return;
         } 
@@ -565,7 +604,7 @@ public:
 
           txn->tids[key_offset] = &tid_;
         } else {
-          VLOG(DEBUG_V12) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
+          LOG(INFO) <<"Abort. Same Coordinators. " << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << coordinator_id_old << " --> " << coordinator_id_new << " " << tid << "  " << remaster;
           txn->abort_lock = true;
           if(readKey.get_write_lock_bit()){
             TwoPLHelper::write_lock_release(tid_, last_tid);
@@ -580,7 +619,7 @@ public:
       }
 
     } else {
-      VLOG(DEBUG_V14) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
+      // LOG(INFO) << "FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
       txn->abort_lock = true;
     }
 
@@ -927,7 +966,7 @@ public:
     latest_tid = TwoPLHelper::write_lock(tid, success); // be locked 
 
     if(!success){
-      VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
+      // VLOG(DEBUG_V12) << "  can't Lock " << *(int*)key; // << " " << tid_int;
       encoder << latest_tid << key_offset << txn_id << success << remaster << is_metis;
       encoder.write_n_bytes(key, key_size);
       responseMessage.data.append(value_size, 0);
@@ -936,6 +975,30 @@ public:
     } else {
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
+
+    
+    std::atomic<uint64_t> *lock_tid;
+    if(Database::which_workload() == myTestSet::YCSB){
+      ycsb::ycsb::key k(*(size_t*)key % 200000 / 50000 + 200000 * partition_id);
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) &k);
+    } else {
+      ITable &router_lock_table = *db.find_router_lock_table(table_id, partition_id);
+      lock_tid = &router_lock_table.search_metadata((void*) key);
+    }
+
+    TwoPLHelper::write_lock(*lock_tid, success); // be locked 
+    if(!success){
+      TwoPLHelper::write_lock_release(tid);
+      // auto test = my_debug_key(table_id, partition_id, key);
+      // LOG(INFO) << "  can't Lock " << *(int*)key;// << " " <<  test; // << " " << tid_int;
+      encoder << latest_tid << key_offset << txn_id << success << remaster << is_metis;
+      encoder.write_n_bytes(key, key_size);
+      responseMessage.data.append(value_size, 0);
+      responseMessage.flush();
+      return;
+    }
+
     // lock the router_table 
     if(partitioner->is_dynamic()){
           // 数据所在节点的路由表
@@ -1004,6 +1067,8 @@ public:
 
     // wait for the commit / abort to unlock
     TwoPLHelper::write_lock_release(tid);
+    TwoPLHelper::write_lock_release(*lock_tid);
+
   }
 
   static void async_search_response_handler(MessagePiece inputPiece,

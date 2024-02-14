@@ -19,7 +19,7 @@
 namespace star {
 namespace group_commit {
 
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 
 template <class Workload, class Protocol> class LionGenerator : public Worker {
@@ -168,14 +168,14 @@ public:
 
                   schedule_meta.done_schedule.fetch_add(1);
                   status = static_cast<ExecutorStatus>(worker_status.load());
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
                   // wait for end
                   while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
                     auto i = schedule_meta.done_schedule.load();
                     std::this_thread::sleep_for(std::chrono::microseconds(5));
                     status = static_cast<ExecutorStatus>(worker_status.load());
                   }
-                  LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
+                  // LOG(INFO) << "done_schedule: " << schedule_meta.done_schedule.load();
 
                   is_full_signal_self[dispatcher_id].store(false);
 
@@ -200,20 +200,14 @@ public:
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      std::size_t hot_area_size = context.coordinator_num;
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
-          partition_id = 0;
+          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         } else {
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
         }
@@ -235,7 +229,6 @@ public:
                                   partition_id / hot_area_size % context.coordinator_num;;
         }
       }
-
       // 
       std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
       
@@ -272,12 +265,9 @@ public:
                           std::vector<int>& busy_local,
                           std::vector<int>& replicate_busy_local) {
     
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
+      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};           // dynamic replica nums
+      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0}; // secondary replica nums
 
-      
       size_t ycsbTableID = ycsb::ycsb::tableID;
       auto query_keys = t->keys;
 
@@ -294,14 +284,7 @@ public:
 
         cur_c_id = tab->get_dynamic_coordinator_id();
         secondary_c_ids = tab->get_secondary_coordinator_id();
-
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
+        from_nodes_id[cur_c_id] += 1;
 
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
@@ -417,7 +400,7 @@ public:
       weight_sum += weight_c;
       query_keys.push_back(customer_coordinator_id);
         
-      for(size_t i = 0 ; i >= 3 && i < t->keys.size() - 3; i ++ ){
+      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
         auto router_table = db.find_router_table(tpcc::stock::tableID);
 
         auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
@@ -582,7 +565,7 @@ public:
 
     // which_workload_(crossPartition, (int)cur_timestamp);
     // find minimal cost routing 
-    LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
     
     std::vector<int> busy_local(context.coordinator_num, 0);
     std::vector<int> replicate_busy_local(context.coordinator_num, 0);
@@ -645,10 +628,10 @@ public:
                  std::chrono::steady_clock::now() - staart)
                  .count() * 1.0 / 1000 ;
 
-    LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
+    // LOG(INFO) << "scheduler : " << cur_timestamp__ << " " << schedule_meta.txn_id.load();
               
     if(real_distribute_num > 0){
-      LOG(INFO) << "real_distribute_num = " << real_distribute_num;
+      // LOG(INFO) << "real_distribute_num = " << real_distribute_num;
     }
     while((int)schedule_meta.txn_id.load() < dispatcher_num){
       std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -670,33 +653,33 @@ public:
 
     if(dispatcher_id == 0){
 
+
+
+    if(cur_val > threshold && context.random_router == 0){ 
     LOG(INFO) << "busy: ";
     for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
       LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
                 << cur_val  << " " << aver_val << " "      << cur_val;
     }
-    LOG(INFO) << "replicate_busy: ";
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
-    }
-
-    if(cur_val > threshold && context.random_router == 0){ 
+    // LOG(INFO) << "replicate_busy: ";
+    // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+    //   LOG(INFO) <<" replicate_busy[" << i << "] = " << node_replica_busy[i];
+    // }
       if(WorkloadType::which_workload == myTestSet::YCSB){
         balance_master(aver_val, threshold);  
       } else {
         balance_master_tpcc(aver_val, threshold);  
       }
-      
+    LOG(INFO) << " after: ";
+    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
+    }
     }
 
     if(replica_cur_val > replica_threshold && context.random_router == 0){
       // balance_replica(node_replica_busy, replica_cur_val);
     }
 
-    LOG(INFO) << " after: ";
-    for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      LOG(INFO) <<" busy[" << i << "] = " << busy_[i];
-    }
 
     schedule_meta.reorder_done.store(true);
     }
@@ -708,7 +691,7 @@ public:
     cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                  std::chrono::steady_clock::now() - staart)
                  .count() * 1.0 / 1000 ;
-    LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
+    // LOG(INFO) << "scheduler + reorder : " << cur_timestamp__ << " " << cur_val << " " << aver_val << " " << threshold;
 
   }
 
@@ -1009,7 +992,7 @@ public:
       auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "ExecutorStatus::START : " << cur_timestamp__;
+      // LOG(INFO) << "ExecutorStatus::START : " << cur_timestamp__;
 
       if(id == 0){
         skip_s_phase.store(true);
@@ -1051,27 +1034,27 @@ public:
       cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - test)
                   .count() * 1.0 / 1000;
-      LOG(INFO) << "send : " << cur_timestamp__;
+      // LOG(INFO) << "send : " << cur_timestamp__;
 
       // 
       for (auto l = 0u; l < context.coordinator_num; l++){
         if(l == context.coordinator_id){
           continue;
         }
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
+        // LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
         messages_mutex[l]->lock();
         ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
         flush_message(async_messages, l);
         messages_mutex[l]->unlock();
       }
 
-      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-      }
+      // for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
+      //   LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
+      // }
 
       n_complete_workers.fetch_add(1);
       // VLOG(DEBUG_V) << "Generator " << id << " finish START";
-      LOG(INFO) << "?? done_schedule ?? = " << schedule_meta.all_done_schedule.load();
+      // LOG(INFO) << "?? done_schedule ?? = " << schedule_meta.all_done_schedule.load();
       while (static_cast<ExecutorStatus>(worker_status.load()) !=
              ExecutorStatus::CLEANUP) {
         process_request();

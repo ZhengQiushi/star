@@ -14,7 +14,7 @@
 namespace star {
 
 namespace lion {
-#define MAX_COORDINATOR_NUM 20
+#define MAX_COORDINATOR_NUM 80
 
 struct ScheduleMeta {
   ScheduleMeta(int coordinator_num, int batch_size){
@@ -43,7 +43,7 @@ struct ScheduleMeta {
     node_txns.resize(this->batch_size);
     txn_id.store(0);
     reorder_done.store(false);
-    LOG(INFO) << " CLEAR !!!! " << txn_id.load();
+    // LOG(INFO) << " CLEAR !!!! " << txn_id.load();
 
     start_schedule.store(0);
     done_schedule.store(0);
@@ -179,7 +179,7 @@ public:
       if (i == coordinator_id) {
         continue;
       }
-      LOG(INFO) << " new_signal_message from " << coordinator_id << " -> " << i;
+      // LOG(INFO) << " new_signal_message from " << coordinator_id << " -> " << i;
       ControlMessageFactory::new_signal_message(*messages[i],
                                                 static_cast<uint32_t>(status));
     }
@@ -240,23 +240,23 @@ public:
       n_started_workers.store(0);
       n_completed_workers.store(0);
       signal_worker(ExecutorStatus::START);
-      LOG(INFO) << "signal start, wait start";
+      // LOG(INFO) << "signal start, wait start";
       wait_all_workers_start();
       // std::this_thread::sleep_for(
       //     std::chrono::milliseconds(context.group_time));
       // set_worker_status(ExecutorStatus::STOP);
-      LOG(INFO) << "wait finish";
+      // LOG(INFO) << "wait finish";
       wait_all_workers_finish();
       
       broadcast_stop();
-      LOG(INFO) << "broadcast stop, wait stop";
+      // LOG(INFO) << "broadcast stop, wait stop";
       wait4_stop(n_coordinators - 1);
       // process replication
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::CLEANUP);
-      LOG(INFO) << "set_worker_status, wait_all_workers_finish";
+      // LOG(INFO) << "set_worker_status, wait_all_workers_finish";
       wait_all_workers_finish();
-      LOG(INFO) << "all_workers_finish, wait 4 ack";
+      // LOG(INFO) << "all_workers_finish, wait 4 ack";
       wait4_ack();
     }
 
@@ -270,7 +270,7 @@ public:
 
     for (;;) {
 
-      LOG(INFO) << "wait 4 signal";
+      // LOG(INFO) << "wait 4 signal";
       ExecutorStatus status = wait4_signal();
       if (status == ExecutorStatus::EXIT) {
         set_worker_status(ExecutorStatus::EXIT);
@@ -281,24 +281,24 @@ public:
       n_completed_workers.store(0);
       n_started_workers.store(0);
       set_worker_status(ExecutorStatus::START);
-      LOG(INFO) << "wait_all_workers_start";
+      // LOG(INFO) << "wait_all_workers_start";
       wait_all_workers_start();
-      LOG(INFO) << "start, wait 4 stop";
+      // LOG(INFO) << "start, wait 4 stop";
       wait4_stop(1);
       set_worker_status(ExecutorStatus::STOP);
-      LOG(INFO) << "wait_all_workers_finish";
+      // LOG(INFO) << "wait_all_workers_finish";
       wait_all_workers_finish();
       
       broadcast_stop();
-      LOG(INFO) << "broadcast_stop, wait4_stop";
+      // LOG(INFO) << "broadcast_stop, wait4_stop";
       wait4_stop(n_coordinators - 2);
       
       // process replication
       n_completed_workers.store(0);
       set_worker_status(ExecutorStatus::CLEANUP);
-      LOG(INFO) << "wait_all_workers_finish";
+      // LOG(INFO) << "wait_all_workers_finish";
       wait_all_workers_finish();
-      LOG(INFO) << "send_ack";
+      // LOG(INFO) << "send_ack";
       send_ack();
     }
   }

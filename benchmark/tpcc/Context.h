@@ -26,6 +26,8 @@ public:
     c.star_sync_in_single_master_phase = this->star_sync_in_single_master_phase;
     return c;
   }
+  
+  std::size_t getGranule(std::size_t key) const { return key;}
 
   Context get_cross_partition_context() const {
     Context c = *this;

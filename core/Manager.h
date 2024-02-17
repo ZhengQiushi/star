@@ -236,6 +236,10 @@ public:
                 << ") on the non-coordinator node exits.";
     }
   }
+  
+  void push_replica_message(Message *message) override {
+    push_message(message);
+  }
 
   void push_message(Message *message) override {
 

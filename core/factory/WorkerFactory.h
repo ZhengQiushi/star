@@ -30,6 +30,11 @@
 #include "protocol/SiloGC/SiloGCGenerator.h"
 #include "protocol/SiloGC/SiloGCExecutor.h"
 
+#include "protocol/H-Store/HStore.h"
+#include "protocol/H-Store/HStoreManager.h"
+#include "protocol/H-Store/HStoreGenerator.h"
+#include "protocol/H-Store/HStoreExecutor.h"
+
 // #include "protocol/TwoPLGC/TwoPLGC.h"
 // #include "protocol/TwoPLGC/TwoPLGCExecutor.h"
 
@@ -152,7 +157,8 @@ public:
 
     std::unordered_set<std::string> protocols = {"Silo",  "SiloGC",  "Star",
                                                  "TwoPL", "TwoPLGC", "Calvin",
-                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria", "LION-S", "CLAY-S"};
+                                                 "Lion", "LIONS", "Hermes", "MyClay", "Aria", "LION-S", "CLAY-S",
+                                                 "HStore" };
     LOG(INFO) << "context.protocol: " << context.protocol;
 
     CHECK(protocols.count(context.protocol) == 1);
@@ -198,7 +204,24 @@ public:
       }
       workers.push_back(manager);
 
-    } else if (context.protocol == "Star") {
+    } else if (context.protocol == "HStore") {
+
+      using TransactionType = star::HStoreTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+
+      auto manager = std::make_shared<HStoreManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<HStoreExecutor<WorkloadType>>(
+            coordinator_id, i, db, context, manager->worker_status,
+            manager->n_completed_workers, manager->n_started_workers,
+            manager->txn_meta));
+      }
+      workers.push_back(manager);
+    } 
+    else if (context.protocol == "Star") {
 
       CHECK(context.partition_num %
                 (context.worker_num * context.coordinator_num) ==
@@ -291,7 +314,7 @@ public:
           typename WorkloadType::DatabaseType;
 
       int manager_thread_id = context.worker_num;
-      // manager_thread_id += 1;
+      manager_thread_id += 1;
 
       auto manager = std::make_shared<LionSManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
@@ -304,10 +327,10 @@ public:
             manager->n_started_workers));
       }
       // 
-      // workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
-      //       coordinator_id, workers.size(), db, context,
-      //       manager->worker_status, manager->n_completed_workers,
-      //       manager->n_started_workers));
+      workers.push_back(std::make_shared<LionMetisExecutor<WorkloadType>>(
+            coordinator_id, workers.size(), db, context,
+            manager->worker_status, manager->n_completed_workers,
+            manager->n_started_workers));
 
       workers.push_back(manager);
       // workers.push_back(recorder);  
@@ -602,8 +625,27 @@ public:
       }
 
       workers.push_back(manager);
+    } else if (context.protocol == "HStore") {
 
-    } else if (context.protocol == "Star") {
+      using TransactionType = star::HStoreTransaction;
+      using WorkloadType =
+          typename InferType<Context>::template WorkloadType<TransactionType>;
+      using DatabaseType = 
+          typename WorkloadType::DatabaseType;
+
+      auto manager = std::make_shared<HStoreManager<WorkloadType>>(
+          coordinator_id, context.worker_num, context, stop_flag);
+
+      for (auto i = 0u; i < context.worker_num; i++) {
+        workers.push_back(std::make_shared<HStoreGenerator<WorkloadType, HStore<DatabaseType>>>(
+            coordinator_id, i, db, context, manager->worker_status,
+            manager->n_completed_workers, manager->n_started_workers,
+            manager->schedule_meta));
+      }
+      workers.push_back(manager);
+    } 
+    
+    else if (context.protocol == "Star") {
       //  CHECK(context.partition_num %
       //           (context.worker_num * context.coordinator_num) ==
       //       0)
@@ -675,7 +717,7 @@ public:
       using DatabaseType = 
           typename WorkloadType::DatabaseType;
 
-      int manager_thread_id = context.worker_num;// + 1;
+      int manager_thread_id = context.worker_num + 1;
 
       auto manager = std::make_shared<LionSManager<WorkloadType>>(
           coordinator_id, manager_thread_id, context, stop_flag);
@@ -688,9 +730,9 @@ public:
       }
       // 
       // if(context.lion_with_metis_init){
-        // workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
-        //       coordinator_id, workers.size(), db, context, manager->worker_status,
-        //       manager->n_completed_workers, manager->n_started_workers));
+        workers.push_back(std::make_shared<group_commit::LionMetisGenerator<WorkloadType, Lion<DatabaseType>>>(
+              coordinator_id, workers.size(), db, context, manager->worker_status,
+              manager->n_completed_workers, manager->n_started_workers));
       // }
       workers.push_back(manager);
       // workers.push_back(recorder);  

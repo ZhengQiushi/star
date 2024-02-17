@@ -38,7 +38,19 @@ public:
 
   virtual void onExit() {}
 
+  virtual void start_hstore_master() {}
+
+  virtual void push_master_special_message(Message *message) { }
+
+  virtual Message *pop_master_message() { return nullptr; }
+
+  virtual void push_master_message(Message *message) { }
+
   virtual void push_message(Message *message) = 0;
+
+  virtual void push_replica_message(Message *message) {
+    DCHECK(false);
+  }
 
   virtual Message *pop_message() = 0;
 
@@ -101,6 +113,14 @@ public:
 
   Percentile<int64_t> router_percentile, execute_percentile, commit_percentile;
   Percentile<int64_t> analyze_percentile, execute_latency;
+
+  std::atomic<uint64_t> n_failed_write_lock{0}, n_failed_read_lock{0}, n_failed_no_cmd{0}, n_failed_cmd_not_ready{0};
+
+  std::atomic<uint64_t> last_window_persistence_latency{0};
+  std::atomic<uint64_t> last_window_txn_latency{0};
+  std::atomic<uint64_t> last_window_queued_lock_req_latency{0};
+  std::atomic<uint64_t> last_window_lock_req_latency{0};
+  std::atomic<uint64_t> last_window_active_txns{0};
 };
 
 } // namespace star

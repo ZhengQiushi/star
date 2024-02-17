@@ -11,6 +11,8 @@ DEFINE_int32(payment_dist, 15, "payment distributed.");
 // ./main --logtostderr=1 --id=1 --servers="127.0.0.1:10010;127.0.0.1:10011"
 // cmake -DCMAKE_BUILD_TYPE=Release
 
+bool do_tid_check = false;
+
 int main(int argc, char *argv[]) {
 
   google::InitGoogleLogging(argv[0]);
@@ -20,6 +22,7 @@ int main(int argc, char *argv[]) {
   SETUP_CONTEXT(context);
 
   context.operation_replication = FLAGS_operation_replication;
+  context.granules_per_partition = FLAGS_granule_count;
 
   if (FLAGS_query == "mixed") {
     context.workloadType = star::tpcc::TPCCWorkloadType::MIXED;

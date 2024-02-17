@@ -27,6 +27,7 @@ public:
     data_.push_back(value);
   }
 
+
   void add(const std::vector<element_type> &v) {
     // std::lock_guard<std::mutex> l(mm);
     isSorted_ = false;
@@ -45,8 +46,8 @@ public:
   element_type nth(double n) {
     // std::lock_guard<std::mutex> l(mm);
     if (data_.size() == 0) {
-      element_type n;
-      return n;
+      element_type nn;
+      return nn;
     }
     checkSort();
     DCHECK(n > 0 && n <= 100);
@@ -54,6 +55,10 @@ public:
     auto i = static_cast<decltype(sz)>(ceil(n / 100 * sz)) - 1;
     DCHECK(i >= 0 && i < size());
     return data_[i];
+  }
+
+  int avg() {
+    return sum / (size() + 0.1);
   }
 
   void save_cdf(const std::string &path) {
@@ -103,5 +108,6 @@ private:
   std::atomic<int> busy;
   bool isSorted_ = true;
   std::vector<element_type> data_;
+  int sum = 0;
 };
 } // namespace star

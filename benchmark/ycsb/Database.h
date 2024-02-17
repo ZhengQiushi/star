@@ -8,6 +8,8 @@
 #include "benchmark/ycsb/Random.h"
 #include "benchmark/ycsb/Schema.h"
 #include "common/Operation.h"
+#include "common/ThreadPool.h"
+#include "common/WALLogger.h"
 #include "core/Partitioner.h"
 #include "core/Table.h"
 #include "core/RouterValue.h"
@@ -249,7 +251,7 @@ public:
 
     for (auto i = 0u; i < partitionNum; i++) {
       if (partitioner == nullptr ||
-          partitioner->is_partition_replicated_on_me(i)) {
+          coordinator_id != partitioner->total_coordinators() && partitioner->is_partition_replicated_on_me(i)) {
         all_parts.push_back(i);
       }
     }
@@ -466,6 +468,57 @@ public:
     CHECK(false); // not supported
   }
 
+  void start_checkpoint_process(const std::vector<int> & partitions) {
+    static thread_local std::vector<char> checkpoint_buffer;
+    checkpoint_buffer.reserve(8 * 1024 * 1024);
+    const std::size_t write_buffer_threshold = 128 * 1024;
+    for (auto partitionID: partitions) {
+      ITable *table = find_table(0, partitionID);
+      table->turn_on_cow();
+      threadpools[partitionID % 6]->enqueue([this,write_buffer_threshold, table]() {
+        table->dump_copy([&, this, table](const void * k, const void * v){
+          std::size_t size_needed = table->key_size();
+          auto write_idx = checkpoint_buffer.size();
+          checkpoint_buffer.resize(size_needed + checkpoint_buffer.size());
+          memcpy(&checkpoint_buffer[write_idx], (const char*)k, table->key_size());
+
+          size_needed = table->value_size();
+          write_idx = checkpoint_buffer.size();
+          checkpoint_buffer.resize(size_needed + checkpoint_buffer.size());
+          memcpy(&checkpoint_buffer[write_idx], (const char*)v, table->value_size());
+        }, [&, this, write_buffer_threshold, table]() { // Called when the table is unlocked
+          if (checkpoint_buffer.size() >= write_buffer_threshold) {
+            this->checkpoint_file_writer->write(&checkpoint_buffer[0], checkpoint_buffer.size(), false);
+            checkpoint_buffer.clear();
+          }
+          //checkpoint_buffer.clear();
+        });
+      });
+    }
+  }
+
+  bool checkpoint_work_finished(const std::vector<int> & partitions) {
+    for (auto partitionID: partitions) {
+      ITable *table = find_table(0, partitionID);
+      if (table->cow_dump_finished() == false)
+        return false;
+    }
+    return true;
+  }
+
+  void stop_checkpoint_process(const std::vector<int> & partitions) {
+    for (auto partitionID: partitions) {
+      ITable *table = find_table(0, partitionID);
+      auto cleanup_work = table->turn_off_cow();
+      threadpools[partitionID % 6]->enqueue(cleanup_work);
+    }
+  }
+
+  ~Database() {
+    for (size_t i = 0; i < threadpools.size(); ++i) {
+      delete threadpools[i];
+    }
+  }
 
   template<typename KeyType>
   std::set<int32_t> getPartitionIDs(const star::Context &context, KeyType key) const{
@@ -568,6 +621,9 @@ private:
   std::size_t coordinator_id; // = context.coordinator_id;
   std::size_t partitionNum; // = context.partition_num;
   std::size_t threadsNum; // = context.worker_num;
+
+  std::vector<ThreadPool*> threadpools;
+  WALLogger * checkpoint_file_writer = nullptr;
 };
 } // namespace ycsb
 } // namespace star

@@ -50,6 +50,21 @@ DEFINE_string(log_path, "", "path to disk logging.");
 DEFINE_bool(tcp_no_delay, true, "TCP Nagle algorithm, true: disable nagle");
 DEFINE_bool(tcp_quick_ack, false, "TCP quick ack mode, true: enable quick ack");
 DEFINE_bool(cpu_affinity, true, "pinning each thread to a separate core");
+
+DEFINE_bool(hstore_command_logging, true, "configure command logging mode for hstore");
+DEFINE_int32(cross_txn_workers, 0, "number of workers generating cross-partition transactions");
+DEFINE_int32(persist_latency, 110, "emulated persist latency");
+DEFINE_int32(wal_group_commit_time, 10, "wal group commit time in us");
+DEFINE_int32(wal_group_commit_size, 7, "wal group commit batch size");
+DEFINE_bool(aria_read_only, true, "aria read only optimization");
+DEFINE_bool(aria_reordering, true, "aria reordering optimization");
+DEFINE_bool(aria_si, false, "aria snapshot isolation");
+DEFINE_int32(stragglers_per_batch, 0, "# stragglers in a batch");
+DEFINE_int32(stragglers_num_txn_len, 10, "# straggler transaction length types"); 
+DEFINE_int32(stragglers_partition, -1, "straggler partition");
+DEFINE_bool(lotus_async_repl, false, "Lotus async replication");
+
+
 DEFINE_bool(enable_data_transfer, false, "enable data transfer or not");
 
 DEFINE_bool(lion_no_switch, false, "");
@@ -76,7 +91,20 @@ DEFINE_int32(cpu_core_id, 0, "cpu core id");
 DEFINE_int32(skew_factor, 0, "workload skew factor");
 DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
 
+enum LotusCheckpointScheme {
+  COW_OFF_CHECKPOINT_OFF_LOGGING_ON = 0,
+  COW_ON_CHECKPOINT_OFF_LOGGING_ON = 1,
+  COW_ON_CHECKPOINT_ON_LOGGING_ON = 2,
+  COW_ON_CHECKPOINT_ON_LOGGING_OFF = 3
+};
 
+
+DEFINE_int32(lotus_checkpoint, 0, "Lotus COW checkpoint scheme");
+DEFINE_string(lotus_checkpoint_location, "", "Path to store checkpoint files");
+DEFINE_double(stragglers_zipf_factor, 0, "straggler zipfian factor");
+DEFINE_int32(sender_group_nop_count, 40000, "# nop insts to executes during TCP sender message grouping");
+DEFINE_int32(granule_count, 1, "# granules in a partition");
+DEFINE_bool(hstore_active_active, false, "H-Store style active-active replication");
 
 #define SETUP_CONTEXT(context)                                                 \
   boost::algorithm::split(context.peers, FLAGS_servers,                        \
@@ -116,7 +144,7 @@ DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
   context.migration_only = FLAGS_migration_only;                               \
   context.nop_prob = FLAGS_nop_prob;                                           \
   context.n_nop = FLAGS_n_nop;                                                 \
-  context.rn_nop = FLAGS_rn_nop;                                               \  
+  context.rn_nop = FLAGS_rn_nop;                                               \
   context.time_to_run = FLAGS_time_to_run;                                     \
   context.workload_time = FLAGS_workload_time;                                 \
   context.init_time = FLAGS_init_time;                                         \
@@ -131,4 +159,22 @@ DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
   context.cpu_core_id = FLAGS_cpu_core_id;                                     \
   context.skew_factor = FLAGS_skew_factor;                                     \
   context.repartition_strategy = FLAGS_repartition_strategy;                   \
+  context.cross_txn_workers = FLAGS_cross_txn_workers;                         \
+  context.emulated_persist_latency = FLAGS_persist_latency;                    \
+  context.wal_group_commit_time = FLAGS_wal_group_commit_time;                 \
+  context.hstore_command_logging = FLAGS_hstore_command_logging;               \
+  context.group_commit_batch_size = FLAGS_wal_group_commit_size;               \
+  context.aria_read_only_optmization = FLAGS_aria_read_only;                   \
+  context.aria_reordering_optmization = FLAGS_aria_reordering;                 \
+  context.aria_snapshot_isolation = FLAGS_aria_si;                             \
+  context.stragglers_per_batch = FLAGS_stragglers_per_batch;                   \
+  context.stragglers_partition = FLAGS_stragglers_partition;                   \
+  context.sender_group_nop_count = FLAGS_sender_group_nop_count;               \
+  context.straggler_zipf_factor = FLAGS_stragglers_zipf_factor;                \
+  context.straggler_num_txn_len = FLAGS_stragglers_num_txn_len;                \
+  context.granules_per_partition = FLAGS_granule_count;                        \
+  context.lotus_async_repl = FLAGS_lotus_async_repl;                           \
+  context.lotus_checkpoint = FLAGS_lotus_checkpoint;                           \
+  context.lotus_checkpoint_location = FLAGS_lotus_checkpoint_location;         \
+  context.hstore_active_active = FLAGS_hstore_active_active;                   \
   context.set_star_partitioner();

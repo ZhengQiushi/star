@@ -18,6 +18,8 @@
 #include "benchmark/tpcc/Schema.h"
 #include "common/Operation.h"
 #include "common/Time.h"
+#include "common/ThreadPool.h"
+#include "common/WALLogger.h"
 #include "core/Partitioner.h"
 #include "core/Table.h"
 #include "core/RouterValue.h"
@@ -253,7 +255,7 @@ public:
     for (auto threadID = 0u; threadID < threadsNum; threadID++) {
       v.emplace_back([&](int thread_id) {
         
-        for (auto p_id = thread_id; p_id < partitionNum; p_id += threadsNum) {
+        for (size_t p_id = thread_id; p_id < partitionNum; p_id += threadsNum) {
           auto partitionID = p_id;
           LOG(INFO) << "threadID: " << thread_id << " " << p_id << " ";
           size_t last_replica = (partitionID + 1) % context.coordinator_num;
@@ -1156,6 +1158,67 @@ public:
     }
   }
 
+
+  void start_checkpoint_process(const std::vector<int> & partitions) {
+    static thread_local std::vector<char> checkpoint_buffer;
+    checkpoint_buffer.reserve(8 * 1024 * 1024);
+    const std::size_t write_buffer_threshold = 128 * 1024;
+    for (auto partitionID: partitions) {
+      for (std::size_t i = 0; i < tbl_vecs.size(); ++i) {
+        if (i == 3 || i == 8) continue; // No need to checkpoint readonly customer_name_idx / item_table
+        ITable *table = find_table(i, partitionID);
+        table->turn_on_cow();
+        threadpools[partitionID % 6]->enqueue([this,write_buffer_threshold, table]() {
+          table->dump_copy([&, this, table](const void * k, const void * v){
+            std::size_t size_needed = table->key_size();
+            auto write_idx = checkpoint_buffer.size();
+            checkpoint_buffer.resize(size_needed + checkpoint_buffer.size());
+            memcpy(&checkpoint_buffer[write_idx], (const char*)k, table->key_size());
+
+            size_needed = table->value_size();
+            write_idx = checkpoint_buffer.size();
+            checkpoint_buffer.resize(size_needed + checkpoint_buffer.size());
+            memcpy(&checkpoint_buffer[write_idx], (const char*)v, table->value_size());
+          }, [&, this, write_buffer_threshold, table]() { // Called when the table is unlocked
+            if (checkpoint_buffer.size() >= write_buffer_threshold) {
+              this->checkpoint_file_writer->write(&checkpoint_buffer[0], checkpoint_buffer.size(), false);
+              checkpoint_buffer.clear();
+            }
+            //checkpoint_buffer.clear();
+          });
+      });
+      }
+    }
+  }
+
+  bool checkpoint_work_finished(const std::vector<int> & partitions) {
+    for (auto partitionID: partitions) {
+      for (std::size_t i = 0; i < tbl_vecs.size(); ++i) {
+        if (i == 3 || i == 8) continue; // No need to checkpoint readonly customer_name_idx / item_table
+        ITable *table = find_table(i, partitionID);
+        if (table->cow_dump_finished() == false)
+          return false;
+      }
+    }
+    return true;
+  }
+
+  void stop_checkpoint_process(const std::vector<int> & partitions) {
+    for (auto partitionID: partitions) {
+      for (std::size_t i = 0; i < tbl_vecs.size(); ++i) {
+        if (i == 3 || i == 8) continue; // No need to checkpoint readonly customer_name_idx / item_table
+        ITable *table = find_table(i, partitionID);
+        auto cleanup_work = table->turn_off_cow();
+        threadpools[partitionID % 6]->enqueue(cleanup_work);
+      }
+    }
+  }
+
+  ~Database() {
+    for (size_t i = 0; i < threadpools.size(); ++i) {
+      delete threadpools[i];
+    }
+  }
 private:
   void warehouseInit(std::size_t partitionID, ITable *table) {
 
@@ -1638,6 +1701,9 @@ private:
   std::size_t coordinator_id; // = context.coordinator_id;
   std::size_t partitionNum; // = context.partition_num;
   std::size_t threadsNum; // = context.worker_num;
+
+  std::vector<ThreadPool*> threadpools;
+  WALLogger * checkpoint_file_writer = nullptr;
 };
 } // namespace tpcc
 } // namespace star

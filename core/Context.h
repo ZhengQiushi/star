@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "common/WALLogger.h"
+
 namespace star {
 class Context {
 
@@ -39,9 +41,22 @@ public:
   std::size_t sleep_time = 50; // us
   std::string partitioner;
   std::size_t delay_time = 0;
+  std::size_t wal_group_commit_time = 10;// us
+
   std::string log_path;
   std::string cdf_path;
   std::size_t cpu_core_id = 0;
+
+  std::size_t cross_txn_workers = 0;
+  bool hstore_command_logging = true;
+  star::WALLogger * logger = nullptr;
+  std::size_t group_commit_batch_size = 7;
+  // https://www.storagereview.com/review/intel-ssd-dc-p4510-review
+  // We emulate 110us write latency of Intel DC P4510 SSD.
+  std::size_t emulated_persist_latency = 110;
+     
+  bool enable_hstore_master = false;
+
   std::size_t skew_factor = 0;
   std::size_t time_to_run = 25;
   std::size_t workload_time = 30;
@@ -91,5 +106,17 @@ public:
   bool aria_snapshot_isolation = false;
   
   std::vector<std::string> peers;
+  int stragglers_per_batch = 0;
+  int stragglers_total_wait_time = 20000;
+  int stragglers_partition = -1;
+  int sender_group_nop_count = 40000;
+  double straggler_zipf_factor = 0;
+  std::size_t straggler_num_txn_len = 10;
+  std::size_t granules_per_partition = 128;
+  bool lotus_async_repl = false;
+  int lotus_checkpoint = 0;
+  std::string lotus_checkpoint_location;
+  bool hstore_active_active = false;
+  bool lotus_sp_parallel_exec_commit = false;
 };
 } // namespace star

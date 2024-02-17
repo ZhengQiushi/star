@@ -5,6 +5,7 @@
 #pragma once
 
 #include "common/Percentile.h"
+#include "common/WALLogger.h"
 #include "core/ControlMessage.h"
 #include "core/Defs.h"
 #include "core/Delay.h"
@@ -247,6 +248,10 @@ public:
 
   void push_message(Message *message) override { in_queue.push(message); }
 
+  void push_replica_message(Message *message) override { 
+    CHECK(false);
+  }
+
   Message *pop_message() override {
     if (out_queue.empty())
       return nullptr;
@@ -309,8 +314,8 @@ public:
 
   virtual void setupHandlers(TransactionType &txn) = 0;
 
-protected:
-  void flush_messages() {
+
+  virtual void flush_messages() {
 
     for (auto i = 0u; i < messages.size(); i++) {
       if (i == coordinator_id) {
@@ -328,7 +333,7 @@ protected:
       init_message(messages[i].get(), i);
     }
   }
-
+protected:
   void init_message(Message *message, std::size_t dest_node_id) {
     message->set_source_node_id(coordinator_id);
     message->set_dest_node_id(dest_node_id);
@@ -337,7 +342,7 @@ protected:
 
 protected:
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;
@@ -345,8 +350,11 @@ protected:
   ProtocolType protocol;
   WorkloadType workload;
   std::unique_ptr<Delay> delay;
-  
-  Percentile<int64_t> percentile, dist_latency, local_latency;
+
+  Percentile<int64_t> percentile, dist_latency, local_latency, commit_latency; 
+  Percentile<uint64_t> local_txn_stall_time_pct, local_txn_commit_work_time_pct, local_txn_commit_persistence_time_pct, local_txn_commit_prepare_time_pct, local_txn_commit_replication_time_pct, local_txn_commit_write_back_time_pct, local_txn_commit_unlock_time_pct, local_txn_local_work_time_pct, local_txn_remote_work_time_pct;
+  Percentile<uint64_t> dist_txn_stall_time_pct, dist_txn_commit_work_time_pct, 
+  dist_txn_commit_persistence_time_pct, dist_txn_commit_prepare_time_pct,dist_txn_commit_write_back_time_pct, dist_txn_commit_unlock_time_pct, dist_txn_local_work_time_pct, dist_txn_commit_replication_time_pct, dist_txn_remote_work_time_pct;
 
   std::unique_ptr<TransactionType> transaction;
   std::vector<std::unique_ptr<Message>> messages;
@@ -375,5 +383,30 @@ protected:
   // Percentile<int64_t> time_other_module;
 
   // Percentile<int64_t> time_total;
+  WALLogger * logger = nullptr;
+
+  void record_txn_breakdown_stats(TransactionType & txn) {
+    if (txn.is_single_partition()) {
+      local_txn_stall_time_pct.add(txn.get_stall_time());
+      local_txn_commit_work_time_pct.add(txn.get_commit_work_time());
+      local_txn_commit_write_back_time_pct.add(txn.get_commit_write_back_time());
+      local_txn_commit_unlock_time_pct.add(txn.get_commit_unlock_time());
+      local_txn_local_work_time_pct.add(txn.get_local_work_time());
+      local_txn_remote_work_time_pct.add(txn.get_remote_work_time());
+      local_txn_commit_persistence_time_pct.add(txn.get_commit_persistence_time());
+      local_txn_commit_prepare_time_pct.add(txn.get_commit_prepare_time());
+      local_txn_commit_replication_time_pct.add(txn.get_commit_replication_time());
+    } else {
+      dist_txn_stall_time_pct.add(txn.get_stall_time());
+      dist_txn_commit_work_time_pct.add(txn.get_commit_work_time());
+      dist_txn_commit_write_back_time_pct.add(txn.get_commit_write_back_time());
+      dist_txn_commit_unlock_time_pct.add(txn.get_commit_unlock_time());
+      dist_txn_local_work_time_pct.add(txn.get_local_work_time());
+      dist_txn_remote_work_time_pct.add(txn.get_remote_work_time());
+      dist_txn_commit_persistence_time_pct.add(txn.get_commit_persistence_time());
+      dist_txn_commit_prepare_time_pct.add(txn.get_commit_prepare_time());
+      dist_txn_commit_replication_time_pct.add(txn.get_commit_replication_time());
+    }
+  }
 };
 } // namespace star

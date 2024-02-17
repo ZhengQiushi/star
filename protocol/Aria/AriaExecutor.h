@@ -878,7 +878,10 @@ public:
 
     return message;
   }
-
+  void push_replica_message(Message *message) override { 
+    DCHECK(false);
+    in_queue.push(message); 
+  }
   void flush_messages() {
 
     for (auto i = 0u; i < messages.size(); i++) {

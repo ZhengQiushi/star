@@ -439,7 +439,7 @@ public:
       partition_id_ %= context.partition_num;
 
       // 
-      std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, storage);
+      std::unique_ptr<TransactionType> cur_transaction = workload.next_transaction(context, partition_id_, this->id, storage);
       
       simpleTransaction* txn = new simpleTransaction();
       txn->keys = cur_transaction->get_query();

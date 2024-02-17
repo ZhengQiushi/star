@@ -12,6 +12,34 @@
 namespace star {
 namespace tpcc {
 
+int32_t wid_to_granule_id(int32_t W_ID, const Context &context) {
+  if (context.granules_per_partition == 1) {
+    return 0;
+  }
+  auto W_NUM = context.partition_num;
+  auto D_NUM = 10;
+  return W_ID + context.granules_per_partition - (W_NUM + 1);
+}
+
+int32_t did_to_granule_id(int32_t D_ID, const Context &context) {
+  if (context.granules_per_partition == 1) {
+    return 0;
+  }
+  auto W_NUM = context.partition_num;
+  auto D_NUM = 10;
+  return D_ID + context.granules_per_partition - (W_NUM + 1) - (D_NUM + 1);
+}
+
+int32_t id_to_granule_id(int32_t ID, const Context &context) {
+  if (context.granules_per_partition == 1) {
+    return 0;
+  }
+  auto W_NUM = context.partition_num;
+  auto D_NUM = 10;
+  return ID % (context.granules_per_partition - (W_NUM + 1) - (D_NUM + 1));
+}
+
+
 struct NewOrderQuery {
   bool isRemote() {
     for (auto i = 0; i < O_OL_CNT; i++) {
@@ -60,6 +88,30 @@ struct NewOrderQuery {
 
   NewOrderQueryInfo INFO[15];
   std::vector<uint64_t> record_keys; // for migration
+
+  int32_t parts[2];
+  int32_t granules[2][17];
+  int32_t part_granule_count[2];
+  int num_parts = 0;
+
+  int32_t get_part(int i) {
+    DCHECK(i < num_parts);
+    return parts[i];
+  }
+
+  int32_t get_part_granule_count(int i) {
+    DCHECK(i < num_parts);
+    return part_granule_count[i];
+  }
+
+  int32_t get_part_granule(int i, int j) {
+    DCHECK(i < num_parts);
+    return granules[i][j];
+  }
+
+  int number_of_parts() {
+    return num_parts;
+  }
 };
 
 class makeNewOrderQuery {
@@ -80,6 +132,11 @@ public:
     // The district number (D_ID) is randomly selected within [1 .. 10] from the
     // home warehouse (D_W_ID = W_ID).
     
+
+    query.num_parts = 1;
+
+    query.parts[0] = W_ID - 1;
+    query.part_granule_count[0] = query.part_granule_count[1] = 0;
 
     // The non-uniform random customer number (C_ID) is selected using the
     // NURand(1023,1,3000) function from the selected district number (C_D_ID =
@@ -139,7 +196,7 @@ public:
       // The first supplying warehouse number (OL_SUPPLY_W_ID) is selected as
       // the home warehouse 90% of the time and as a remote warehouse 10% of the
       // time.
-
+      int part_idx = -1;
       if (i == 0) {
         // figure out buy from which warehouse
         if (x <= context.newOrderCrossPartitionProbability &&
@@ -150,14 +207,49 @@ public:
           if(query.INFO[i].OL_SUPPLY_W_ID == 0){
             query.INFO[i].OL_SUPPLY_W_ID = W_ID;
           }
-
+          query.num_parts = 2;
+          query.parts[0] = query.INFO[i].OL_SUPPLY_W_ID - 1;
+          query.parts[1] = W_ID - 1;
+          DCHECK(query.part_granule_count[1] == 0);
+          query.granules[1][query.part_granule_count[1]++] = wid_to_granule_id(W_ID, context);
+          part_idx = 0;
         } else {
           query.INFO[i].OL_SUPPLY_W_ID = W_ID;
+          query.granules[0][query.part_granule_count[0]++] = wid_to_granule_id(W_ID, context);
+          part_idx = 0;
         }
       } else {
         query.INFO[i].OL_SUPPLY_W_ID = W_ID;
+        part_idx = query.num_parts == 2 ? 1: 0;
       }
       query.INFO[i].OL_QUANTITY = 5; // random.uniform_dist(1, 10);
+
+      auto g = id_to_granule_id(query.INFO[i].OL_I_ID, context);
+      bool exist = false;
+
+      for (auto k = 0; k < query.part_granule_count[part_idx]; ++k) {
+        if ((int)g == query.granules[part_idx][k]) {
+          exist = true;
+          break;
+        }
+      }
+      if (exist == false) {
+        query.granules[part_idx][query.part_granule_count[part_idx]++] = g;
+      }
+    }
+    
+    int part_idx = query.num_parts == 2 ? 1: 0;
+    auto g = did_to_granule_id(query.D_ID, context);
+    bool exist = false;
+
+    for (auto k = 0; k < query.part_granule_count[part_idx]; ++k) {
+      if ((int)g == query.granules[part_idx][k]) {
+        exist = true;
+        break;
+      }
+    }
+    if (exist == false) {
+      query.granules[part_idx][query.part_granule_count[part_idx]++] = g;
     }
 
     return query;

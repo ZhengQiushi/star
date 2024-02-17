@@ -162,7 +162,7 @@ namespace star
             // int idle_coord_id = -1;
             for(auto& idle: idle_node){
                 int cur_min_cost = 0;
-                for(int i = 0 ; i < txns.size(); i ++ ){
+                for(size_t i = 0 ; i < txns.size(); i ++ ){
                     cur_min_cost += cost[txns[i]->idx_][idle.first];
                 }
                 if(min_cost > cur_min_cost && (migrate_only || true)){
@@ -214,7 +214,7 @@ namespace star
         void AddTxn(simpleTransaction* txn){
             bool need_new_clump = true;
 
-            for(int i = 0; i < txn->keys.size(); i ++ ){
+            for(size_t i = 0; i < txn->keys.size(); i ++ ){
                 if(!key_clumps_idx.count(txn->keys[i])) continue;
                 // LOG(INFO) << "ADD TO " << key_clumps_idx[txn->keys[i]] << " " << txn->keys[0] << " " << txn->keys[1] << " " << txn->keys[4];
                 need_new_clump = false;
@@ -222,7 +222,7 @@ namespace star
                 break;
             }
             if(need_new_clump){
-                for(int i = 0; i < txn->keys.size(); i ++ ){
+                for(size_t i = 0; i < txn->keys.size(); i ++ ){
                     key_clumps_idx[txn->keys[i]] = clumps.size();
                 }
                 // LOG(INFO) << "ADD TO " << clumps.size() << " " << txn->keys[0] << " " << txn->keys[1] << " " << txn->keys[4];

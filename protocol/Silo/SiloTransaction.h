@@ -22,8 +22,8 @@ public:
   using MetaDataType = std::atomic<uint64_t>;
 
   SiloTransaction(std::size_t coordinator_id, std::size_t partition_id,
-                  Partitioner &partitioner)
-      : coordinator_id(coordinator_id), partition_id(partition_id),
+                  Partitioner &partitioner, std::size_t ith_replica)
+      : coordinator_id(coordinator_id), partition_id(partition_id), ith_replica(ith_replica),
         startTime(std::chrono::steady_clock::now()), partitioner(partitioner) {
     reset();
   }
@@ -65,6 +65,22 @@ public:
   virtual TransactionResult transmit_execute(std::size_t worker_id) = 0;
 
 
+  virtual int32_t get_partition_count() = 0;
+
+  virtual int32_t get_partition(int i) = 0;
+
+  virtual int32_t get_partition_granule_count(int i) = 0;
+
+  virtual int32_t get_granule(int partition_id, int j) = 0;
+
+  virtual bool is_single_partition() = 0;
+
+  // Which replica this txn runs on
+  virtual const std::string serialize(std::size_t ith_replica = 0) = 0;
+
+  virtual void deserialize_lock_status(Decoder & dec) {}
+
+  virtual void serialize_lock_status(Encoder & enc) {}
 
   virtual void reset_query() = 0;
   virtual std::string print_raw_query_str() =0;
@@ -73,7 +89,7 @@ public:
   virtual const std::vector<u_int64_t> get_query_master() = 0;
   virtual const std::vector<bool> get_query_update() = 0;
 
-    virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
+  virtual std::set<int> txn_nodes_involved(bool is_dynamic) = 0;
   virtual std::unordered_map<int, int> txn_nodes_involved(int& max_node, bool is_dynamic) = 0;
   virtual bool check_cross_node_txn(bool is_dynamic) = 0;
   virtual std::size_t get_partition_id() = 0;
@@ -100,7 +116,8 @@ public:
 
   template <class KeyType, class ValueType>
   void search_for_read(std::size_t table_id, std::size_t partition_id,
-                       const KeyType &key, ValueType &value) {
+                       const KeyType &key, ValueType &value,
+std::size_t granule_id = 0) {
 
     SiloRWKey readKey;
 
@@ -121,7 +138,8 @@ public:
 
   template <class KeyType, class ValueType>
   void search_for_update(std::size_t table_id, std::size_t partition_id,
-                         const KeyType &key, ValueType &value) {
+                         const KeyType &key, ValueType &value,
+std::size_t granule_id = 0) {
 
     SiloRWKey readKey;
 
@@ -143,7 +161,8 @@ public:
 
   template <class KeyType, class ValueType>
   void update(std::size_t table_id, std::size_t partition_id,
-              const KeyType &key, const ValueType &value) {
+              const KeyType &key, const ValueType &value, 
+std::size_t granule_id = 0) {
     SiloRWKey writeKey;
 
     writeKey.set_table_id(table_id);
@@ -356,6 +375,11 @@ public:
   Breakdown b;
   ExecutorStatus status;
   int prepare, fetch, commit;
+
+  uint64_t txn_random_seed_start = 0;
+  uint64_t transaction_id = 0;
+  uint64_t straggler_wait_time = 0;
+  std::size_t ith_replica;
 };
 
 } // namespace star

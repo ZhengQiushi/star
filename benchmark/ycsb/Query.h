@@ -21,6 +21,29 @@ struct YCSBQuery {
     UPDATE.resize(query_size, false);
   }
   std::vector<size_t> record_keys;// for migration
+  int parts[5];
+  int granules[5][10];
+  int part_granule_count[5];
+  int num_parts = 0;
+  bool cross_partition;
+  int32_t get_part(int i) {
+    DCHECK(i < num_parts);
+    return parts[i];
+  }
+
+  int32_t get_part_granule_count(int i) {
+    return part_granule_count[i];
+  }
+
+  int32_t get_granule(int i, int j) {
+    DCHECK(i < num_parts);
+    DCHECK(j < part_granule_count[i]);
+    return granules[i][j];
+  }
+
+  int number_of_parts() {
+    return num_parts;
+  }
 };
 
 class makeYCSBQuery {
@@ -55,11 +78,17 @@ public:
                        Random &random, 
                        DatabaseType &db, 
                        double cur_timestamp, 
-                       size_t query_size) const {
+                       size_t query_size,
+                       uint32_t granuleID) const {
     // 
     DCHECK(context.partition_num > partitionID);
 
     YCSBQuery query(query_size);
+    query.cross_partition = false;
+    query.num_parts = 1;
+    query.parts[0] = partitionID;
+    query.part_granule_count[0] = 0;
+
     int readOnly = random.uniform_dist(1, 100);
     int crossPartition = random.uniform_dist(1, 100);
 
@@ -127,48 +156,84 @@ public:
           query.UPDATE[i] = true;
         }
       }
-
+      int this_partition_idx = 0;
+      bool retry = false;
       // first key 
       if(i == 0){ // first_key_index
         query.Y_KEY[i] = first_key;
-        continue;
-      }
-
-      // other keys
-      bool retry;
-      do {
-        retry = false;
-        if (crossPartition <= cross_partition_probalility &&
-            context.partition_num > 1) {
-          // 跨分区
-          int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition); // 分区内偏移
-          int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition) + workload_type; // 分区偏移
+        
+        if (query.num_parts == 1) {
+          query.num_parts = 1;
           
+          query.parts[query.num_parts] = first_key / static_cast<int32_t>(context.keysPerPartition);
+          query.part_granule_count[query.num_parts] = 0;
+          query.num_parts++;
+        }
+        query.cross_partition = true;
+        this_partition_idx = 0;
+      } else {
+        // other keys
+        
+        do {
+          retry = false;
+          
+          if (crossPartition <= cross_partition_probalility &&
+              context.partition_num > 1) {
+            // 跨分区
+            int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition); // 分区内偏移
+            int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition) + workload_type; // 分区偏移
+            
 
-          if(key_partition_num < 0){
-            key_partition_num += context.partition_num;
+            if(key_partition_num < 0){
+              key_partition_num += context.partition_num;
+            }
+            key_partition_num %= context.partition_num;
+
+            // 对应的几类偏移
+            key = (key_partition_num) * static_cast<int32_t>(context.keysPerPartition) 
+                  + key_num * query_size + i
+                  + 2 * my_threshold * static_cast<int>(context.keysPerPartition); 
+            key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
+            
+            // 
+            query.cross_partition = true;
+            this_partition_idx = 1;
+            query.parts[this_partition_idx] = key_partition_num;
+          } else {
+            key = first_key + i;
+            this_partition_idx = 0;
+            query.parts[this_partition_idx] = first_key / static_cast<int32_t>(context.keysPerPartition);
           }
 
-          // 对应的几类偏移
-          key = (key_partition_num) * static_cast<int32_t>(context.keysPerPartition) 
-                + key_num * query_size + i
-                + 2 * my_threshold * static_cast<int>(context.keysPerPartition); 
-          key = key % static_cast<int32_t>(context.keysPerPartition * context.partition_num);
-        } else {
-          key = first_key + i;
-        }
+          query.Y_KEY[i] = key;
 
-        query.Y_KEY[i] = key;
+          // ensure not repeated 
+          for (auto k = 0u; k < i; k++) {
+            if (query.Y_KEY[k] == query.Y_KEY[i]) {
+              retry = true;
+              break;
+            }
+          }
 
-        // ensure not repeated 
-        for (auto k = 0u; k < i; k++) {
-          if (query.Y_KEY[k] == query.Y_KEY[i]) {
-            retry = true;
+
+        } while (retry);
+      }
+      if (retry == false) {
+        auto granuleId = (int)context.getGranule(query.Y_KEY[i]);
+        // if(i <= 1)
+        //   LOG(INFO) << granuleId << " " << query.Y_KEY[i] << " " << query.parts[this_partition_idx];
+
+        bool good = true;
+        for (int32_t k = 0; k < query.part_granule_count[this_partition_idx]; ++k) {
+          if (query.granules[this_partition_idx][k] == granuleId) {
+            good = false;
             break;
           }
         }
-      } while (retry);
-
+        if (good == true) {
+          query.granules[this_partition_idx][query.part_granule_count[this_partition_idx]++] = granuleId;
+        }
+      }
     } // end for
 
     // LOG(INFO) << "cur_timestamp: " << cur_timestamp << " " << workload_type << " " << query.Y_KEY[0] << " " << query.Y_KEY[1];

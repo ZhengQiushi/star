@@ -6,8 +6,10 @@
 
 #include "StringPiece.h"
 #include "common/MessagePiece.h"
+#include "common/Time.h"
 #include <chrono>
 #include <string>
+#include <functional>
 
 namespace star {
 
@@ -88,12 +90,27 @@ public:
 
   using header_type = uint64_t;
   using deadbeef_type = uint32_t;
+  using source_cluster_worker_id_type = int32_t;
+  using transaction_id_type = int64_t;
   using iterator_type = Iterator;
 
   Message() : data(get_prefix_size(), 0) {
     set_message_length(data.size());
     get_deadbeef_ref() = DEADBEEF;
+    gen_time = Time::now();
+    set_put_to_in_queue_time(gen_time);
+    set_put_to_out_queue_time(gen_time);
   }
+
+  virtual ~Message() {}
+
+  void set_put_to_in_queue_time(uint64_t ts) { put_to_in_queue_time = ts; }
+  uint64_t get_put_to_in_queue_time() { return put_to_in_queue_time; }
+  void set_gen_time(uint64_t ts) { gen_time = ts; }
+  uint64_t get_gen_time() { return gen_time; }
+  void set_put_to_out_queue_time(uint64_t t) { put_to_out_queue_time = t; }
+  uint64_t get_put_to_out_queue_time() { return put_to_out_queue_time; }
+  std::chrono::steady_clock::time_point get_flush_time() { return time; }
 
   void resize(std::size_t size) {
     DCHECK(data.size() == get_prefix_size());
@@ -102,11 +119,18 @@ public:
     get_deadbeef_ref() = DEADBEEF;
   }
 
-  char *get_raw_ptr() { return &data[0]; }
+  virtual char *get_raw_ptr() { return &data[0]; }
 
   void clear() {
     data = std::string(get_prefix_size(), 0);
     set_message_length(data.size());
+    get_deadbeef_ref() = DEADBEEF;
+  }
+
+  void clear_message_pieces() {
+    data.resize(get_prefix_size());
+    set_message_length(data.size());
+    set_message_count(0);
     get_deadbeef_ref() = DEADBEEF;
   }
 
@@ -135,6 +159,15 @@ public:
   }
 
 public:
+  void set_is_replica(bool is_replica) {
+    clear_source_node_id();
+    get_header_ref() |= (is_replica << IS_REPLICA_OFFSET);
+  }
+  // Whether this message is designated to a replica
+  uint64_t get_is_replica() {
+    return (get_header_ref() >> IS_REPLICA_OFFSET) & IS_REPLICA_MASK;
+  }
+
   void set_source_node_id(uint64_t source_node_id) {
     DCHECK(source_node_id < (1 << 7));
     clear_source_node_id();
@@ -145,13 +178,13 @@ public:
     return (get_header_ref() >> SOURCE_NODE_ID_OFFSET) & SOURCE_NODE_ID_MASK;
   }
 
-  void set_dest_node_id(uint64_t dest_node_id) {
+  virtual void set_dest_node_id(uint64_t dest_node_id) {
     DCHECK(dest_node_id < (1 << 7));
     clear_dest_node_id();
     get_header_ref() |= (dest_node_id << DEST_NODE_ID_OFFSET);
   }
 
-  uint64_t get_dest_node_id() {
+  virtual uint64_t get_dest_node_id() {
     return (get_header_ref() >> DEST_NODE_ID_OFFSET) & DEST_NODE_ID_MASK;
   }
 
@@ -169,11 +202,83 @@ public:
     return (get_header_ref() >> MESSAGE_COUNT_OFFSET) & MESSAGE_COUNT_MASK;
   }
 
-  uint64_t get_message_length() {
+  virtual uint64_t get_message_length() {
     return (get_header_ref() >> MESSAGE_LENGTH_OFFSET) & MESSAGE_LENGTH_MASK;
   }
 
+  int32_t get_source_cluster_worker_id() {
+    return *reinterpret_cast<uint32_t *>(&data[0] + sizeof(header_type) + sizeof(deadbeef_type));
+  }
+
+  void set_source_cluster_worker_id(int32_t id) {
+    *reinterpret_cast<uint32_t *>(&data[0] + sizeof(header_type) + sizeof(deadbeef_type)) = id;
+  }
+
+  uint64_t get_transaction_id() const {
+    return *reinterpret_cast<const uint64_t *>(&data[0] + sizeof(header_type) + sizeof(deadbeef_type) + sizeof(source_cluster_worker_id_type));
+  }
+
+  void set_transaction_id(uint64_t tid) {
+    *reinterpret_cast<uint64_t *>(&data[0] + sizeof(header_type) + sizeof(deadbeef_type) + sizeof(source_cluster_worker_id_type)) = tid;
+  }
+
+  size_t size_as_of_transaction_id() const {
+    return sizeof(header_type) + sizeof(deadbeef_type) + sizeof(source_cluster_worker_id_type) + sizeof(transaction_id_type);
+  }
+
+  size_t size_as_of_messaeg_gen_time() const {
+    return size_as_of_transaction_id() + sizeof(uint64_t);
+  }
+
+  size_t size_as_of_messaeg_send_time() const {
+    return size_as_of_messaeg_gen_time() + sizeof(uint64_t);
+  }
+
+  size_t size_as_of_messaeg_recv_time() const {
+    return size_as_of_messaeg_send_time() + sizeof(uint64_t);
+  }
+
+  size_t size_as_of_messaeg_resp_time() const {
+    return size_as_of_messaeg_recv_time() + sizeof(uint64_t);
+  }
+
+  uint64_t get_message_gen_time() const {
+    return *reinterpret_cast<const uint64_t *>(&data[0] + size_as_of_transaction_id());
+  }
+
+  uint64_t get_message_send_time() const {
+    return *reinterpret_cast<const uint64_t *>(&data[0] + size_as_of_messaeg_gen_time());
+  }
+
+  uint64_t get_message_recv_time() const {
+    return *reinterpret_cast<const uint64_t *>(&data[0] + size_as_of_messaeg_send_time());
+  }
+
+  uint64_t get_message_resp_time() const {
+    return *reinterpret_cast<const uint64_t *>(&data[0] + size_as_of_messaeg_recv_time());
+  }
+
+  void set_message_gen_time(uint64_t t) {
+    *reinterpret_cast<uint64_t *>(&data[0] + size_as_of_transaction_id()) = t;
+  }
+
+  void set_message_send_time(uint64_t t) {
+    *reinterpret_cast<uint64_t *>(&data[0] + size_as_of_messaeg_gen_time()) = t;
+  }
+
+  void set_message_recv_time(uint64_t t) {
+    *reinterpret_cast<uint64_t *>(&data[0] + size_as_of_messaeg_send_time()) = t;
+  }
+
+  void set_message_resp_time(uint64_t t) {
+    *reinterpret_cast<uint64_t *>(&data[0] + size_as_of_messaeg_recv_time()) = t;
+  }
+
 private:
+  void clear_is_replica_bit() {
+    get_header_ref() &= ~(IS_REPLICA_MASK << IS_REPLICA_OFFSET);
+  }
+
   void clear_source_node_id() {
     get_header_ref() &= ~(SOURCE_NODE_ID_MASK << SOURCE_NODE_ID_OFFSET);
   }
@@ -195,7 +300,7 @@ private:
   }
 
   void set_message_count(uint64_t message_count) {
-    DCHECK(message_count < (1 << 20));
+    DCHECK(message_count < (1 << 15));
     clear_message_count();
     get_header_ref() |= (message_count << MESSAGE_COUNT_OFFSET);
   }
@@ -216,10 +321,13 @@ private:
 public:
   std::string data;
   std::chrono::steady_clock::time_point time;
-
+  uint64_t gen_time;
+  uint64_t put_to_in_queue_time;
+  uint64_t put_to_out_queue_time;
+  int ref_cnt = 0;
 public:
   static constexpr uint32_t get_prefix_size() {
-    return sizeof(header_type) + sizeof(deadbeef_type);
+    return sizeof(header_type) + sizeof(deadbeef_type) + sizeof(source_cluster_worker_id_type) + sizeof(transaction_id_type) + sizeof(uint64_t) * 4;
   }
 
   static uint64_t get_message_length(uint64_t v) {
@@ -239,9 +347,33 @@ public:
   static constexpr uint64_t MESSAGE_COUNT_MASK = 0x7fff;
   static constexpr uint64_t MESSAGE_COUNT_OFFSET = 27;
 
-  static constexpr uint64_t MESSAGE_LENGTH_MASK = 0x7ffffffull;
-  static constexpr uint64_t MESSAGE_LENGTH_OFFSET = 0;
+  static constexpr uint64_t MESSAGE_LENGTH_MASK = 0x3ffffffull;
+  static constexpr uint64_t MESSAGE_LENGTH_OFFSET = 1;
+
+  static constexpr uint64_t IS_REPLICA_MASK = 0x1l;
+  static constexpr uint64_t IS_REPLICA_OFFSET = 0;
 
   static constexpr uint32_t DEADBEEF = 0xDEADBEEF;
+};
+
+class GrouppedMessage: public Message {
+public:
+  GrouppedMessage() { clear(); }
+  GrouppedMessage(const std::string & group_data, uint64_t dest_node): group_data(group_data), dest_node(dest_node) {}
+  void addMessage(Message * message) {
+    group_data.append(message->get_raw_ptr(), message->get_message_length());
+  }
+  virtual char *get_raw_ptr() override { return &group_data[0]; }
+  virtual size_t get_message_length() override { return group_data.size(); }
+  virtual uint64_t get_dest_node_id() override {
+    return dest_node;
+  }
+  virtual void set_dest_node_id(uint64_t dest_node) override {
+    this->dest_node = dest_node;
+  }
+  void clear() { group_data.clear(); dest_node = std::numeric_limits<uint64_t>::max(); }
+private:
+  std::string group_data;
+  uint64_t dest_node;
 };
 } // namespace star

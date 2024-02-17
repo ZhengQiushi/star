@@ -29,8 +29,8 @@ public:
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context, RandomType &random,
            Partitioner &partitioner, Storage &storage, 
-           double cur_timestamp)
-      : Transaction(coordinator_id, partition_id, partitioner), 
+           double cur_timestamp, std::size_t ith_replica = 0)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
         worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
@@ -43,8 +43,9 @@ public:
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context,
            RandomType &random, Partitioner &partitioner,
-           Storage &storage, simpleTransaction& simple_txn, bool is_transmit)
-      : Transaction(coordinator_id, partition_id, partitioner), 
+           Storage &storage, simpleTransaction& simple_txn, bool is_transmit,
+           std::size_t ith_replica = 0)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
         worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         query(makeNewOrderQuery()(simple_txn.keys, is_transmit)) {
@@ -61,8 +62,8 @@ public:
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context,
            RandomType &random, Partitioner &partitioner,
-           Storage &storage, simpleTransaction& simple_txn)
-      : Transaction(coordinator_id, partition_id, partitioner), 
+           Storage &storage, simpleTransaction& simple_txn, std::size_t ith_replica = 0)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
         worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         query(makeNewOrderQuery()(simple_txn.keys)) {
@@ -77,8 +78,9 @@ public:
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, 
-                  Transaction& txn)
-      : Transaction(coordinator_id, partition_id, partitioner), 
+                  Transaction& txn,  
+                  std::size_t ith_replica = 0)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
         worker_status_(worker_status), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id), 
@@ -113,7 +115,7 @@ public:
     auto warehouseTableID = warehouse::tableID;
     storage.warehouse_key = warehouse::key(W_ID);
     this->search_for_read(warehouseTableID, W_ID - 1, storage.warehouse_key,
-                          storage.warehouse_value);
+                          storage.warehouse_value, wid_to_granule_id(W_ID, context));
 
     // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
     // D_TAX, the district tax rate, is retrieved, and D_NEXT_O_ID, the next
@@ -123,7 +125,7 @@ public:
     auto districtTableID = district::tableID;
     storage.district_key = district::key(W_ID, D_ID);
     this->search_for_update(districtTableID, W_ID - 1, storage.district_key,
-                            storage.district_value);
+                            storage.district_value, did_to_granule_id(D_ID, context));
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
     // selected and C_DISCOUNT, the customer's discount rate, C_LAST, the
@@ -133,7 +135,7 @@ public:
     auto customerTableID = customer::tableID;
     storage.customer_key = customer::key(W_ID, D_ID, C_ID);
     this->search_for_read(customerTableID, W_ID - 1, storage.customer_key,
-                          storage.customer_value);
+                          storage.customer_value, did_to_granule_id(D_ID, context));
 
     auto itemTableID = item::tableID;
     auto stockTableID = stock::tableID;
@@ -438,7 +440,7 @@ public:
     // }
     DCHECK(key_partition_id < (1 << 30));
     this->search_for_read(warehouseTableID, key_partition_id, storage.warehouse_key,
-                          storage.warehouse_value);
+                          storage.warehouse_value, wid_to_granule_id(W_ID, context));
 
     // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
     // D_TAX, the district tax rate, is retrieved, and D_NEXT_O_ID, the next
@@ -452,7 +454,7 @@ public:
     //   return TransactionResult::ABORT_NORETRY;
     // }
     this->search_for_update(districtTableID, key_partition_id, storage.district_key,
-                            storage.district_value);
+                            storage.district_value, did_to_granule_id(D_ID, context));
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
     // selected and C_DISCOUNT, the customer's discount rate, C_LAST, the
@@ -466,7 +468,7 @@ public:
     //   return TransactionResult::ABORT_NORETRY;
     // }
     this->search_for_read(customerTableID, key_partition_id, storage.customer_key,
-                          storage.customer_value);
+                          storage.customer_value, did_to_granule_id(D_ID, context));
 
     auto itemTableID = item::tableID;
     auto stockTableID = stock::tableID;
@@ -506,7 +508,8 @@ public:
       //   return TransactionResult::ABORT_NORETRY;
       // }
       this->search_for_update(stockTableID, key_partition_id,
-                              storage.stock_keys[i], storage.stock_values[i]);
+                              storage.stock_keys[i], storage.stock_values[i],
+                              id_to_granule_id(OL_I_ID, context));
     }
 
 
@@ -567,7 +570,7 @@ public:
     //   return TransactionResult::ABORT_NORETRY;
     // }
     this->update(districtTableID, key_partition_id, storage.district_key,
-                 storage.district_value);
+                 storage.district_value, did_to_granule_id(D_ID, context));
 
     if (context.operation_replication) {
       Encoder encoder(this->operation.data);
@@ -633,7 +636,7 @@ public:
       //   return TransactionResult::ABORT_NORETRY;
       // }
       this->update(stockTableID, key_partition_id, storage.stock_keys[i],
-                   storage.stock_values[i]);
+                   storage.stock_values[i], id_to_granule_id(OL_I_ID, context));
 
       if (context.operation_replication) {
         Encoder encoder(this->operation.data);
@@ -908,6 +911,27 @@ public:
   std::size_t get_partition_id(){
     return partition_id;
   }
+
+  virtual int32_t get_partition_count() override { return query.number_of_parts(); }
+
+  virtual int32_t get_partition(int i) override { return query.get_part(i); }
+
+  virtual int32_t get_partition_granule_count(int i) override { return query.get_part_granule_count(i); }
+
+  virtual int32_t get_granule(int partition_id, int j) override { return query.get_part_granule(partition_id, j); }
+
+  virtual bool is_single_partition() override { return query.number_of_parts() == 1; }
+
+
+  virtual const std::string serialize(std::size_t ith_replica = 0) override {
+    std::string res;
+    uint32_t txn_type = 0;
+    Encoder encoder(res);
+    encoder << this->transaction_id << txn_type << this->straggler_wait_time << ith_replica << this->txn_random_seed_start << partition_id;
+    Transaction::serialize_lock_status(encoder);
+    return res;
+  }
+  
 private:
   void get_item_stock_keys_query(std::vector<item::key>& item_keys, std::vector<stock::key>& stock_keys){
     for (int i = 0; i < query.O_OL_CNT; i++) {
@@ -943,8 +967,8 @@ public:
 
   Payment(std::size_t coordinator_id, std::size_t partition_id,
           DatabaseType &db, const ContextType &context, RandomType &random,
-          Partitioner &partitioner, Storage &storage)
-      : Transaction(coordinator_id, partition_id, partitioner), db(db),
+          Partitioner &partitioner, Storage &storage, std::size_t ith_replica = 0)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), db(db),
         context(context), random(random), storage(storage),
         partition_id(partition_id),
         query(makePaymentQuery()(context, partition_id + 1, random)) {}
@@ -993,9 +1017,9 @@ public:
     if (C_ID == 0) {
       storage.customer_name_idx_key =
           customer_name_idx::key(C_W_ID, C_D_ID, query.C_LAST);
-      this->search_local_index(customerNameIdxTableID, C_W_ID - 1,
-                               storage.customer_name_idx_key,
-                               storage.customer_name_idx_value);
+      // this->search_local_index(customerNameIdxTableID, C_W_ID - 1,
+      //                          storage.customer_name_idx_key,
+      //                          storage.customer_name_idx_value);
 
       this->process_requests(worker_id);
       C_ID = storage.customer_name_idx_value.C_ID;
@@ -1199,6 +1223,25 @@ public:
   }
   std::size_t get_partition_id(){
     return partition_id;
+  }
+
+  virtual int32_t get_partition_count() override { return 1; } // uery.number_of_parts()
+
+  virtual int32_t get_partition(int i) override { return 1; } // query.get_part(i)
+  
+  virtual int32_t get_partition_granule_count(int i) override { return i; } //  query.get_part_granule_count(i);
+
+  virtual int32_t get_granule(int partition_id, int j) override { return j; } // query.get_part_granule(partition_id, j); 
+  
+  virtual bool is_single_partition() override { return 1; } // query.number_of_parts() == 
+
+  virtual const std::string serialize(std::size_t ith_replica = 0) override {
+    std::string res;
+    uint32_t txn_type = 1;
+    Encoder encoder(res);
+    encoder << this->transaction_id <<  txn_type << this->straggler_wait_time << ith_replica << this->txn_random_seed_start << partition_id;
+    Transaction::serialize_lock_status(encoder);
+    return res;
   }
 private:
   DatabaseType &db;

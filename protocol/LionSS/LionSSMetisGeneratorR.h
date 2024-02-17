@@ -482,8 +482,8 @@ public:
       t->destination_coordinator = max_node;
       t->old_dest = t->destination_coordinator;
 
-      t->execution_cost = 10 * weight_sum - max_cnt;
-      t->is_real_distributed = (max_cnt == 100 * weight_sum) ? false : true;
+      t->execution_cost = 10 * (int)weight_sum - max_cnt;
+      t->is_real_distributed = (max_cnt == 100 * (int)weight_sum) ? false : true;
 
       t->replica_heavy_node = replica_max_node;
       // if(t->is_real_distributed){

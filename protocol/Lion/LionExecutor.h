@@ -530,7 +530,7 @@ public:
 
           //#####
           int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
+                                                                std::chrono::steady_clock::now() - now)
               .count();
           time_before_prepare_set += before_prepare;
           now = std::chrono::steady_clock::now();
@@ -541,7 +541,7 @@ public:
 
           //#####
           int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
+                                                                std::chrono::steady_clock::now() - now)
               .count();
 
           time_prepare_read += prepare_read;
@@ -559,7 +559,7 @@ public:
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           // ####
           int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - transaction->b.startTime)
+                                                                std::chrono::steady_clock::now() - now)
               .count();
           time_read_remote += remote_read;
           now = std::chrono::steady_clock::now();
@@ -576,7 +576,7 @@ public:
 
             // ####
             int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                  std::chrono::steady_clock::now() - transaction->b.startTime)
+                                                                  std::chrono::steady_clock::now() - now)
                 .count();
             time_read_remote1 += write_time;
             now = std::chrono::steady_clock::now();
@@ -620,7 +620,7 @@ public:
               }
               // ####
               int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transaction->b.startTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
               time3 += commit_time;
               transaction->b.time_commit += commit_time;
@@ -775,7 +775,7 @@ public:
       bool retry_transaction = false;
 
       auto rematser_begin = std::chrono::steady_clock::now();
-      
+      auto now = std::chrono::steady_clock::now();
       do {
         ////  // VLOG_IF(DEBUG_V, id==0) << "LionExecutor: "<< id << " " << "process_request" << i;
         process_request();
@@ -787,7 +787,7 @@ public:
           setupHandlers(*cur_trans[i], *protocol);
         }
 
-        auto now = std::chrono::steady_clock::now();
+        
 
         cur_trans[i]->prepare_read_execute(id);
 
@@ -802,7 +802,7 @@ public:
       } while (retry_transaction);
 
       int remaster_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                              std::chrono::steady_clock::now() - cur_trans[i]->b.startTime)
+                                                              std::chrono::steady_clock::now() - now)
             .count();
       cur_trans[i]->b.time_other_module += remaster_time;
 
@@ -888,6 +888,18 @@ public:
     // }
     
   }
+
+  Message * delay_pop_message() override {
+    bool success = false;
+    Message * ret = delay_queue.pop_no_wait(success);
+    if(success) return ret;
+    else return nullptr;
+  };
+
+  void delay_push_message(Message *message) override {
+     delay_queue.push_no_wait(message);
+  }
+
   Message *pop_message() override {
     if (out_queue.empty())
       return nullptr;
@@ -1282,6 +1294,7 @@ private:
   LockfreeQueue<Message *, 100860> in_queue, out_queue,
                           //  in_queue_metis,  
                            sync_queue; // for value sync when phase switching occurs
+  ShareQueue<Message *> delay_queue;
 
   // ShareQueue<simpleTransaction> &txn_meta.router_transactions_queue;
   std::deque<int> router_stop_queue;

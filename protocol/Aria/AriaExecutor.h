@@ -337,7 +337,7 @@ public:
                            std::chrono::steady_clock::now() - txnStartTime)
                            .count();
       txnStartTime = std::chrono::steady_clock::now();
-
+      auto now = std::chrono::steady_clock::now();
       transactions[i]->set_epoch(cur_epoch);
       transactions[i]->set_id(i); // tid starts from 1
       transactions[i]->set_tid_offset(i);
@@ -357,10 +357,11 @@ public:
 
           //#####
           int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - txnStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
           txnStartTime = std::chrono::steady_clock::now();
           transactions[i]->b.time_wait4serivce += before_prepare;
+          now = std::chrono::steady_clock::now();
           // LOG(INFO) << before_prepare;
           //#####
           
@@ -368,19 +369,21 @@ public:
 
           //#####
           int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - txnStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
 
           txnStartTime = std::chrono::steady_clock::now();
+          now = std::chrono::steady_clock::now();
           transactions[i]->b.time_local_locks += prepare_read;
           //#####
           
           auto result = transactions[i]->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           // ####
           int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - txnStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
           txnStartTime = std::chrono::steady_clock::now();
+          now = std::chrono::steady_clock::now();
           transactions[i]->b.time_remote_locks += remote_read;
           // #### 
           
@@ -391,9 +394,10 @@ public:
 
             // ####
             int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - txnStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
             txnStartTime = std::chrono::steady_clock::now();
+            now = std::chrono::steady_clock::now();
             transactions[i]->b.time_execute += write_time;
             // #### 
           }

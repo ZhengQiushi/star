@@ -51,7 +51,7 @@ sudo journalctl -xe | grep docker
 234
 235
 
-232-253
+232-117
 scp -r docker.service  zqs@10.77.110.144:/home/zqs/
 scp -r zqs_image.tar zqs@10.77.110.144:/home/zqs/
 

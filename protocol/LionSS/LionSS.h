@@ -280,6 +280,10 @@ private:
               *messages[coordinatorID], *table, readKey.get_key(),
               readKey.get_value(), commit_tid);
         }
+
+        if(context.migration_only && replicate_count == 2){
+          break;
+        }
       }
       // DCHECK(replicate_count == partitioner.replica_num() - 1);
     }

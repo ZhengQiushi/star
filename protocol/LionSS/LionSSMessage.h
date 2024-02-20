@@ -496,7 +496,7 @@ public:
       }
       if(remaster == false || context.migration_only > 0) {
         // simulate cost of transmit data
-        for (auto i = 0u; i < context.n_nop * 2; i++) {
+        for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
           asm("nop");
         }
       } else {
@@ -671,7 +671,7 @@ public:
         if(remaster == false || context.migration_only > 0) {
           txn->network_size += 50000 * (key_size + value_size);
           // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
+          for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
             asm("nop");
           } 
         } else {
@@ -914,7 +914,7 @@ public:
       }
       if(remaster == false || context.migration_only > 0) {
         // simulate cost of transmit data
-        for (auto i = 0u; i < context.n_nop * 2; i++) {
+        for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
           asm("nop");
         }
       } else {
@@ -1045,7 +1045,7 @@ public:
       } else {
         if(remaster == false || context.migration_only > 0) {
           // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
+          for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
             asm("nop");
           }
         } else {

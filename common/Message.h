@@ -35,6 +35,11 @@ namespace star {
  *
  */
 
+uint64_t getCurrentTimestamp() {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+}
+
 class Message {
 public:
   // TODO: make it a C++ compatible forward iterator
@@ -110,11 +115,19 @@ public:
     get_deadbeef_ref() = DEADBEEF;
   }
 
-  void flush() {
+  void flush(uint64_t delay_microseconds = 0) {
     auto message_count = get_message_count();
     set_message_count(message_count + 1);
     set_message_length(data.length());
     time = std::chrono::steady_clock::now();
+
+    if(delay_microseconds != 0){
+      auto duration = std::chrono::microseconds(delay_microseconds);
+      auto result_time_point = time + duration;
+      this->delay_time = std::chrono::duration_cast<std::chrono::microseconds>(result_time_point.time_since_epoch()).count();
+    } else {
+      this->delay_time = 0;
+    }
   }
 
   bool check_size() { return get_message_length() == data.size(); }
@@ -216,6 +229,7 @@ private:
 public:
   std::string data;
   std::chrono::steady_clock::time_point time;
+  uint64_t delay_time = 0;
 
 public:
   static constexpr uint32_t get_prefix_size() {

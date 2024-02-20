@@ -6,7 +6,7 @@ user="centos"
 ips=(10.77.70.246 10.77.70.247 10.77.70.248 10.77.70.117) 
 # 10.77.110.147
 nodes=3 # replace with the size of ips
-port=20010
+port=22010
 workload=$1
 run_time=$2
 # skew_ratio/star/aws_star_10.py
@@ -26,13 +26,14 @@ for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"rm -rf /core* \" & "
     done 
 
 
 # 
 
 
-
+# docker exec zqs_0 bash -c "bash /home/star/run.sh"
 # run.sh
 for id in $(seq 0 $nodes)
     do
@@ -54,6 +55,7 @@ for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"rm -rf /core* \" & "
     done 
 
 

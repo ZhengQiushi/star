@@ -14,7 +14,7 @@ I1225 00:39:07.245288 199522 Coordinator.h:316] Coordinator 0 connected to 3
 I1225 00:39:07.245368 199522 Coordinator.h:328] Coordinator 0 connected to all peers.
 I1225 00:39:07.245801 200061 Dispatcher.h:48] Incoming Dispatcher started, numCoordinators = 4, numWorkers = 2, group id = 0
 I1225 00:39:07.246022 199522 Coordinator.h:91] Coordinator starts to run 2 workers.
-I1225 00:39:07.246058 200062 Dispatcher.h:145] Outgoing Dispatcher started, numCoordinators = 4, numWorkers = 2, group id = 0
+I1225 00:39:07.246058 200062 Dispatcher.h:247] Outgoing Dispatcher started, numCoordinators = 4, numWorkers = 2, group id = 0
 I1225 00:39:07.246337 200063 LionExecutor.h:245] Executor 0 starts.
 I1225 00:39:07.246830 199522 Coordinator.h:125] SLEEP : 3
 I1225 00:39:07.250236 200064 Manager.h:232] Manager(worker id = 1) on the non-coordinator node started.
@@ -64,7 +64,7 @@ I1225 00:39:11.168951 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 
 I1225 00:39:11.169106 200061 LionExecutor.h:812] async_message_respond_num : 8from 2 to 0 1642503
 I1225 00:39:11.169121 200061 LionExecutor.h:812] async_message_respond_num : 9from 2 to 0 1642505
 I1225 00:39:11.169133 200061 LionExecutor.h:812] async_message_respond_num : 10from 2 to 0 1642507
-I1225 00:39:11.169143 200061 LionExecutor.h:812] async_message_respond_num : 11from 2 to 0 1642509
+I1225 00:39:11.169246 200061 LionExecutor.h:812] async_message_respond_num : 11from 2 to 0 1642509
 I1225 00:39:11.169157 200063 LionMessage.h:846] replication_response_handler: 0->2 1642503
 I1225 00:39:11.169173 200063 LionMessage.h:846] replication_response_handler: 0->2 1642505
 I1225 00:39:11.169184 200063 LionMessage.h:846] replication_response_handler: 0->2 1642507
@@ -91,7 +91,7 @@ I1225 00:39:11.169992 200063 Lion.h:280]  async_message_num: 0 -> 2 15 1634291 k
 I1225 00:39:11.170011 200063 Lion.h:280]  async_message_num: 0 -> 2 16 1634298 kWUnpNP0LB
 I1225 00:39:11.170116 200061 LionExecutor.h:812] async_message_respond_num : 16from 2 to 0 1634291
 I1225 00:39:11.170128 200061 LionExecutor.h:812] async_message_respond_num : 17from 2 to 0 1634298
-I1225 00:39:11.170145 200063 LionMessage.h:846] replication_response_handler: 0->2 1634291
+I1225 00:39:11.170247 200063 LionMessage.h:846] replication_response_handler: 0->2 1634291
 I1225 00:39:11.170157 200063 LionMessage.h:846] replication_response_handler: 0->2 1634298
 I1225 00:39:11.170230 200063 LionMessage.h:520] 1405970 uoYc02whDW insert 
 I1225 00:39:11.170274 200063 Lion.h:280]  async_message_num: 0 -> 1 17 1405970 kWUnpNP0LB
@@ -116,8 +116,8 @@ I1225 00:39:11.171026 200063 LionMessage.h:520] 1403675 Z9B6pzjW3B insert
 I1225 00:39:11.171072 200063 Lion.h:280]  async_message_num: 0 -> 1 22 1403675 kWUnpNP0LB
 I1225 00:39:11.171087 200063 Lion.h:280]  async_message_num: 0 -> 2 23 1403675 kWUnpNP0LB
 I1225 00:39:11.171233 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3007964 hKNpsFot0S
-I1225 00:39:11.171252 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3007965 1n1IXheikc
-I1225 00:39:11.171252 200061 LionExecutor.h:812] async_message_respond_num : 23from 2 to 0 1403675
+I1225 00:39:11.171248 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3007965 1n1IXheikc
+I1225 00:39:11.171248 200061 LionExecutor.h:812] async_message_respond_num : 23from 2 to 0 1403675
 I1225 00:39:11.171268 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3007969 Cw5XtO8rjj
 I1225 00:39:11.171291 200061 LionExecutor.h:812] async_message_respond_num : 24from 1 to 0 1403675
 I1225 00:39:11.171296 200063 LionMessage.h:846] replication_response_handler: 0->2 1403675
@@ -242,7 +242,7 @@ I1225 00:39:11.177193 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.177201 200061 LionExecutor.h:812] async_message_respond_num : 54from 2 to 0 1634691
 I1225 00:39:11.177222 200061 LionExecutor.h:812] async_message_respond_num : 55from 2 to 0 1634693
 I1225 00:39:11.177240 200063 LionMessage.h:846] replication_response_handler: 0->2 1634691
-I1225 00:39:11.177253 200063 LionMessage.h:846] replication_response_handler: 0->2 1634693
+I1225 00:39:11.177117 200063 LionMessage.h:846] replication_response_handler: 0->2 1634693
 I1225 00:39:11.177275 200063 LionMessage.h:520] 1401903 1oN89gROPQ insert 
 I1225 00:39:11.177325 200063 Lion.h:280]  async_message_num: 0 -> 1 55 1401903 kWUnpNP0LB
 I1225 00:39:11.177340 200063 Lion.h:280]  async_message_num: 0 -> 2 56 1401903 kWUnpNP0LB
@@ -315,7 +315,7 @@ I1225 00:39:11.200170 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 
 I1225 00:39:11.200801 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023537 y9SdgiGVFE
 I1225 00:39:11.200821 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023539 c2U68cEqVG
 I1225 00:39:11.200837 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023542 IZfFpPIVqt
-I1225 00:39:11.201452 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 6686 nOLmVfzjNK
+I1225 00:39:11.202472 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 6686 nOLmVfzjNK
 I1225 00:39:11.201514 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049643 FyfUt4o6Xm
 I1225 00:39:11.201534 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049646 PjGf30kjFS
 I1225 00:39:11.201550 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049649 By9hcjxlo3
@@ -377,9 +377,9 @@ I1225 00:39:11.256444 200063 LionExecutor.h:332] [C-PHASE] worker 0 c_phase
 I1225 00:39:11.256460 200064 StarManager.h:240] wait4_stop
 I1225 00:39:11.256491 200064 StarManager.h:247] wait_all_workers_finish
 I1225 00:39:11.257302 200063 LionMessage.h:520] 1406290 EvzWgBLqEo insert 
-I1225 00:39:11.257441 200063 Lion.h:280]  async_message_num: 0 -> 2 0 1631459 kWUnpNP0LB
-I1225 00:39:11.257620 200061 LionExecutor.h:812] async_message_respond_num : 1from 2 to 0 1631459
-I1225 00:39:11.257649 200063 LionMessage.h:846] replication_response_handler: 0->2 1631459
+I1225 00:39:11.257441 200063 Lion.h:280]  async_message_num: 0 -> 2 0 1632479 kWUnpNP0LB
+I1225 00:39:11.257620 200061 LionExecutor.h:812] async_message_respond_num : 1from 2 to 0 1632479
+I1225 00:39:11.257649 200063 LionMessage.h:846] replication_response_handler: 0->2 1632479
 I1225 00:39:11.257673 200063 LionMessage.h:520] 1402173 RiXm7BgstG insert 
 I1225 00:39:11.257814 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2808968 o7ZCMgLHJq
 I1225 00:39:11.257843 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3044844 SbpuQ6i4vn
@@ -446,7 +446,7 @@ I1225 00:39:11.262163 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.262255 200063 LionMessage.h:520] 1409812 jwMxwiXl5k insert 
 I1225 00:39:11.262302 200063 Lion.h:280]  async_message_num: 0 -> 2 15 1649069 kWUnpNP0LB
 I1225 00:39:11.262502 200061 LionExecutor.h:812] async_message_respond_num : 16from 2 to 0 1649069
-I1225 00:39:11.262526 200063 LionMessage.h:846] replication_response_handler: 0->2 1649069
+I1225 00:39:11.262486 200063 LionMessage.h:846] replication_response_handler: 0->2 1649069
 I1225 00:39:11.262575 200063 LionMessage.h:520] 1409910 M4y0e8X8NZ insert 
 I1225 00:39:11.262609 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3001243 AVgEanzA54
 I1225 00:39:11.262639 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3001244 OC78r5dWeQ
@@ -633,7 +633,7 @@ I1225 00:39:11.308795 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 
 I1225 00:39:11.309237 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3033505 s2ho77h1VR
 I1225 00:39:11.309947 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3030439 y3hxvKmY1r
 I1225 00:39:11.309983 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3030443 u1EBFXc1gg
-I1225 00:39:11.310253 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 8713 K3atcmS7Ej
+I1225 00:39:11.310117 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 8713 K3atcmS7Ej
 I1225 00:39:11.310674 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013516 nSaounDhz8
 I1225 00:39:11.310719 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013518 ueRpYONuTE
 I1225 00:39:11.311184 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013065 aLgEgrDtEv
@@ -798,9 +798,9 @@ I1225 00:39:11.322216 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.332067 200063 LionMessage.h:846] replication_response_handler: 0->1 1408423
 I1225 00:39:11.332088 200063 LionMessage.h:520] 1406347 JJQZrkA8MY insert 
 I1225 00:39:11.332121 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048049 MPRqTdgZjB
-I1225 00:39:11.332145 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048051 d7OmQO6mET
+I1225 00:39:11.332247 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048051 d7OmQO6mET
 I1225 00:39:11.332386 200063 LionMessage.h:520] 1400601 qYFuOHMro8 insert 
-I1225 00:39:11.332535 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 191 Ir514KAGX6
+I1225 00:39:11.331175 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 191 Ir514KAGX6
 I1225 00:39:11.332594 200063 Lion.h:280]  async_message_num: 0 -> 1 34 1400601 kWUnpNP0LB
 I1225 00:39:11.332620 200063 Lion.h:280]  async_message_num: 0 -> 2 35 1400601 kWUnpNP0LB
 I1225 00:39:11.332640 200063 Lion.h:280]  async_message_num: 0 -> 2 36 1603008 kWUnpNP0LB
@@ -826,7 +826,7 @@ I1225 00:39:11.333662 200063 Lion.h:280]  async_message_num: 0 -> 2 40 1649916 k
 I1225 00:39:11.333995 200061 LionExecutor.h:812] async_message_respond_num : 41from 2 to 0 1649916
 I1225 00:39:11.334020 200063 LionMessage.h:846] replication_response_handler: 0->2 1649916
 I1225 00:39:11.334085 200063 LionMessage.h:520] 1403310 SoIrI4ZLAT insert 
-I1225 00:39:11.334143 200063 Lion.h:280]  async_message_num: 0 -> 2 41 1616553 kWUnpNP0LB
+I1225 00:39:11.334246 200063 Lion.h:280]  async_message_num: 0 -> 2 41 1616553 kWUnpNP0LB
 I1225 00:39:11.334265 200063 Lion.h:280]  async_message_num: 0 -> 2 42 1611107 kWUnpNP0LB
 I1225 00:39:11.334298 200063 Lion.h:280]  async_message_num: 0 -> 2 43 1611113 kWUnpNP0LB
 I1225 00:39:11.334317 200061 LionExecutor.h:812] async_message_respond_num : 42from 2 to 0 1616553
@@ -979,8 +979,8 @@ I1225 00:39:11.401152 200064 StarManager.h:276] send_ack
 I1225 00:39:11.401168 200063 LionExecutor.h:434] whole batch 89 milliseconds.
 I1225 00:39:11.401185 200064 StarManager.h:279] finished
 I1225 00:39:11.401420 200064 StarManager.h:227] start C-Phase
-I1225 00:39:11.401437 200064 StarManager.h:236] wait_all_workers_start
-I1225 00:39:11.401438 200063 LionExecutor.h:300] prepare_transactions_to_run 0 milliseconds.
+I1225 00:39:11.402467 200064 StarManager.h:236] wait_all_workers_start
+I1225 00:39:11.402468 200063 LionExecutor.h:300] prepare_transactions_to_run 0 milliseconds.
 I1225 00:39:11.403457 200063 LionExecutor.h:193]  RECV : 8
 I1225 00:39:11.403473 200063 LionExecutor.h:193]  RECV : 10
 I1225 00:39:11.403482 200063 LionExecutor.h:193]  RECV : 10
@@ -1016,12 +1016,12 @@ I1225 00:39:11.405987 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.406002 200063 LionMessage.h:846] replication_response_handler: 0->2 1642437
 I1225 00:39:11.406018 200063 LionMessage.h:846] replication_response_handler: 0->2 1642439
 I1225 00:39:11.406039 200063 LionMessage.h:520] 1405040 3w3SB3ENzh insert 
-I1225 00:39:11.406091 200063 Lion.h:280]  async_message_num: 0 -> 2 7 1625201 kWUnpNP0LB
-I1225 00:39:11.406116 200063 Lion.h:280]  async_message_num: 0 -> 2 8 1625204 kWUnpNP0LB
-I1225 00:39:11.406236 200061 LionExecutor.h:812] async_message_respond_num : 8from 2 to 0 1625201
-I1225 00:39:11.406250 200061 LionExecutor.h:812] async_message_respond_num : 9from 2 to 0 1625204
-I1225 00:39:11.406263 200063 LionMessage.h:846] replication_response_handler: 0->2 1625201
-I1225 00:39:11.406286 200063 LionMessage.h:846] replication_response_handler: 0->2 1625204
+I1225 00:39:11.406091 200063 Lion.h:280]  async_message_num: 0 -> 2 7 1624801 kWUnpNP0LB
+I1225 00:39:11.406116 200063 Lion.h:280]  async_message_num: 0 -> 2 8 1624804 kWUnpNP0LB
+I1225 00:39:11.406236 200061 LionExecutor.h:812] async_message_respond_num : 8from 2 to 0 1624801
+I1225 00:39:11.406250 200061 LionExecutor.h:812] async_message_respond_num : 9from 2 to 0 1624804
+I1225 00:39:11.406263 200063 LionMessage.h:846] replication_response_handler: 0->2 1624801
+I1225 00:39:11.406286 200063 LionMessage.h:846] replication_response_handler: 0->2 1624804
 I1225 00:39:11.406319 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3034580 mZB5Ry9zXu
 I1225 00:39:11.406397 200063 LionMessage.h:520] 1403139 Kkky5hxieN insert 
 I1225 00:39:11.406610 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 6705 sH7puAwG4w
@@ -1074,26 +1074,26 @@ I1225 00:39:11.409582 200063 Lion.h:280]  async_message_num: 0 -> 2 18 1643176 k
 I1225 00:39:11.409729 200061 LionExecutor.h:812] async_message_respond_num : 19from 2 to 0 1643176
 I1225 00:39:11.409760 200063 LionMessage.h:846] replication_response_handler: 0->2 1643176
 I1225 00:39:11.409794 200063 LionMessage.h:520] 1404285 cK8v76iPVy insert 
-I1225 00:39:11.410005 200063 Lion.h:280]  async_message_num: 0 -> 2 19 1621432 kWUnpNP0LB
-I1225 00:39:11.410046 200063 Lion.h:280]  async_message_num: 0 -> 2 20 1621433 kWUnpNP0LB
+I1225 00:39:11.410005 200063 Lion.h:280]  async_message_num: 0 -> 2 19 1622462 kWUnpNP0LB
+I1225 00:39:11.410046 200063 Lion.h:280]  async_message_num: 0 -> 2 20 1622463 kWUnpNP0LB
 I1225 00:39:11.410199 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2801276 tVVBIcUIIG
 I1225 00:39:11.410230 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3006389 dmuyUPhZLN
-I1225 00:39:11.410276 200061 LionExecutor.h:812] async_message_respond_num : 20from 2 to 0 1621432
-I1225 00:39:11.410291 200061 LionExecutor.h:812] async_message_respond_num : 21from 2 to 0 1621433
-I1225 00:39:11.410305 200063 LionMessage.h:846] replication_response_handler: 0->2 1621432
-I1225 00:39:11.410324 200063 LionMessage.h:846] replication_response_handler: 0->2 1621433
+I1225 00:39:11.410276 200061 LionExecutor.h:812] async_message_respond_num : 20from 2 to 0 1622462
+I1225 00:39:11.410291 200061 LionExecutor.h:812] async_message_respond_num : 21from 2 to 0 1622463
+I1225 00:39:11.410305 200063 LionMessage.h:846] replication_response_handler: 0->2 1622462
+I1225 00:39:11.410324 200063 LionMessage.h:846] replication_response_handler: 0->2 1622463
 I1225 00:39:11.410363 200063 LionMessage.h:520] 1409769 kgQyt4RAW9 insert 
 I1225 00:39:11.410408 200063 Lion.h:280]  async_message_num: 0 -> 2 21 1648850 kWUnpNP0LB
 I1225 00:39:11.410496 200061 LionExecutor.h:812] async_message_respond_num : 22from 2 to 0 1648850
 I1225 00:39:11.410514 200063 LionMessage.h:846] replication_response_handler: 0->2 1648850
 I1225 00:39:11.410758 200063 LionMessage.h:520] 1404291 uFcM86tsd9 insert 
-I1225 00:39:11.410914 200063 Lion.h:280]  async_message_num: 0 -> 2 22 1621456 kWUnpNP0LB
+I1225 00:39:11.410914 200063 Lion.h:280]  async_message_num: 0 -> 2 22 1622476 kWUnpNP0LB
 I1225 00:39:11.410943 200063 Lion.h:280]  async_message_num: 0 -> 2 23 1621461 kWUnpNP0LB
 I1225 00:39:11.410964 200063 Lion.h:280]  async_message_num: 0 -> 2 24 1621464 kWUnpNP0LB
-I1225 00:39:11.411198 200061 LionExecutor.h:812] async_message_respond_num : 23from 2 to 0 1621456
+I1225 00:39:11.411198 200061 LionExecutor.h:812] async_message_respond_num : 23from 2 to 0 1622476
 I1225 00:39:11.411214 200061 LionExecutor.h:812] async_message_respond_num : 24from 2 to 0 1621461
 I1225 00:39:11.411227 200061 LionExecutor.h:812] async_message_respond_num : 25from 2 to 0 1621464
-I1225 00:39:11.411240 200063 LionMessage.h:846] replication_response_handler: 0->2 1621456
+I1225 00:39:11.411240 200063 LionMessage.h:846] replication_response_handler: 0->2 1622476
 I1225 00:39:11.411260 200063 LionMessage.h:846] replication_response_handler: 0->2 1621461
 I1225 00:39:11.411275 200063 LionMessage.h:846] replication_response_handler: 0->2 1621464
 I1225 00:39:11.411293 200063 LionMessage.h:520] 1405842 6w1V5mwcY2 insert 
@@ -1113,7 +1113,7 @@ I1225 00:39:11.411945 200063 Lion.h:280]  async_message_num: 0 -> 2 29 1645679 k
 I1225 00:39:11.412102 200061 LionExecutor.h:812] async_message_respond_num : 28from 2 to 0 1645677
 I1225 00:39:11.412119 200061 LionExecutor.h:812] async_message_respond_num : 29from 2 to 0 1645678
 I1225 00:39:11.412129 200061 LionExecutor.h:812] async_message_respond_num : 30from 2 to 0 1645679
-I1225 00:39:11.412143 200063 LionMessage.h:846] replication_response_handler: 0->2 1645677
+I1225 00:39:11.412246 200063 LionMessage.h:846] replication_response_handler: 0->2 1645677
 I1225 00:39:11.412165 200063 LionMessage.h:846] replication_response_handler: 0->2 1645678
 I1225 00:39:11.412180 200063 LionMessage.h:846] replication_response_handler: 0->2 1645679
 I1225 00:39:11.412199 200063 LionMessage.h:520] 1409656 rm9Sk4xQpL insert 
@@ -1163,7 +1163,7 @@ I1225 00:39:11.430909 200063 Lion.h:280]  async_message_num: 0 -> 2 43 1641062 k
 I1225 00:39:11.431105 200061 LionExecutor.h:812] async_message_respond_num : 40from 2 to 0 1408211
 I1225 00:39:11.431123 200061 LionExecutor.h:812] async_message_respond_num : 41from 2 to 0 1641056
 I1225 00:39:11.431133 200061 LionExecutor.h:812] async_message_respond_num : 42from 2 to 0 1641057
-I1225 00:39:11.431145 200061 LionExecutor.h:812] async_message_respond_num : 43from 2 to 0 1641062
+I1225 00:39:11.431247 200061 LionExecutor.h:812] async_message_respond_num : 43from 2 to 0 1641062
 I1225 00:39:11.431159 200063 LionMessage.h:846] replication_response_handler: 0->2 1408211
 I1225 00:39:11.431181 200063 LionMessage.h:846] replication_response_handler: 0->2 1641056
 I1225 00:39:11.431195 200061 LionExecutor.h:812] async_message_respond_num : 44from 1 to 0 1408211
@@ -1292,7 +1292,7 @@ I1225 00:39:11.464056 200063 Lion.h:280]  async_message_num: 0 -> 2 15 1610383 k
 I1225 00:39:11.464094 200063 Lion.h:280]  async_message_num: 0 -> 2 16 1610384 kWUnpNP0LB
 I1225 00:39:11.464071 200061 LionExecutor.h:812] async_message_respond_num : 9from 2 to 0 1610406
 I1225 00:39:11.464120 200063 LionExecutor.h:657] prepare: 8  execute: 72  commit: 80  router : 0
-I1225 00:39:11.464143 200063 LionMessage.h:846] replication_response_handler: 0->1 1402081
+I1225 00:39:11.464246 200063 LionMessage.h:846] replication_response_handler: 0->1 1402081
 I1225 00:39:11.464126 200061 LionExecutor.h:812] async_message_respond_num : 10from 2 to 0 1610409
 I1225 00:39:11.464201 200061 LionExecutor.h:812] async_message_respond_num : 11from 2 to 0 1610410
 I1225 00:39:11.464215 200061 LionExecutor.h:812] async_message_respond_num : 12from 2 to 0 1610413
@@ -1557,7 +1557,7 @@ I1225 00:39:11.510890 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.511751 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027924 z6Ebm1FP0y
 I1225 00:39:11.511778 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027925 G2x6JvpRbn
 I1225 00:39:11.512305 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023247 KNEG4tXK7Q
-I1225 00:39:11.512332 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023252 5FHHvtrKoJ
+I1225 00:39:11.512332 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023248 5FHHvtrKoJ
 I1225 00:39:11.513257 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049841 YisJu3YHlg
 I1225 00:39:11.513284 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049843 BgVLx1NQaC
 I1225 00:39:11.513305 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049846 35TwfWnsix
@@ -1569,13 +1569,13 @@ I1225 00:39:11.514264 200063 LionExecutor.h:381] [S-PHASE] worker 0 ready to run
 I1225 00:39:11.514283 200063 LionExecutor.h:396] [S-PHASE] done 0 milliseconds.
 I1225 00:39:11.514264 200064 StarManager.h:267] wait_all_workers_finish
 I1225 00:39:11.514297 200063 LionExecutor.h:405] [S-PHASE] fence 0 milliseconds.
-I1225 00:39:11.514317 200064 Manager.h:210] send stop from 0 to the other...
-I1225 00:39:11.514336 200064 StarManager.h:270] wait4_stop
+I1225 00:39:11.524617 200064 Manager.h:210] send stop from 0 to the other...
+I1225 00:39:11.524636 200064 StarManager.h:270] wait4_stop
 I1225 00:39:11.514434 200064 StarManager.h:274] wait_all_workers_finish
 I1225 00:39:11.514434 200063 LionExecutor.h:420] wait back 0 milliseconds.
 I1225 00:39:11.514469 200063 LionExecutor.h:434] whole batch 53 milliseconds.
 I1225 00:39:11.514447 200064 StarManager.h:276] send_ack
-I1225 00:39:11.514544 200064 StarManager.h:279] finished
+I1225 00:39:11.524744 200064 StarManager.h:279] finished
 I1225 00:39:11.514724 200064 StarManager.h:227] start C-Phase
 I1225 00:39:11.514751 200063 LionExecutor.h:300] prepare_transactions_to_run 0 milliseconds.
 I1225 00:39:11.514751 200064 StarManager.h:236] wait_all_workers_start
@@ -1684,8 +1684,8 @@ I1225 00:39:11.521196 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.521224 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013461 yN1aXpBCcc
 I1225 00:39:11.521281 200063 Lion.h:280]  async_message_num: 0 -> 2 25 1635163 kWUnpNP0LB
 I1225 00:39:11.521310 200063 Lion.h:280]  async_message_num: 0 -> 2 26 1635165 kWUnpNP0LB
-I1225 00:39:11.521437 200061 LionExecutor.h:812] async_message_respond_num : 26from 2 to 0 1635163
-I1225 00:39:11.521450 200061 LionExecutor.h:812] async_message_respond_num : 27from 2 to 0 1635165
+I1225 00:39:11.522467 200061 LionExecutor.h:812] async_message_respond_num : 26from 2 to 0 1635163
+I1225 00:39:11.522470 200061 LionExecutor.h:812] async_message_respond_num : 27from 2 to 0 1635165
 I1225 00:39:11.521463 200063 LionMessage.h:846] replication_response_handler: 0->2 1635163
 I1225 00:39:11.521484 200063 LionMessage.h:846] replication_response_handler: 0->2 1635165
 I1225 00:39:11.521562 200063 LionMessage.h:520] 1408987 DkOddMK5bM insert 
@@ -1714,7 +1714,7 @@ I1225 00:39:11.522373 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.522392 200063 LionMessage.h:846] replication_response_handler: 0->2 1628533
 I1225 00:39:11.522419 200063 LionMessage.h:520] 1408711 vF7fdmHbXC insert 
 I1225 00:39:11.522509 200063 Lion.h:280]  async_message_num: 0 -> 2 33 1643556 kWUnpNP0LB
-I1225 00:39:11.522536 200063 Lion.h:280]  async_message_num: 0 -> 2 34 1643559 kWUnpNP0LB
+I1225 00:39:11.521176 200063 Lion.h:280]  async_message_num: 0 -> 2 34 1643559 kWUnpNP0LB
 I1225 00:39:11.522555 200063 Lion.h:280]  async_message_num: 0 -> 2 35 1643563 kWUnpNP0LB
 I1225 00:39:11.522578 200063 Lion.h:280]  async_message_num: 0 -> 2 36 1643564 kWUnpNP0LB
 I1225 00:39:11.522764 200061 LionExecutor.h:812] async_message_respond_num : 34from 2 to 0 1643556
@@ -1844,22 +1844,22 @@ I1225 00:39:11.540642 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.540679 200063 LionMessage.h:520] 1402876 02x4KPNcPi insert 
 I1225 00:39:11.540750 200063 Lion.h:280]  async_message_num: 0 -> 1 67 1402876 kWUnpNP0LB
 I1225 00:39:11.540776 200063 Lion.h:280]  async_message_num: 0 -> 2 68 1402876 kWUnpNP0LB
-I1225 00:39:11.540800 200063 Lion.h:280]  async_message_num: 0 -> 2 69 1614383 kWUnpNP0LB
-I1225 00:39:11.540823 200063 Lion.h:280]  async_message_num: 0 -> 2 70 1614384 kWUnpNP0LB
+I1225 00:39:11.540800 200063 Lion.h:280]  async_message_num: 0 -> 2 69 1624683 kWUnpNP0LB
+I1225 00:39:11.540823 200063 Lion.h:280]  async_message_num: 0 -> 2 70 1624684 kWUnpNP0LB
 I1225 00:39:11.541023 200061 LionExecutor.h:812] async_message_respond_num : 68from 2 to 0 1402876
-I1225 00:39:11.541043 200061 LionExecutor.h:812] async_message_respond_num : 69from 2 to 0 1614383
-I1225 00:39:11.541054 200061 LionExecutor.h:812] async_message_respond_num : 70from 2 to 0 1614384
+I1225 00:39:11.541043 200061 LionExecutor.h:812] async_message_respond_num : 69from 2 to 0 1624683
+I1225 00:39:11.541054 200061 LionExecutor.h:812] async_message_respond_num : 70from 2 to 0 1624684
 I1225 00:39:11.541079 200061 LionExecutor.h:812] async_message_respond_num : 71from 1 to 0 1402876
 I1225 00:39:11.541075 200063 LionMessage.h:846] replication_response_handler: 0->2 1402876
-I1225 00:39:11.541110 200063 LionMessage.h:846] replication_response_handler: 0->2 1614383
-I1225 00:39:11.541126 200063 LionMessage.h:846] replication_response_handler: 0->2 1614384
+I1225 00:39:11.541110 200063 LionMessage.h:846] replication_response_handler: 0->2 1624683
+I1225 00:39:11.541126 200063 LionMessage.h:846] replication_response_handler: 0->2 1624684
 I1225 00:39:11.541142 200063 LionMessage.h:846] replication_response_handler: 0->1 1402876
 I1225 00:39:11.541158 200063 LionMessage.h:520] 1408855 FmLZQtidVU insert 
 I1225 00:39:11.541218 200063 Lion.h:280]  async_message_num: 0 -> 2 71 1644279 kWUnpNP0LB
 I1225 00:39:11.541239 200063 Lion.h:280]  async_message_num: 0 -> 2 72 1644281 kWUnpNP0LB
 I1225 00:39:11.541257 200063 Lion.h:280]  async_message_num: 0 -> 2 73 1644282 kWUnpNP0LB
 I1225 00:39:11.541441 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2800796 ADKvmeVHR6
-I1225 00:39:11.541451 200061 LionExecutor.h:812] async_message_respond_num : 72from 2 to 0 1644279
+I1225 00:39:11.542471 200061 LionExecutor.h:812] async_message_respond_num : 72from 2 to 0 1644279
 I1225 00:39:11.541474 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3003981 AaTNsNQjns
 I1225 00:39:11.541476 200061 LionExecutor.h:812] async_message_respond_num : 73from 2 to 0 1644281
 I1225 00:39:11.541522 200061 LionExecutor.h:812] async_message_respond_num : 74from 2 to 0 1644282
@@ -1883,7 +1883,7 @@ I1225 00:39:11.542382 200063 LionMessage.h:520] 1404581 7xWi97FtJf insert
 I1225 00:39:11.542469 200063 Lion.h:280]  async_message_num: 0 -> 2 77 1622907 kWUnpNP0LB
 I1225 00:39:11.542495 200063 Lion.h:280]  async_message_num: 0 -> 2 78 1622911 kWUnpNP0LB
 I1225 00:39:11.542515 200063 Lion.h:280]  async_message_num: 0 -> 2 79 1622912 kWUnpNP0LB
-I1225 00:39:11.542536 200063 Lion.h:280]  async_message_num: 0 -> 2 80 1622913 kWUnpNP0LB
+I1225 00:39:11.541176 200063 Lion.h:280]  async_message_num: 0 -> 2 80 1622913 kWUnpNP0LB
 I1225 00:39:11.542555 200063 Lion.h:280]  async_message_num: 0 -> 2 81 1622914 kWUnpNP0LB
 I1225 00:39:11.542798 200061 LionExecutor.h:812] async_message_respond_num : 78from 2 to 0 1622907
 I1225 00:39:11.542812 200061 LionExecutor.h:812] async_message_respond_num : 79from 2 to 0 1622911
@@ -1899,7 +1899,7 @@ I1225 00:39:11.542973 200063 LionMessage.h:520] 1409222 Uu1n3pgHsD insert
 I1225 00:39:11.543061 200063 Lion.h:280]  async_message_num: 0 -> 2 82 1646113 kWUnpNP0LB
 I1225 00:39:11.543095 200063 Lion.h:280]  async_message_num: 0 -> 2 83 1646114 kWUnpNP0LB
 I1225 00:39:11.543121 200063 Lion.h:280]  async_message_num: 0 -> 2 84 1646115 kWUnpNP0LB
-I1225 00:39:11.543145 200063 Lion.h:280]  async_message_num: 0 -> 2 85 1646116 kWUnpNP0LB
+I1225 00:39:11.543247 200063 Lion.h:280]  async_message_num: 0 -> 2 85 1646116 kWUnpNP0LB
 I1225 00:39:11.543170 200063 Lion.h:280]  async_message_num: 0 -> 2 86 1646118 kWUnpNP0LB
 I1225 00:39:11.543201 200063 LionExecutor.h:657] prepare: 7  execute: 760  commit: 68  router : 0
 I1225 00:39:11.543256 200064 StarManager.h:117] send_ack
@@ -1908,7 +1908,7 @@ I1225 00:39:11.543282 200064 StarManager.h:256] start S-Phase
 I1225 00:39:11.543295 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 26 milliseconds.
 I1225 00:39:11.543326 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
 I1225 00:39:11.543346 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 7415 ZYeqiYU9NJ
-I1225 00:39:11.543375 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3031453 jjLElcz0BX
+I1225 00:39:11.543375 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3032473 jjLElcz0BX
 I1225 00:39:11.543442 200061 LionExecutor.h:812] async_message_respond_num : 83from 2 to 0 1646113
 I1225 00:39:11.543454 200061 LionExecutor.h:812] async_message_respond_num : 84from 2 to 0 1646114
 I1225 00:39:11.543464 200061 LionExecutor.h:812] async_message_respond_num : 85from 2 to 0 1646115
@@ -1927,7 +1927,7 @@ I1225 00:39:11.546099 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.546130 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3046604 qEpx7rsacP
 I1225 00:39:11.547086 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2801645 dPolY8APjQ
 I1225 00:39:11.547120 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3008227 q2N1nZb7LR
-I1225 00:39:11.547145 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3008228 H5naLcBpFV
+I1225 00:39:11.547247 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3008228 H5naLcBpFV
 I1225 00:39:11.547181 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3008231 ootbLpMZk4
 I1225 00:39:11.548163 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3022593 LnERtewFXZ
 I1225 00:39:11.549341 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024073 bXKqwJChEn
@@ -2046,7 +2046,7 @@ I1225 00:39:11.573941 200063 Lion.h:280]  async_message_num: 0 -> 2 21 1640344 k
 I1225 00:39:11.574105 200061 LionExecutor.h:812] async_message_respond_num : 20from 2 to 0 1640342
 I1225 00:39:11.574120 200061 LionExecutor.h:812] async_message_respond_num : 21from 2 to 0 1640343
 I1225 00:39:11.574131 200061 LionExecutor.h:812] async_message_respond_num : 22from 2 to 0 1640344
-I1225 00:39:11.574143 200063 LionMessage.h:846] replication_response_handler: 0->2 1640342
+I1225 00:39:11.574246 200063 LionMessage.h:846] replication_response_handler: 0->2 1640342
 I1225 00:39:11.574164 200063 LionMessage.h:846] replication_response_handler: 0->2 1640343
 I1225 00:39:11.574182 200063 LionMessage.h:846] replication_response_handler: 0->2 1640344
 I1225 00:39:11.574226 200063 LionMessage.h:520] 1402846 HoPW2kSFLm insert 
@@ -2175,7 +2175,7 @@ I1225 00:39:11.588945 200061 LionExecutor.h:812] async_message_respond_num : 54f
 I1225 00:39:11.588963 200063 LionMessage.h:846] replication_response_handler: 0->2 1647392
 I1225 00:39:11.588984 200063 LionMessage.h:846] replication_response_handler: 0->2 1647393
 I1225 00:39:11.589066 200063 LionMessage.h:520] 1402670 hQwbhndpgY insert 
-I1225 00:39:11.589143 200063 Lion.h:280]  async_message_num: 0 -> 2 54 1613354 kWUnpNP0LB
+I1225 00:39:11.589246 200063 Lion.h:280]  async_message_num: 0 -> 2 54 1613354 kWUnpNP0LB
 I1225 00:39:11.589171 200063 Lion.h:280]  async_message_num: 0 -> 2 55 1613356 kWUnpNP0LB
 I1225 00:39:11.589200 200063 Lion.h:280]  async_message_num: 0 -> 2 56 1613359 kWUnpNP0LB
 I1225 00:39:11.589402 200061 LionExecutor.h:812] async_message_respond_num : 55from 2 to 0 1613354
@@ -2189,7 +2189,7 @@ I1225 00:39:11.589594 200063 Lion.h:280]  async_message_num: 0 -> 1 57 1408418 k
 I1225 00:39:11.589622 200063 Lion.h:280]  async_message_num: 0 -> 2 58 1408418 kWUnpNP0LB
 I1225 00:39:11.589644 200063 Lion.h:280]  async_message_num: 0 -> 2 59 1642092 kWUnpNP0LB
 I1225 00:39:11.589670 200063 Lion.h:280]  async_message_num: 0 -> 2 60 1642096 kWUnpNP0LB
-I1225 00:39:11.589783 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048145 prcRYEgQof
+I1225 00:39:11.589783 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048247 prcRYEgQof
 I1225 00:39:11.589826 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048146 R3SjkbfuMT
 I1225 00:39:11.589848 200061 LionExecutor.h:812] async_message_respond_num : 58from 2 to 0 1408418
 I1225 00:39:11.589857 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3048148 rmXHn20A3s
@@ -2250,7 +2250,7 @@ I1225 00:39:11.592437 200061 LionExecutor.h:812] async_message_respond_num : 71f
 I1225 00:39:11.592453 200061 LionExecutor.h:812] async_message_respond_num : 72from 2 to 0 1625414
 I1225 00:39:11.592474 200063 LionMessage.h:846] replication_response_handler: 0->2 1405082
 I1225 00:39:11.592501 200063 LionMessage.h:846] replication_response_handler: 0->2 1625414
-I1225 00:39:11.592533 200063 LionMessage.h:520] 1407934 DMe0qpCpsZ insert 
+I1225 00:39:11.591173 200063 LionMessage.h:520] 1407934 DMe0qpCpsZ insert 
 I1225 00:39:11.592638 200061 LionExecutor.h:812] async_message_respond_num : 73from 1 to 0 1405082
 I1225 00:39:11.592658 200063 LionMessage.h:846] replication_response_handler: 0->1 1405082
 I1225 00:39:11.592708 200063 Lion.h:280]  async_message_num: 0 -> 2 73 1639673 kWUnpNP0LB
@@ -2700,7 +2700,7 @@ I1225 00:39:11.793470 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.793607 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 317 JKqiJbhl3w
 I1225 00:39:11.794219 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023075 WUBAdp7g1Z
 I1225 00:39:11.794968 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3000372 3p9NellAgL
-I1225 00:39:11.795253 200064 StarManager.h:265] wait_all_workers_start
+I1225 00:39:11.795117 200064 StarManager.h:265] wait_all_workers_start
 I1225 00:39:11.795307 200063 LionExecutor.h:371] [S-PHASE] C_phase router done 6 milliseconds.
 I1225 00:39:11.795320 200063 LionExecutor.h:381] [S-PHASE] worker 0 ready to run_transaction
 I1225 00:39:11.795321 200064 StarManager.h:267] wait_all_workers_finish
@@ -2745,8 +2745,8 @@ I1225 00:39:11.801344 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.801352 200061 LionExecutor.h:812] async_message_respond_num : 3from 2 to 0 1628741
 I1225 00:39:11.801383 200063 LionMessage.h:846] replication_response_handler: 0->2 1628741
 I1225 00:39:11.801405 200061 LionExecutor.h:812] async_message_respond_num : 4from 2 to 0 1605270
-I1225 00:39:11.801435 200061 LionExecutor.h:812] async_message_respond_num : 5from 2 to 0 1605271
-I1225 00:39:11.801457 200063 LionMessage.h:846] replication_response_handler: 0->2 1605270
+I1225 00:39:11.802465 200061 LionExecutor.h:812] async_message_respond_num : 5from 2 to 0 1605271
+I1225 00:39:11.802477 200063 LionMessage.h:846] replication_response_handler: 0->2 1605270
 I1225 00:39:11.801470 200063 LionMessage.h:846] replication_response_handler: 0->2 1605271
 I1225 00:39:11.801584 200061 LionExecutor.h:812] async_message_respond_num : 6from 2 to 0 1601166
 I1225 00:39:11.801613 200061 LionExecutor.h:812] async_message_respond_num : 7from 2 to 0 1601168
@@ -2838,7 +2838,7 @@ I1225 00:39:11.805053 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:11.805071 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049627 7wI57hk1P5
 I1225 00:39:11.805088 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3049630 a2ZSj6BU3E
 I1225 00:39:11.805104 200063 LionMessage.h:520] 1403279 oCVuuSls17 insert 
-I1225 00:39:11.805145 200063 Lion.h:280]  async_message_num: 0 -> 1 31 1403279 kWUnpNP0LB
+I1225 00:39:11.805247 200063 Lion.h:280]  async_message_num: 0 -> 1 31 1403279 kWUnpNP0LB
 I1225 00:39:11.805162 200063 Lion.h:280]  async_message_num: 0 -> 2 32 1403279 kWUnpNP0LB
 I1225 00:39:11.805177 200063 Lion.h:280]  async_message_num: 0 -> 2 33 1616397 kWUnpNP0LB
 I1225 00:39:11.805191 200063 Lion.h:280]  async_message_num: 0 -> 2 34 1616401 kWUnpNP0LB
@@ -2944,7 +2944,7 @@ I1225 00:39:11.819154 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.819175 200063 LionMessage.h:520] 1404394 KjRSp2ChNq insert 
 I1225 00:39:11.819221 200063 Lion.h:280]  async_message_num: 0 -> 1 56 1404394 kWUnpNP0LB
 I1225 00:39:11.819236 200063 Lion.h:280]  async_message_num: 0 -> 2 57 1404394 kWUnpNP0LB
-I1225 00:39:11.819252 200063 Lion.h:280]  async_message_num: 0 -> 2 58 1621976 kWUnpNP0LB
+I1225 00:39:11.819248 200063 Lion.h:280]  async_message_num: 0 -> 2 58 1621976 kWUnpNP0LB
 I1225 00:39:11.819310 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 5829 P8hGPxkt2F
 I1225 00:39:11.819409 200061 LionExecutor.h:812] async_message_respond_num : 57from 1 to 0 1404394
 I1225 00:39:11.819430 200063 LionMessage.h:846] replication_response_handler: 0->1 1404394
@@ -3008,8 +3008,8 @@ I1225 00:39:11.822424 200061 LionExecutor.h:812] async_message_respond_num : 69f
 I1225 00:39:11.822463 200061 LionExecutor.h:812] async_message_respond_num : 70from 2 to 0 1602401
 I1225 00:39:11.822485 200061 LionExecutor.h:812] async_message_respond_num : 71from 2 to 0 1602402
 I1225 00:39:11.822508 200063 LionMessage.h:846] replication_response_handler: 0->2 1602400
-I1225 00:39:11.822522 200063 LionMessage.h:846] replication_response_handler: 0->2 1602401
-I1225 00:39:11.822533 200063 LionMessage.h:846] replication_response_handler: 0->2 1602402
+I1225 00:39:11.822482 200063 LionMessage.h:846] replication_response_handler: 0->2 1602401
+I1225 00:39:11.821173 200063 LionMessage.h:846] replication_response_handler: 0->2 1602402
 I1225 00:39:11.822546 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3026283 u7QjdvFh1F
 I1225 00:39:11.822633 200063 LionMessage.h:520] 1407298 5roDXThGzL insert 
 I1225 00:39:11.822672 200063 Lion.h:280]  async_message_num: 0 -> 2 71 1636496 kWUnpNP0LB
@@ -3078,9 +3078,9 @@ I1225 00:39:11.827924 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:11.827940 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3047064 1HcaIxGY1j
 I1225 00:39:11.828788 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3010651 0ezhpM21rz
 I1225 00:39:11.841058 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3010655 DYuQpeAoc5
-I1225 00:39:11.841430 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3042997 KDNWKvx64W
+I1225 00:39:11.842460 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3042997 KDNWKvx64W
 I1225 00:39:11.841449 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3043002 FWvohlBpmu
-I1225 00:39:11.842525 200064 StarManager.h:265] wait_all_workers_start
+I1225 00:39:11.842485 200064 StarManager.h:265] wait_all_workers_start
 I1225 00:39:11.842572 200063 LionExecutor.h:371] [S-PHASE] C_phase router done 18 milliseconds.
 I1225 00:39:11.842586 200063 LionExecutor.h:381] [S-PHASE] worker 0 ready to run_transaction
 I1225 00:39:11.842588 200064 StarManager.h:267] wait_all_workers_finish
@@ -3095,7 +3095,7 @@ I1225 00:39:11.855356 200064 StarManager.h:227] start C-Phase
 I1225 00:39:11.855369 200064 StarManager.h:236] wait_all_workers_start
 I1225 00:39:11.868206 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3018967 5jq4DDwiO7
 I1225 00:39:11.868233 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3018974 UjOtxYuFY5
-I1225 00:39:11.868252 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027432 HBQp7yRPbI
+I1225 00:39:11.868248 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027432 HBQp7yRPbI
 I1225 00:39:11.868268 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027439 kWUnpNP0LB
 I1225 00:39:11.868299 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 9905 cStzHdzoJQ
 I1225 00:39:11.868319 200063 LionExecutor.h:420] wait back 25 milliseconds.
@@ -3192,7 +3192,7 @@ I1225 00:39:11.896725 200063 Lion.h:280]  async_message_num: 0 -> 2 24 1645085 k
 I1225 00:39:11.896884 200061 LionExecutor.h:812] async_message_respond_num : 22from 1 to 0 1409016
 I1225 00:39:11.896916 200063 LionMessage.h:846] replication_response_handler: 0->1 1409016
 I1225 00:39:11.897114 200061 LionExecutor.h:812] async_message_respond_num : 23from 2 to 0 1409016
-I1225 00:39:11.897145 200061 LionExecutor.h:812] async_message_respond_num : 24from 2 to 0 1645084
+I1225 00:39:11.897247 200061 LionExecutor.h:812] async_message_respond_num : 24from 2 to 0 1645084
 I1225 00:39:11.897167 200061 LionExecutor.h:812] async_message_respond_num : 25from 2 to 0 1645085
 I1225 00:39:11.897190 200063 LionMessage.h:846] replication_response_handler: 0->2 1409016
 I1225 00:39:11.897202 200063 LionMessage.h:846] replication_response_handler: 0->2 1645084
@@ -3237,7 +3237,7 @@ I1225 00:39:11.902266 200061 LionExecutor.h:812] async_message_respond_num : 32f
 I1225 00:39:11.902294 200063 LionMessage.h:846] replication_response_handler: 0->2 1628013
 I1225 00:39:11.902334 200063 LionMessage.h:520] 1408489 i7h51KbEtZ insert 
 I1225 00:39:11.902419 200063 Lion.h:280]  async_message_num: 0 -> 2 32 1642450 kWUnpNP0LB
-I1225 00:39:11.902531 200061 LionExecutor.h:812] async_message_respond_num : 33from 2 to 0 1642450
+I1225 00:39:11.901171 200061 LionExecutor.h:812] async_message_respond_num : 33from 2 to 0 1642450
 I1225 00:39:11.902567 200063 LionMessage.h:846] replication_response_handler: 0->2 1642450
 I1225 00:39:11.902711 200063 LionMessage.h:520] 1408929 Lnax0k4eCY insert 
 I1225 00:39:11.902753 200063 Lion.h:280]  async_message_num: 0 -> 2 33 1644646 kWUnpNP0LB
@@ -3406,7 +3406,7 @@ I1225 00:39:11.951354 200064 StarManager.h:276] send_ack
 I1225 00:39:11.951370 200064 StarManager.h:279] finished
 I1225 00:39:11.951334 200063 LionExecutor.h:434] whole batch 82 milliseconds.
 I1225 00:39:11.961410 200064 StarManager.h:227] start C-Phase
-I1225 00:39:11.961439 200064 StarManager.h:236] wait_all_workers_start
+I1225 00:39:11.962469 200064 StarManager.h:236] wait_all_workers_start
 I1225 00:39:11.961441 200063 LionExecutor.h:300] prepare_transactions_to_run 0 milliseconds.
 I1225 00:39:11.962829 200063 LionExecutor.h:193]  RECV : 9
 I1225 00:39:11.962844 200063 LionExecutor.h:193]  RECV : 7
@@ -3428,14 +3428,14 @@ I1225 00:39:11.963764 200063 Lion.h:280]  async_message_num: 0 -> 2 8 1619862 kW
 I1225 00:39:11.963783 200063 Lion.h:280]  async_message_num: 0 -> 2 9 1619866 kWUnpNP0LB
 I1225 00:39:11.963796 200063 Lion.h:280]  async_message_num: 0 -> 2 10 1619869 kWUnpNP0LB
 I1225 00:39:11.963860 200061 LionExecutor.h:812] async_message_respond_num : 1from 1 to 0 1401957
-I1225 00:39:11.963896 200063 Lion.h:280]  async_message_num: 0 -> 2 11 1602537 kWUnpNP0LB
+I1225 00:39:11.963896 200063 Lion.h:280]  async_message_num: 0 -> 2 11 1601177 kWUnpNP0LB
 I1225 00:39:11.963922 200063 LionMessage.h:846] replication_response_handler: 0->1 1401957
 I1225 00:39:11.963992 200063 Lion.h:280]  async_message_num: 0 -> 2 12 1619207 kWUnpNP0LB
 I1225 00:39:11.964013 200063 Lion.h:280]  async_message_num: 0 -> 2 13 1619211 kWUnpNP0LB
 I1225 00:39:11.964028 200063 Lion.h:280]  async_message_num: 0 -> 2 14 1619212 kWUnpNP0LB
 I1225 00:39:11.964112 200063 Lion.h:280]  async_message_num: 0 -> 2 15 1610212 kWUnpNP0LB
 I1225 00:39:11.964133 200063 Lion.h:280]  async_message_num: 0 -> 2 16 1610213 kWUnpNP0LB
-I1225 00:39:11.964145 200063 Lion.h:280]  async_message_num: 0 -> 2 17 1610214 kWUnpNP0LB
+I1225 00:39:11.964247 200063 Lion.h:280]  async_message_num: 0 -> 2 17 1610214 kWUnpNP0LB
 I1225 00:39:11.964159 200063 Lion.h:280]  async_message_num: 0 -> 2 18 1610215 kWUnpNP0LB
 I1225 00:39:11.964174 200063 Lion.h:280]  async_message_num: 0 -> 2 19 1610217 kWUnpNP0LB
 I1225 00:39:11.964186 200063 LionExecutor.h:657] prepare: 5  execute: 44  commit: 52  router : 0
@@ -3464,8 +3464,8 @@ I1225 00:39:11.964725 200061 LionExecutor.h:812] async_message_respond_num : 11f
 I1225 00:39:11.964746 200063 LionMessage.h:846] replication_response_handler: 0->2 1619862
 I1225 00:39:11.964758 200063 LionMessage.h:846] replication_response_handler: 0->2 1619866
 I1225 00:39:11.964768 200063 LionMessage.h:846] replication_response_handler: 0->2 1619869
-I1225 00:39:11.964768 200061 LionExecutor.h:812] async_message_respond_num : 12from 2 to 0 1602537
-I1225 00:39:11.964797 200063 LionMessage.h:846] replication_response_handler: 0->2 1602537
+I1225 00:39:11.964768 200061 LionExecutor.h:812] async_message_respond_num : 12from 2 to 0 1601177
+I1225 00:39:11.964797 200063 LionMessage.h:846] replication_response_handler: 0->2 1601177
 I1225 00:39:11.964866 200061 LionExecutor.h:812] async_message_respond_num : 13from 2 to 0 1619207
 I1225 00:39:11.964897 200061 LionExecutor.h:812] async_message_respond_num : 14from 2 to 0 1619211
 I1225 00:39:11.964919 200061 LionExecutor.h:812] async_message_respond_num : 15from 2 to 0 1619212
@@ -3609,8 +3609,8 @@ I1225 00:39:11.997382 200063 Lion.h:280]  async_message_num: 0 -> 2 47 1621787 k
 I1225 00:39:11.997396 200063 Lion.h:280]  async_message_num: 0 -> 2 48 1621788 kWUnpNP0LB
 I1225 00:39:11.997411 200063 Lion.h:280]  async_message_num: 0 -> 2 49 1621789 kWUnpNP0LB
 I1225 00:39:11.997426 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2805074 sGCWL5gqRS
-I1225 00:39:11.997442 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3025371 rE65B4W57M
-I1225 00:39:11.997458 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3025379 QRFy4RWv4m
+I1225 00:39:11.997442 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3011771 rE65B4W57M
+I1225 00:39:11.997458 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3011779 QRFy4RWv4m
 I1225 00:39:11.997675 200061 LionExecutor.h:812] async_message_respond_num : 46from 2 to 0 1621782
 I1225 00:39:11.997705 200061 LionExecutor.h:812] async_message_respond_num : 47from 2 to 0 1621783
 I1225 00:39:11.997728 200061 LionExecutor.h:812] async_message_respond_num : 48from 2 to 0 1621787
@@ -3682,9 +3682,9 @@ I1225 00:39:12.011361 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.011371 200063 LionMessage.h:846] replication_response_handler: 0->2 1625693
 I1225 00:39:12.011394 200063 LionMessage.h:520] 1405880 Vysd2VLkji insert 
 I1225 00:39:12.011616 200063 LionMessage.h:520] 1408345 ltl8N9tTuG insert 
-I1225 00:39:12.011643 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014520 5EKKJkBpif
-I1225 00:39:12.011660 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014523 CEMsWlvcCI
-I1225 00:39:12.011678 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014524 nAic7W1zO1
+I1225 00:39:12.011643 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024720 5EKKJkBpif
+I1225 00:39:12.011660 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024723 CEMsWlvcCI
+I1225 00:39:12.011678 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024724 nAic7W1zO1
 I1225 00:39:12.011952 200063 LionMessage.h:520] 1406440 U0qUkDlwke insert 
 I1225 00:39:12.011999 200063 Lion.h:280]  async_message_num: 0 -> 2 62 1632201 kWUnpNP0LB
 I1225 00:39:12.012014 200063 Lion.h:280]  async_message_num: 0 -> 2 63 1632203 kWUnpNP0LB
@@ -3709,10 +3709,10 @@ I1225 00:39:12.012709 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.013190 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2801481 AH2FwLTE1H
 I1225 00:39:12.013525 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3047754 8ubzVVLe9m
 I1225 00:39:12.014284 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2803181 iLZSEClEwU
-I1225 00:39:12.014308 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3015912 TkF3GW5eHS
-I1225 00:39:12.014597 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3030781 0v51QbVLGN
-I1225 00:39:12.014890 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014532 RuwsxDNndm
-I1225 00:39:12.014910 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014533 3TBJl6Z7TX
+I1225 00:39:12.024608 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3015912 TkF3GW5eHS
+I1225 00:39:12.024797 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3030781 0v51QbVLGN
+I1225 00:39:12.014890 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024732 RuwsxDNndm
+I1225 00:39:12.014910 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024733 3TBJl6Z7TX
 I1225 00:39:12.015249 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024831 vFSIH3HM76
 I1225 00:39:12.015270 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024833 wc0K2VBu2W
 I1225 00:39:12.041043 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 4475 IjZ8hczvXn
@@ -3741,7 +3741,7 @@ I1225 00:39:12.101869 200063 LionExecutor.h:324] prepare_transactions_to_run 0 m
 I1225 00:39:12.101883 200063 LionExecutor.h:332] [C-PHASE] worker 0 c_phase
 I1225 00:39:12.101895 200064 StarManager.h:240] wait4_stop
 I1225 00:39:12.101922 200064 StarManager.h:247] wait_all_workers_finish
-I1225 00:39:12.101944 200063 Lion.h:280]  async_message_num: 0 -> 2 0 1602537 kWUnpNP0LB
+I1225 00:39:12.101944 200063 Lion.h:280]  async_message_num: 0 -> 2 0 1601177 kWUnpNP0LB
 I1225 00:39:12.102008 200063 Lion.h:280]  async_message_num: 0 -> 2 1 1621072 kWUnpNP0LB
 I1225 00:39:12.102092 200063 Lion.h:280]  async_message_num: 0 -> 1 2 1400632 kWUnpNP0LB
 I1225 00:39:12.102115 200063 Lion.h:280]  async_message_num: 0 -> 2 3 1400632 kWUnpNP0LB
@@ -3758,16 +3758,16 @@ I1225 00:39:12.102409 200063 Lion.h:280]  async_message_num: 0 -> 2 10 1406737 k
 I1225 00:39:12.102423 200063 Lion.h:280]  async_message_num: 0 -> 2 11 1633688 kWUnpNP0LB
 I1225 00:39:12.102437 200063 Lion.h:280]  async_message_num: 0 -> 2 12 1633690 kWUnpNP0LB
 I1225 00:39:12.102499 200063 Lion.h:280]  async_message_num: 0 -> 2 13 1620208 kWUnpNP0LB
-I1225 00:39:12.102532 200061 LionExecutor.h:812] async_message_respond_num : 2from 1 to 0 1406737
+I1225 00:39:12.101172 200061 LionExecutor.h:812] async_message_respond_num : 2from 1 to 0 1406737
 I1225 00:39:12.102566 200063 Lion.h:280]  async_message_num: 0 -> 2 14 1635823 kWUnpNP0LB
 I1225 00:39:12.102581 200063 Lion.h:280]  async_message_num: 0 -> 2 15 1635825 kWUnpNP0LB
 I1225 00:39:12.102595 200063 LionMessage.h:846] replication_response_handler: 0->1 1406737
-I1225 00:39:12.102593 200061 LionExecutor.h:812] async_message_respond_num : 3from 2 to 0 1602537
+I1225 00:39:12.102593 200061 LionExecutor.h:812] async_message_respond_num : 3from 2 to 0 1601177
 I1225 00:39:12.102660 200063 Lion.h:280]  async_message_num: 0 -> 1 16 1401406 kWUnpNP0LB
 I1225 00:39:12.102659 200061 LionExecutor.h:812] async_message_respond_num : 4from 2 to 0 1621072
 I1225 00:39:12.102680 200063 Lion.h:280]  async_message_num: 0 -> 2 17 1401406 kWUnpNP0LB
 I1225 00:39:12.102716 200063 Lion.h:280]  async_message_num: 0 -> 2 18 1607034 kWUnpNP0LB
-I1225 00:39:12.102731 200063 LionMessage.h:846] replication_response_handler: 0->2 1602537
+I1225 00:39:12.102731 200063 LionMessage.h:846] replication_response_handler: 0->2 1601177
 I1225 00:39:12.102743 200063 LionMessage.h:846] replication_response_handler: 0->2 1621072
 I1225 00:39:12.102807 200063 Lion.h:280]  async_message_num: 0 -> 1 19 1401214 kWUnpNP0LB
 I1225 00:39:12.102803 200061 LionExecutor.h:812] async_message_respond_num : 5from 1 to 0 1401406
@@ -3872,7 +3872,7 @@ I1225 00:39:12.105804 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.105824 200063 LionMessage.h:520] 1406418 Tu8XpTHjnE insert 
 I1225 00:39:12.105866 200063 Lion.h:280]  async_message_num: 0 -> 2 36 1632092 kWUnpNP0LB
 I1225 00:39:12.106093 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 8725 3KYl1iFoIx
-I1225 00:39:12.106143 200061 LionExecutor.h:812] async_message_respond_num : 37from 2 to 0 1632092
+I1225 00:39:12.106246 200061 LionExecutor.h:812] async_message_respond_num : 37from 2 to 0 1632092
 I1225 00:39:12.106165 200063 LionMessage.h:846] replication_response_handler: 0->2 1632092
 I1225 00:39:12.106245 200063 LionMessage.h:520] 1408442 kt5MBSk2ZK insert 
 I1225 00:39:12.106288 200063 Lion.h:280]  async_message_num: 0 -> 2 37 1642212 kWUnpNP0LB
@@ -3917,7 +3917,7 @@ I1225 00:39:12.108106 200063 LionMessage.h:520] 1403380 lrGd1KmF8D insert
 I1225 00:39:12.116382 200063 Lion.h:280]  async_message_num: 0 -> 1 45 1403380 kWUnpNP0LB
 I1225 00:39:12.129055 200063 Lion.h:280]  async_message_num: 0 -> 2 46 1403380 kWUnpNP0LB
 I1225 00:39:12.129073 200063 Lion.h:280]  async_message_num: 0 -> 2 47 1616908 kWUnpNP0LB
-I1225 00:39:12.129091 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014363 DV8S389RJd
+I1225 00:39:12.129091 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024663 DV8S389RJd
 I1225 00:39:12.129173 200061 LionExecutor.h:812] async_message_respond_num : 46from 1 to 0 1403380
 I1225 00:39:12.129199 200063 LionMessage.h:846] replication_response_handler: 0->1 1403380
 I1225 00:39:12.129267 200061 LionExecutor.h:812] async_message_respond_num : 47from 2 to 0 1403380
@@ -3971,9 +3971,9 @@ I1225 00:39:12.131350 200061 LionExecutor.h:812] async_message_respond_num : 59f
 I1225 00:39:12.131373 200061 LionExecutor.h:812] async_message_respond_num : 60from 2 to 0 1645966
 I1225 00:39:12.131395 200061 LionExecutor.h:812] async_message_respond_num : 61from 2 to 0 1645968
 I1225 00:39:12.131422 200063 LionMessage.h:846] replication_response_handler: 0->2 1409192
-I1225 00:39:12.131434 200063 LionMessage.h:846] replication_response_handler: 0->2 1645964
+I1225 00:39:12.132464 200063 LionMessage.h:846] replication_response_handler: 0->2 1645964
 I1225 00:39:12.131444 200063 LionMessage.h:846] replication_response_handler: 0->2 1645966
-I1225 00:39:12.131455 200063 LionMessage.h:846] replication_response_handler: 0->2 1645968
+I1225 00:39:12.132475 200063 LionMessage.h:846] replication_response_handler: 0->2 1645968
 I1225 00:39:12.131467 200063 LionMessage.h:520] 1403665 lGkgiEw1Q2 insert 
 I1225 00:39:12.131544 200063 Lion.h:280]  async_message_num: 0 -> 2 61 1623828 kWUnpNP0LB
 I1225 00:39:12.131561 200063 Lion.h:280]  async_message_num: 0 -> 2 62 1623830 kWUnpNP0LB
@@ -4001,7 +4001,7 @@ I1225 00:39:12.132455 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.132467 200063 LionMessage.h:846] replication_response_handler: 0->2 1636547
 I1225 00:39:12.132477 200063 LionMessage.h:846] replication_response_handler: 0->2 1636552
 I1225 00:39:12.132508 200063 LionMessage.h:520] 1408497 L9mAmiXuPo insert 
-I1225 00:39:12.132539 200063 Lion.h:280]  async_message_num: 0 -> 2 67 1642494 kWUnpNP0LB
+I1225 00:39:12.131179 200063 Lion.h:280]  async_message_num: 0 -> 2 67 1642494 kWUnpNP0LB
 I1225 00:39:12.132616 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3015995 dGDHqFw5Hl
 I1225 00:39:12.132633 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3015998 MCAL4Y1Jkw
 I1225 00:39:12.132794 200061 LionExecutor.h:812] async_message_respond_num : 68from 2 to 0 1642494
@@ -4059,7 +4059,7 @@ I1225 00:39:12.173188 200064 StarManager.h:279] finished
 I1225 00:39:12.186246 200064 StarManager.h:227] start C-Phase
 I1225 00:39:12.186264 200064 StarManager.h:236] wait_all_workers_start
 I1225 00:39:12.199040 200063 LionExecutor.h:300] prepare_transactions_to_run 0 milliseconds.
-I1225 00:39:12.199211 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3025377 MAgBQ5GtJE
+I1225 00:39:12.199211 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3011777 MAgBQ5GtJE
 I1225 00:39:12.199245 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 9342 SzEd2ZgBTi
 I1225 00:39:12.199266 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 9682 cIwzEBwIgi
 I1225 00:39:12.199347 200063 LionExecutor.h:193]  RECV : 10
@@ -4220,7 +4220,7 @@ I1225 00:39:12.206599 200063 LionMessage.h:520] 1409195 R0Seh8Llph insert
 I1225 00:39:12.206645 200063 Lion.h:280]  async_message_num: 0 -> 2 40 1645981 kWUnpNP0LB
 I1225 00:39:12.206660 200063 Lion.h:280]  async_message_num: 0 -> 2 41 1645982 kWUnpNP0LB
 I1225 00:39:12.206674 200063 Lion.h:280]  async_message_num: 0 -> 2 42 1645984 kWUnpNP0LB
-I1225 00:39:12.206730 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3045252 qSThy6WoEn
+I1225 00:39:12.206730 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3045248 qSThy6WoEn
 I1225 00:39:12.206905 200061 LionExecutor.h:812] async_message_respond_num : 41from 2 to 0 1645981
 I1225 00:39:12.206944 200061 LionExecutor.h:812] async_message_respond_num : 42from 2 to 0 1645982
 I1225 00:39:12.206969 200061 LionExecutor.h:812] async_message_respond_num : 43from 2 to 0 1645984
@@ -4251,11 +4251,11 @@ I1225 00:39:12.207866 200061 LionExecutor.h:812] async_message_respond_num : 48f
 I1225 00:39:12.207898 200063 LionMessage.h:846] replication_response_handler: 0->2 1615773
 I1225 00:39:12.207978 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3021728 OSINsOYV0m
 I1225 00:39:12.208052 200063 LionMessage.h:520] 1408507 54VkN7FRu5 insert 
-I1225 00:39:12.208084 200063 Lion.h:280]  async_message_num: 0 -> 2 48 1642539 kWUnpNP0LB
+I1225 00:39:12.208084 200063 Lion.h:280]  async_message_num: 0 -> 2 48 1641179 kWUnpNP0LB
 I1225 00:39:12.208305 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3030272 m4WeGAF9zD
 I1225 00:39:12.208328 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3030273 JyPrf4siH3
-I1225 00:39:12.208330 200061 LionExecutor.h:812] async_message_respond_num : 49from 2 to 0 1642539
-I1225 00:39:12.208359 200063 LionMessage.h:846] replication_response_handler: 0->2 1642539
+I1225 00:39:12.208330 200061 LionExecutor.h:812] async_message_respond_num : 49from 2 to 0 1641179
+I1225 00:39:12.208359 200063 LionMessage.h:846] replication_response_handler: 0->2 1641179
 I1225 00:39:12.208407 200063 LionMessage.h:520] 1408251 GMjcXlVUbL insert 
 I1225 00:39:12.208447 200063 Lion.h:280]  async_message_num: 0 -> 2 49 1641261 kWUnpNP0LB
 I1225 00:39:12.208464 200063 Lion.h:280]  async_message_num: 0 -> 2 50 1641264 kWUnpNP0LB
@@ -4267,18 +4267,18 @@ I1225 00:39:12.208808 200061 LionExecutor.h:812] async_message_respond_num : 51f
 I1225 00:39:12.208827 200063 LionMessage.h:846] replication_response_handler: 0->2 1641261
 I1225 00:39:12.208839 200063 LionMessage.h:846] replication_response_handler: 0->2 1641264
 I1225 00:39:12.208853 200063 LionMessage.h:520] 1402899 jjuOAwT2cw insert 
-I1225 00:39:12.208882 200063 Lion.h:280]  async_message_num: 0 -> 2 51 1614501 kWUnpNP0LB
+I1225 00:39:12.208882 200063 Lion.h:280]  async_message_num: 0 -> 2 51 1624701 kWUnpNP0LB
 I1225 00:39:12.208897 200063 LionExecutor.h:657] prepare: 5  execute: 522  commit: 33  router : 0
 I1225 00:39:12.208928 200063 LionExecutor.h:351] [C-PHASE] worker 0 finish run_transaction
 I1225 00:39:12.208930 200064 StarManager.h:117] send_ack
 I1225 00:39:12.208964 200064 StarManager.h:256] start S-Phase
-I1225 00:39:12.209159 200061 LionExecutor.h:812] async_message_respond_num : 52from 2 to 0 1614501
+I1225 00:39:12.209159 200061 LionExecutor.h:812] async_message_respond_num : 52from 2 to 0 1624701
 I1225 00:39:12.208938 200063 LionExecutor.h:353] [C-PHASE] C_phase - local 9 milliseconds.
 I1225 00:39:12.218062 200063 LionExecutor.h:360] [C-PHASE] worker 0 wait to s_phase
 I1225 00:39:12.218084 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3019416 D2TFCumLZC
 I1225 00:39:12.218101 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3019419 9sPPtQBbt9
 I1225 00:39:12.218117 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3019421 nEeuaNYiX6
-I1225 00:39:12.218137 200063 LionMessage.h:846] replication_response_handler: 0->2 1614501
+I1225 00:39:12.218137 200063 LionMessage.h:846] replication_response_handler: 0->2 1624701
 I1225 00:39:12.218570 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3003981 kWUnpNP0LB
 I1225 00:39:12.218828 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3036953 RNCI8aETUB
 I1225 00:39:12.219473 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3034301 GA00UvhDqf
@@ -4322,7 +4322,7 @@ I1225 00:39:12.242192 200064 StarManager.h:265] wait_all_workers_start
 I1225 00:39:12.242225 200063 LionExecutor.h:371] [S-PHASE] C_phase router done 24 milliseconds.
 I1225 00:39:12.242237 200063 LionExecutor.h:381] [S-PHASE] worker 0 ready to run_transaction
 I1225 00:39:12.242239 200064 StarManager.h:267] wait_all_workers_finish
-I1225 00:39:12.242252 200063 LionExecutor.h:396] [S-PHASE] done 0 milliseconds.
+I1225 00:39:12.242248 200063 LionExecutor.h:396] [S-PHASE] done 0 milliseconds.
 I1225 00:39:12.242327 200063 LionExecutor.h:405] [S-PHASE] fence 0 milliseconds.
 I1225 00:39:12.242331 200064 Manager.h:210] send stop from 0 to the other...
 I1225 00:39:12.242357 200064 StarManager.h:270] wait4_stop
@@ -4514,7 +4514,7 @@ I1225 00:39:12.319080 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.319093 200063 LionMessage.h:846] replication_response_handler: 0->2 1639991
 I1225 00:39:12.319106 200063 LionMessage.h:520] 1409824 UD2gvtxsxA insert 
 I1225 00:39:12.319128 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3045050 YfKzS3ZaJW
-I1225 00:39:12.319145 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3045051 PjEIpYnbJ3
+I1225 00:39:12.319247 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3045051 PjEIpYnbJ3
 I1225 00:39:12.319180 200063 Lion.h:280]  async_message_num: 0 -> 1 45 1409824 kWUnpNP0LB
 I1225 00:39:12.319195 200063 Lion.h:280]  async_message_num: 0 -> 2 46 1409824 kWUnpNP0LB
 I1225 00:39:12.319211 200063 Lion.h:280]  async_message_num: 0 -> 2 47 1649121 kWUnpNP0LB
@@ -4562,7 +4562,7 @@ I1225 00:39:12.320816 200063 Lion.h:280]  async_message_num: 0 -> 2 60 1617777 k
 I1225 00:39:12.321071 200061 LionExecutor.h:812] async_message_respond_num : 56from 2 to 0 1649518
 I1225 00:39:12.321102 200061 LionExecutor.h:812] async_message_respond_num : 57from 2 to 0 1649519
 I1225 00:39:12.321125 200061 LionExecutor.h:812] async_message_respond_num : 58from 2 to 0 1649522
-I1225 00:39:12.321143 200061 LionExecutor.h:812] async_message_respond_num : 59from 2 to 0 1649523
+I1225 00:39:12.321246 200061 LionExecutor.h:812] async_message_respond_num : 59from 2 to 0 1649523
 I1225 00:39:12.321161 200063 LionMessage.h:846] replication_response_handler: 0->2 1649518
 I1225 00:39:12.321175 200063 LionMessage.h:846] replication_response_handler: 0->2 1649519
 I1225 00:39:12.321178 200061 LionExecutor.h:812] async_message_respond_num : 60from 2 to 0 1617775
@@ -4751,7 +4751,7 @@ I1225 00:39:12.407275 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.407287 200063 LionMessage.h:846] replication_response_handler: 0->2 1402163
 I1225 00:39:12.407356 200063 Lion.h:280]  async_message_num: 0 -> 1 18 1402507 kWUnpNP0LB
 I1225 00:39:12.407377 200063 Lion.h:280]  async_message_num: 0 -> 2 19 1402507 kWUnpNP0LB
-I1225 00:39:12.407392 200063 Lion.h:280]  async_message_num: 0 -> 2 20 1612539 kWUnpNP0LB
+I1225 00:39:12.407392 200063 Lion.h:280]  async_message_num: 0 -> 2 20 1611179 kWUnpNP0LB
 I1225 00:39:12.407405 200063 Lion.h:280]  async_message_num: 0 -> 2 21 1612541 kWUnpNP0LB
 I1225 00:39:12.407420 200061 LionExecutor.h:812] async_message_respond_num : 17from 2 to 0 1618997
 I1225 00:39:12.407449 200061 LionExecutor.h:812] async_message_respond_num : 18from 2 to 0 1618999
@@ -4769,11 +4769,11 @@ I1225 00:39:12.407783 200063 Lion.h:280]  async_message_num: 0 -> 1 25 1403544 k
 I1225 00:39:12.407801 200063 Lion.h:280]  async_message_num: 0 -> 2 26 1403544 kWUnpNP0LB
 I1225 00:39:12.407799 200061 LionExecutor.h:812] async_message_respond_num : 20from 2 to 0 1402507
 I1225 00:39:12.407820 200063 Lion.h:280]  async_message_num: 0 -> 2 27 1617726 kWUnpNP0LB
-I1225 00:39:12.407843 200061 LionExecutor.h:812] async_message_respond_num : 21from 2 to 0 1612539
+I1225 00:39:12.407843 200061 LionExecutor.h:812] async_message_respond_num : 21from 2 to 0 1611179
 I1225 00:39:12.407855 200063 Lion.h:280]  async_message_num: 0 -> 2 28 1617729 kWUnpNP0LB
 I1225 00:39:12.407876 200061 LionExecutor.h:812] async_message_respond_num : 22from 2 to 0 1612541
 I1225 00:39:12.407925 200063 LionMessage.h:846] replication_response_handler: 0->2 1402507
-I1225 00:39:12.407938 200063 LionMessage.h:846] replication_response_handler: 0->2 1612539
+I1225 00:39:12.407938 200063 LionMessage.h:846] replication_response_handler: 0->2 1611179
 I1225 00:39:12.407949 200063 LionMessage.h:846] replication_response_handler: 0->2 1612541
 I1225 00:39:12.407965 200061 LionExecutor.h:812] async_message_respond_num : 23from 1 to 0 1403544
 I1225 00:39:12.408000 200063 LionMessage.h:846] replication_response_handler: 0->1 1403544
@@ -4850,7 +4850,7 @@ I1225 00:39:12.411365 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.411377 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3011192 u68vb2Z9xh
 I1225 00:39:12.411393 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3011193 zFpw58PhkZ
 I1225 00:39:12.411410 200063 LionMessage.h:520] 1409996 YGc38waZux insert 
-I1225 00:39:12.411456 200063 Lion.h:280]  async_message_num: 0 -> 2 43 1649985 kWUnpNP0LB
+I1225 00:39:12.412476 200063 Lion.h:280]  async_message_num: 0 -> 2 43 1649985 kWUnpNP0LB
 I1225 00:39:12.411471 200063 Lion.h:280]  async_message_num: 0 -> 2 44 1649986 kWUnpNP0LB
 I1225 00:39:12.411684 200061 LionExecutor.h:812] async_message_respond_num : 44from 2 to 0 1649985
 I1225 00:39:12.411715 200061 LionExecutor.h:812] async_message_respond_num : 45from 2 to 0 1649986
@@ -4927,10 +4927,10 @@ I1225 00:39:12.414439 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.414455 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3018376 o9EE5SslRC
 I1225 00:39:12.414453 200061 LionExecutor.h:812] async_message_respond_num : 61from 2 to 0 1635186
 I1225 00:39:12.414494 200061 LionExecutor.h:812] async_message_respond_num : 62from 2 to 0 1635188
-I1225 00:39:12.414521 200061 LionExecutor.h:812] async_message_respond_num : 63from 2 to 0 1635189
-I1225 00:39:12.414543 200061 LionExecutor.h:812] async_message_respond_num : 64from 2 to 0 1635190
-I1225 00:39:12.414566 200061 LionExecutor.h:812] async_message_respond_num : 65from 2 to 0 1635194
-I1225 00:39:12.414588 200063 LionMessage.h:846] replication_response_handler: 0->2 1635186
+I1225 00:39:12.424721 200061 LionExecutor.h:812] async_message_respond_num : 63from 2 to 0 1635189
+I1225 00:39:12.424743 200061 LionExecutor.h:812] async_message_respond_num : 64from 2 to 0 1635190
+I1225 00:39:12.424766 200061 LionExecutor.h:812] async_message_respond_num : 65from 2 to 0 1635194
+I1225 00:39:12.424788 200063 LionMessage.h:846] replication_response_handler: 0->2 1635186
 I1225 00:39:12.414600 200063 LionMessage.h:846] replication_response_handler: 0->2 1635188
 I1225 00:39:12.414611 200063 LionMessage.h:846] replication_response_handler: 0->2 1635189
 I1225 00:39:12.414623 200063 LionMessage.h:846] replication_response_handler: 0->2 1635190
@@ -4997,8 +4997,8 @@ I1225 00:39:12.448887 200064 StarManager.h:247] wait_all_workers_finish
 I1225 00:39:12.448926 200063 Lion.h:280]  async_message_num: 0 -> 2 0 1624242 kWUnpNP0LB
 I1225 00:39:12.448998 200063 Lion.h:280]  async_message_num: 0 -> 2 1 1603082 kWUnpNP0LB
 I1225 00:39:12.449018 200063 Lion.h:280]  async_message_num: 0 -> 2 2 1603084 kWUnpNP0LB
-I1225 00:39:12.449085 200063 Lion.h:280]  async_message_num: 0 -> 1 3 1401433 kWUnpNP0LB
-I1225 00:39:12.449101 200063 Lion.h:280]  async_message_num: 0 -> 2 4 1401433 kWUnpNP0LB
+I1225 00:39:12.449085 200063 Lion.h:280]  async_message_num: 0 -> 1 3 1402463 kWUnpNP0LB
+I1225 00:39:12.449101 200063 Lion.h:280]  async_message_num: 0 -> 2 4 1402463 kWUnpNP0LB
 I1225 00:39:12.449115 200063 Lion.h:280]  async_message_num: 0 -> 2 5 1607166 kWUnpNP0LB
 I1225 00:39:12.449184 200063 Lion.h:280]  async_message_num: 0 -> 2 6 1612090 kWUnpNP0LB
 I1225 00:39:12.449203 200063 Lion.h:280]  async_message_num: 0 -> 2 7 1612092 kWUnpNP0LB
@@ -5007,8 +5007,8 @@ I1225 00:39:12.449278 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.449293 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3040694 SblPfcUqDz
 I1225 00:39:12.449309 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3040697 IRpkcqAAV3
 I1225 00:39:12.449326 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3040699 NxkVoxP5hb
-I1225 00:39:12.449321 200061 LionExecutor.h:812] async_message_respond_num : 1from 1 to 0 1401433
-I1225 00:39:12.449384 200063 LionMessage.h:846] replication_response_handler: 0->1 1401433
+I1225 00:39:12.449321 200061 LionExecutor.h:812] async_message_respond_num : 1from 1 to 0 1402463
+I1225 00:39:12.449384 200063 LionMessage.h:846] replication_response_handler: 0->1 1402463
 I1225 00:39:12.449407 200061 LionExecutor.h:812] async_message_respond_num : 2from 2 to 0 1624242
 I1225 00:39:12.449462 200063 Lion.h:280]  async_message_num: 0 -> 1 8 1401279 kWUnpNP0LB
 I1225 00:39:12.449478 200063 Lion.h:280]  async_message_num: 0 -> 2 9 1401279 kWUnpNP0LB
@@ -5016,7 +5016,7 @@ I1225 00:39:12.449492 200063 Lion.h:280]  async_message_num: 0 -> 2 10 1606397 k
 I1225 00:39:12.449493 200061 LionExecutor.h:812] async_message_respond_num : 3from 2 to 0 1603082
 I1225 00:39:12.449512 200063 LionMessage.h:846] replication_response_handler: 0->2 1624242
 I1225 00:39:12.449532 200061 LionExecutor.h:812] async_message_respond_num : 4from 2 to 0 1603084
-I1225 00:39:12.449587 200061 LionExecutor.h:812] async_message_respond_num : 5from 2 to 0 1401433
+I1225 00:39:12.449587 200061 LionExecutor.h:812] async_message_respond_num : 5from 2 to 0 1402463
 I1225 00:39:12.449607 200063 Lion.h:280]  async_message_num: 0 -> 2 11 1617482 kWUnpNP0LB
 I1225 00:39:12.449612 200061 LionExecutor.h:812] async_message_respond_num : 6from 2 to 0 1607166
 I1225 00:39:12.449625 200063 Lion.h:280]  async_message_num: 0 -> 2 12 1617483 kWUnpNP0LB
@@ -5027,7 +5027,7 @@ I1225 00:39:12.449698 200061 LionExecutor.h:812] async_message_respond_num : 8fr
 I1225 00:39:12.449716 200063 LionMessage.h:846] replication_response_handler: 0->2 1603082
 I1225 00:39:12.449745 200063 LionMessage.h:846] replication_response_handler: 0->2 1603084
 I1225 00:39:12.449750 200061 LionExecutor.h:812] async_message_respond_num : 9from 1 to 0 1401279
-I1225 00:39:12.449757 200063 LionMessage.h:846] replication_response_handler: 0->2 1401433
+I1225 00:39:12.449757 200063 LionMessage.h:846] replication_response_handler: 0->2 1402463
 I1225 00:39:12.449790 200063 LionMessage.h:846] replication_response_handler: 0->2 1607166
 I1225 00:39:12.449791 200061 LionExecutor.h:812] async_message_respond_num : 10from 2 to 0 1401279
 I1225 00:39:12.449801 200063 LionMessage.h:846] replication_response_handler: 0->2 1612090
@@ -5050,7 +5050,7 @@ I1225 00:39:12.450150 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.450160 200063 LionMessage.h:846] replication_response_handler: 0->2 1617488
 I1225 00:39:12.450170 200063 LionMessage.h:846] replication_response_handler: 0->2 1617489
 I1225 00:39:12.450184 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3003749 ZuVDUPRHe7
-I1225 00:39:12.450253 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 7715 R47xErDpTw
+I1225 00:39:12.450117 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 7715 R47xErDpTw
 I1225 00:39:12.450296 200061 LionExecutor.h:812] async_message_respond_num : 16from 2 to 0 1608376
 I1225 00:39:12.450326 200063 Lion.h:280]  async_message_num: 0 -> 2 19 1603983 kWUnpNP0LB
 I1225 00:39:12.450343 200063 Lion.h:280]  async_message_num: 0 -> 2 20 1603986 kWUnpNP0LB
@@ -5081,10 +5081,10 @@ I1225 00:39:12.450809 200061 LionExecutor.h:812] async_message_respond_num : 24f
 I1225 00:39:12.450881 200063 Lion.h:280]  async_message_num: 0 -> 2 29 1609223 kWUnpNP0LB
 I1225 00:39:12.450898 200063 LionMessage.h:846] replication_response_handler: 0->2 1609081
 I1225 00:39:12.450909 200063 LionMessage.h:846] replication_response_handler: 0->2 1609083
-I1225 00:39:12.450978 200063 Lion.h:280]  async_message_num: 0 -> 2 30 1625316 kWUnpNP0LB
-I1225 00:39:12.450992 200063 Lion.h:280]  async_message_num: 0 -> 2 31 1625320 kWUnpNP0LB
+I1225 00:39:12.450978 200063 Lion.h:280]  async_message_num: 0 -> 2 30 1611716 kWUnpNP0LB
+I1225 00:39:12.450992 200063 Lion.h:280]  async_message_num: 0 -> 2 31 1611720 kWUnpNP0LB
 I1225 00:39:12.450990 200061 LionExecutor.h:812] async_message_respond_num : 25from 2 to 0 1614697
-I1225 00:39:12.451009 200063 Lion.h:280]  async_message_num: 0 -> 2 32 1625324 kWUnpNP0LB
+I1225 00:39:12.451009 200063 Lion.h:280]  async_message_num: 0 -> 2 32 1611724 kWUnpNP0LB
 I1225 00:39:12.451028 200061 LionExecutor.h:812] async_message_respond_num : 26from 2 to 0 1614698
 I1225 00:39:12.451057 200061 LionExecutor.h:812] async_message_respond_num : 27from 2 to 0 1614699
 I1225 00:39:12.451074 200061 LionExecutor.h:812] async_message_respond_num : 28from 2 to 0 1614702
@@ -5101,17 +5101,17 @@ I1225 00:39:12.451217 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.451249 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3046038 2PkFtvrZog
 I1225 00:39:12.451265 200063 LionMessage.h:846] replication_response_handler: 0->2 1609223
 I1225 00:39:12.451336 200063 Lion.h:280]  async_message_num: 0 -> 2 35 1623493 kWUnpNP0LB
-I1225 00:39:12.451341 200061 LionExecutor.h:812] async_message_respond_num : 31from 2 to 0 1625316
-I1225 00:39:12.451366 200061 LionExecutor.h:812] async_message_respond_num : 32from 2 to 0 1625320
-I1225 00:39:12.451386 200061 LionExecutor.h:812] async_message_respond_num : 33from 2 to 0 1625324
+I1225 00:39:12.451341 200061 LionExecutor.h:812] async_message_respond_num : 31from 2 to 0 1611716
+I1225 00:39:12.451366 200061 LionExecutor.h:812] async_message_respond_num : 32from 2 to 0 1611720
+I1225 00:39:12.451386 200061 LionExecutor.h:812] async_message_respond_num : 33from 2 to 0 1611724
 I1225 00:39:12.451408 200063 Lion.h:280]  async_message_num: 0 -> 2 36 1607861 kWUnpNP0LB
 I1225 00:39:12.451423 200063 Lion.h:280]  async_message_num: 0 -> 2 37 1607864 kWUnpNP0LB
-I1225 00:39:12.451437 200063 Lion.h:280]  async_message_num: 0 -> 2 38 1607865 kWUnpNP0LB
-I1225 00:39:12.451439 200061 LionExecutor.h:812] async_message_respond_num : 34from 2 to 0 1617569
-I1225 00:39:12.451450 200063 LionMessage.h:846] replication_response_handler: 0->2 1625316
+I1225 00:39:12.452467 200063 Lion.h:280]  async_message_num: 0 -> 2 38 1607865 kWUnpNP0LB
+I1225 00:39:12.452469 200061 LionExecutor.h:812] async_message_respond_num : 34from 2 to 0 1617569
+I1225 00:39:12.452470 200063 LionMessage.h:846] replication_response_handler: 0->2 1611716
 I1225 00:39:12.451467 200061 LionExecutor.h:812] async_message_respond_num : 35from 2 to 0 1617573
-I1225 00:39:12.451479 200063 LionMessage.h:846] replication_response_handler: 0->2 1625320
-I1225 00:39:12.451512 200063 LionMessage.h:846] replication_response_handler: 0->2 1625324
+I1225 00:39:12.451479 200063 LionMessage.h:846] replication_response_handler: 0->2 1611720
+I1225 00:39:12.451512 200063 LionMessage.h:846] replication_response_handler: 0->2 1611724
 I1225 00:39:12.451524 200063 LionMessage.h:846] replication_response_handler: 0->2 1617569
 I1225 00:39:12.451534 200063 LionMessage.h:846] replication_response_handler: 0->2 1617573
 I1225 00:39:12.451540 200061 LionExecutor.h:812] async_message_respond_num : 36from 2 to 0 1623493
@@ -5336,8 +5336,8 @@ I1225 00:39:12.479600 200063 Lion.h:280]  async_message_num: 0 -> 2 10 1618940 k
 I1225 00:39:12.479640 200063 Lion.h:280]  async_message_num: 0 -> 2 11 1618943 kWUnpNP0LB
 I1225 00:39:12.479653 200063 LionMessage.h:846] replication_response_handler: 0->1 1401227
 I1225 00:39:12.479707 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3027960 HZBUKP3Jq7
-I1225 00:39:12.479784 200063 Lion.h:280]  async_message_num: 0 -> 2 12 1614368 kWUnpNP0LB
-I1225 00:39:12.479801 200063 Lion.h:280]  async_message_num: 0 -> 2 13 1614369 kWUnpNP0LB
+I1225 00:39:12.479784 200063 Lion.h:280]  async_message_num: 0 -> 2 12 1624668 kWUnpNP0LB
+I1225 00:39:12.479801 200063 Lion.h:280]  async_message_num: 0 -> 2 13 1624669 kWUnpNP0LB
 I1225 00:39:12.479882 200063 Lion.h:280]  async_message_num: 0 -> 2 14 1621641 kWUnpNP0LB
 I1225 00:39:12.479900 200063 Lion.h:280]  async_message_num: 0 -> 2 15 1621644 kWUnpNP0LB
 I1225 00:39:12.479914 200063 Lion.h:280]  async_message_num: 0 -> 2 16 1621646 kWUnpNP0LB
@@ -5349,7 +5349,7 @@ I1225 00:39:12.480125 200063 Lion.h:280]  async_message_num: 0 -> 2 20 1626520 k
 I1225 00:39:12.480142 200063 LionMessage.h:846] replication_response_handler: 0->1 1403146
 I1225 00:39:12.480140 200061 LionExecutor.h:812] async_message_respond_num : 3from 2 to 0 1626234
 I1225 00:39:12.480204 200061 LionExecutor.h:812] async_message_respond_num : 4from 2 to 0 1626239
-I1225 00:39:12.480252 200061 LionExecutor.h:812] async_message_respond_num : 5from 2 to 0 1401227
+I1225 00:39:12.480248 200061 LionExecutor.h:812] async_message_respond_num : 5from 2 to 0 1401227
 I1225 00:39:12.480266 200063 Lion.h:280]  async_message_num: 0 -> 2 21 1601396 kWUnpNP0LB
 I1225 00:39:12.480285 200061 LionExecutor.h:812] async_message_respond_num : 6from 2 to 0 1606139
 I1225 00:39:12.480296 200063 Lion.h:280]  async_message_num: 0 -> 2 22 1601397 kWUnpNP0LB
@@ -5362,7 +5362,7 @@ I1225 00:39:12.480437 200063 Lion.h:280]  async_message_num: 0 -> 2 23 1606792 k
 I1225 00:39:12.480438 200061 LionExecutor.h:812] async_message_respond_num : 8from 2 to 0 1628077
 I1225 00:39:12.480486 200061 LionExecutor.h:812] async_message_respond_num : 9from 2 to 0 1628078
 I1225 00:39:12.480540 200061 LionExecutor.h:812] async_message_respond_num : 10from 2 to 0 1618938
-I1225 00:39:12.480548 200063 Lion.h:280]  async_message_num: 0 -> 2 24 1612536 kWUnpNP0LB
+I1225 00:39:12.480548 200063 Lion.h:280]  async_message_num: 0 -> 2 24 1611176 kWUnpNP0LB
 I1225 00:39:12.480574 200061 LionExecutor.h:812] async_message_respond_num : 11from 2 to 0 1618939
 I1225 00:39:12.480587 200063 LionMessage.h:846] replication_response_handler: 0->2 1628072
 I1225 00:39:12.480604 200061 LionExecutor.h:812] async_message_respond_num : 12from 2 to 0 1618940
@@ -5372,15 +5372,15 @@ I1225 00:39:12.480661 200063 LionMessage.h:846] replication_response_handler: 0-
 I1225 00:39:12.480695 200063 LionMessage.h:846] replication_response_handler: 0->2 1618938
 I1225 00:39:12.480705 200063 LionMessage.h:846] replication_response_handler: 0->2 1618939
 I1225 00:39:12.480716 200063 LionMessage.h:846] replication_response_handler: 0->2 1618940
-I1225 00:39:12.480716 200061 LionExecutor.h:812] async_message_respond_num : 14from 2 to 0 1614368
+I1225 00:39:12.480716 200061 LionExecutor.h:812] async_message_respond_num : 14from 2 to 0 1624668
 I1225 00:39:12.480739 200063 LionMessage.h:846] replication_response_handler: 0->2 1618943
-I1225 00:39:12.480764 200061 LionExecutor.h:812] async_message_respond_num : 15from 2 to 0 1614369
+I1225 00:39:12.480764 200061 LionExecutor.h:812] async_message_respond_num : 15from 2 to 0 1624669
 I1225 00:39:12.480777 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3042310 WXS2jaFpCe
 I1225 00:39:12.480808 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3042311 7ruVG4dr2I
 I1225 00:39:12.480823 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3042313 2eQulumgHA
-I1225 00:39:12.480840 200063 LionMessage.h:846] replication_response_handler: 0->2 1614368
+I1225 00:39:12.480840 200063 LionMessage.h:846] replication_response_handler: 0->2 1624668
 I1225 00:39:12.480841 200061 LionExecutor.h:812] async_message_respond_num : 16from 2 to 0 1621641
-I1225 00:39:12.480851 200063 LionMessage.h:846] replication_response_handler: 0->2 1614369
+I1225 00:39:12.480851 200063 LionMessage.h:846] replication_response_handler: 0->2 1624669
 I1225 00:39:12.480872 200061 LionExecutor.h:812] async_message_respond_num : 17from 2 to 0 1621644
 I1225 00:39:12.480897 200061 LionExecutor.h:812] async_message_respond_num : 18from 2 to 0 1621646
 I1225 00:39:12.480934 200063 LionMessage.h:846] replication_response_handler: 0->2 1621641
@@ -5403,12 +5403,12 @@ I1225 00:39:12.481200 200061 LionExecutor.h:812] async_message_respond_num : 24f
 I1225 00:39:12.481210 200063 LionMessage.h:846] replication_response_handler: 0->2 1601397
 I1225 00:39:12.481241 200063 LionMessage.h:846] replication_response_handler: 0->2 1606792
 I1225 00:39:12.481254 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2802725 AdlwNvQGJL
-I1225 00:39:12.481253 200061 LionExecutor.h:812] async_message_respond_num : 25from 2 to 0 1612536
+I1225 00:39:12.481117 200061 LionExecutor.h:812] async_message_respond_num : 25from 2 to 0 1611176
 I1225 00:39:12.481281 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013627 zBBDJi4Te0
 I1225 00:39:12.481317 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013632 vtFfzAlmzt
 I1225 00:39:12.481317 200061 LionExecutor.h:812] async_message_respond_num : 26from 1 to 0 1405264
 I1225 00:39:12.481343 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3013634 vprMba3CG6
-I1225 00:39:12.481377 200063 LionMessage.h:846] replication_response_handler: 0->2 1612536
+I1225 00:39:12.481377 200063 LionMessage.h:846] replication_response_handler: 0->2 1611176
 I1225 00:39:12.481390 200063 LionMessage.h:846] replication_response_handler: 0->1 1405264
 I1225 00:39:12.481403 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 8029 52XrERTmSB
 I1225 00:39:12.481487 200063 Lion.h:280]  async_message_num: 0 -> 2 29 1606233 kWUnpNP0LB
@@ -5472,10 +5472,10 @@ I1225 00:39:12.507136 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 
 I1225 00:39:12.507460 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023172 q5lqrxT6AD
 I1225 00:39:12.507478 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3023173 TIXLCCtyJR
 I1225 00:39:12.515496 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 2802870 HfeixVUGsk
-I1225 00:39:12.528055 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014354 rpWRn0UMG9
-I1225 00:39:12.528075 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014355 RSaqbKTt7w
-I1225 00:39:12.528091 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014357 m0ioI9p6Fn
-I1225 00:39:12.528124 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3014358 6p6wxOp8dr
+I1225 00:39:12.528055 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024654 rpWRn0UMG9
+I1225 00:39:12.528075 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024655 RSaqbKTt7w
+I1225 00:39:12.528091 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024657 m0ioI9p6Fn
+I1225 00:39:12.528124 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3024658 6p6wxOp8dr
 I1225 00:39:12.528482 200063 LionMessage.h:801]  respond send to : 0 -> 2  with 165 V9Od5MbNcE
 I1225 00:39:12.528580 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3006588 eWyWolew5J
 I1225 00:39:12.528599 200063 LionMessage.h:801]  respond send to : 0 -> 1  with 3006590 2nVYPbhvsx

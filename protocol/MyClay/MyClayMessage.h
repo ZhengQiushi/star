@@ -397,13 +397,17 @@ public:
       VLOG(DEBUG_V12) << " Lock " << *(int*)key << " " << tid << " " << latest_tid;
     }
 
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
-      // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop * 2; i++) {
-        asm("nop");
-      }
-    }
-
+        // if(remaster == false || context.migration_only > 0) {
+        //   // txn->network_size += 50000 * (key_size + value_size);
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+        //     asm("nop");
+        //   } 
+        // } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        // }
     // lock the router_table 
     auto router_table = db.find_router_table(table_id); // , coordinator_id_old);
     auto router_val = (RouterValue*)router_table->search_value(key);
@@ -504,12 +508,17 @@ public:
     uint64_t last_tid = 0;
 
 
-    if(remaster == false || (remaster == true && context.migration_only > 0)) {
-      // simulate cost of transmit data
-      for (auto i = 0u; i < context.n_nop * 2; i++) {
-        asm("nop");
-      }
-    }
+        // if(remaster == false || context.migration_only > 0) {
+        //   // txn->network_size += 50000 * (key_size + value_size);
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+        //     asm("nop");
+        //   } 
+        // } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        // }
 
     if(success == true){
       // update router 
@@ -953,7 +962,7 @@ public:
     if (write_lock) {
       TwoPLHelper::write_lock_release(tid);
     } else {
-      TwoPLHelper::read_lock_release(tid);
+      TwoPLHelper::read_lock_release_relax(tid);
     }
   }
 

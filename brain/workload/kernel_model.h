@@ -1,30 +1,9 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// kernel_model.cpp
-//
-// Identification: src/brain/workload/kernel_model.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/workload/kernel_model.h"
 #include "brain/util/model_util.h"
 
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// kernel_model.h
-//
-// Identification: src/include/brain/workload/kernel_model.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 #include "brain/workload/base_tf.h"

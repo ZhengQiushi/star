@@ -365,11 +365,18 @@ public:
       for (auto i = 0u; i < context.n_nop * 2; i++) {
         asm("nop");
       }
-    } else {
-          for (auto i = 0u; i < context.rn_nop; i++) {
-            asm("nop");
-          }
-        }
+    } 
+        // if(remaster == false || context.migration_only > 0) {
+        //   // txn->network_size += 50000 * (key_size + value_size);
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+        //     asm("nop");
+        //   } 
+        // } else {
+        //   for (auto i = 0u; i < context.rn_nop; i++) {
+        //     asm("nop");
+        //   }
+        // }
 
     // lock the router_table 
     if(partitioner->is_dynamic()){
@@ -548,12 +555,18 @@ public:
           for (auto i = 0u; i < context.n_nop * 2; i++) {
             asm("nop");
           }
-        } else {
-          for (auto i = 0u; i < context.rn_nop; i++) {
-            asm("nop");
-          }
         }
-
+        // if(remaster == false || context.migration_only > 0) {
+        //   // txn->network_size += 50000 * (key_size + value_size);
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+        //     asm("nop");
+        //   } 
+        // } else {
+        //   for (auto i = 0u; i < context.rn_nop; i++) {
+        //     asm("nop");
+        //   }
+        // }
         // lock the respond tid and key
         bool success = false;
         std::atomic<uint64_t> &tid_ = table.search_metadata(key, success);
@@ -1026,7 +1039,7 @@ public:
             responseMessage.data.append(value_size, 0);
             
 //            auto value = table.search_value(key);
-//            LOG(INFO) << *(int*)key << " " << (char*)value << " success: " << success << " " << " remaster: " << remaster << " " << new_secondary_coordinator_id;
+          //  LOG(INFO) << *(int*)key << " " << " success: " << success << " " << " remaster: " << remaster;
             
             if(success == true && remaster == false){
               // transfer: read from db and load data into message buffer
@@ -1035,7 +1048,7 @@ public:
               auto row = table.search(key);
               TwoPLHelper::read(row, dest, value_size);
             }
-            responseMessage.flush();
+            responseMessage.flush(context.rn_nop / 20);
 
           } else if(coordinator_id_new == coordinator_id_old) {
             success = false;
@@ -1160,7 +1173,7 @@ public:
           
           VLOG(DEBUG_V12) << table_id <<" " << *(int*) key << " " << (char*)value << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
         }
-
+          // LOG(INFO) << table_id <<" " << *(int*) key << " " << " reponse switch " << " " << " " << tid << "  " << remaster << " | " << success << " ";
         // simulate migrations with receiver 
         // if(remaster == false || (remaster == true && context.migration_only > 0)) {
         //   // simulate cost of transmit data

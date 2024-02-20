@@ -1,14 +1,4 @@
-#===----------------------------------------------------------------------===#
-#
-#                         Peloton
-#
-# LSTM.py
-#
-# Identification: src/brain/modelgen/LSTM.py
-#
-# Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-#
-#===----------------------------------------------------------------------===#
+
 
 import tensorflow as tf
 import functools

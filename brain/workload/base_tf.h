@@ -1,14 +1,4 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// base_tf.cpp
-//
-// Identification: src/brain/workload/base_tf.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/workload/base_tf.h"
@@ -17,17 +7,6 @@
 #include "brain/util/tf_session_entity/tf_session_entity_output.h"
 // #include "util/file_util.h"
 
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// base_tf.h
-//
-// Identification: src/include/brain/workload/base_tf.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 #include <memory>

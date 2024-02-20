@@ -406,6 +406,10 @@ void unpack_route_transaction(){
     auto& transactions = txn_meta.s_transactions_queue;
 
     for (auto i = 0u; i < transactions.size(); i++) {
+      if(transactions[i].get() == 0){
+        continue;
+      }
+      auto now = std::chrono::steady_clock::now();
       // do not grant locks to abort no retry transaction
       auto local_locks = std::chrono::steady_clock::now();
 
@@ -438,7 +442,7 @@ void unpack_route_transaction(){
                   lock_manager_id) {
             continue;
           }
-          auto now = std::chrono::steady_clock::now();
+          
           grant_lock = true;
           std::atomic<uint64_t> &tid = table->search_metadata(key);
           if (readKey.get_write_lock_bit()) {
@@ -457,7 +461,7 @@ void unpack_route_transaction(){
         }
 
         int lock_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transactions[i]->b.startTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
         transactions[i]->b.time_scheuler += lock_time;
 
@@ -526,17 +530,18 @@ void unpack_route_transaction(){
 
       idle_time += idle;
 
-      auto now = std::chrono::steady_clock::now();
+      
 
       bool ok;
       auto transaction = transaction_queue.pop_no_wait(ok);
       
       DCHECK(ok);
       transaction->b.execStartTime = std::chrono::steady_clock::now();
+      auto now = std::chrono::steady_clock::now();
 
           //#####
           int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
           // time_before_prepare_set += before_prepare;
           now = std::chrono::steady_clock::now();
@@ -548,7 +553,7 @@ void unpack_route_transaction(){
 
           //#####
           int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
 
           // time_prepare_read += prepare_read;
@@ -559,7 +564,7 @@ void unpack_route_transaction(){
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           // ####
           int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
           // time_read_remote += remote_read;
           now = std::chrono::steady_clock::now();
@@ -576,7 +581,7 @@ void unpack_route_transaction(){
 
             // ####
             int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
             // time_read_remote1 += write_time;
             now = std::chrono::steady_clock::now();
@@ -607,9 +612,10 @@ void unpack_route_transaction(){
                         partitioner.replica_group_size);
 
         int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                    std::chrono::steady_clock::now() - now)
                   .count();
         transaction->b.time_commit += commit_time;
+        now = std::chrono::steady_clock::now();
         // if(transaction->on_replica_id == (int)context.coordinator_id){
         record_commit_transactions(*transaction);
         // }

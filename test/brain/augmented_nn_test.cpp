@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// augmented_nn_test.cpp
-//
-// Identification: test/brain/augmented_nn_test.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #include <algorithm>
 #include "brain/selectivity/augmented_nn.h"

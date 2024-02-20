@@ -43,7 +43,7 @@ public:
   static int get_workload_type(const Context &context, double cur_timestamp){
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// 
-    return workload_type;
+    return 4 - workload_type;
   }
   static int round(int a, int b){
     return a / b * b;

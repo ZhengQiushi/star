@@ -1,28 +1,7 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// workload_defaults.cpp
-//
-// Identification: src/brain/workload/workload_defaults.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/workload/workload_defaults.h"
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// workload_defaults.h
-//
-// Identification: src/include/brain/workload/workload_defaults.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 /**

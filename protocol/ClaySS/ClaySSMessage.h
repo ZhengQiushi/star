@@ -485,6 +485,17 @@ public:
       // LOG(INFO) << "LOCK ROUTER " << *(int*)key << " " << static_cast<int>(op);
 
       TwoPLHelper::write_lock(*lock_tid, success); // be locked 
+        // if(remaster == false || context.migration_only > 0) {
+        //   // txn->network_size += 50000 * (key_size + value_size);
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+        //     asm("nop");
+        //   } 
+        // } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        // }
       if(!success){
         TwoPLHelper::write_lock_release(tid);
         // auto test = my_debug_key(table_id, partition_id, key);
@@ -649,6 +660,18 @@ public:
 
       last_tid = TwoPLHelper::write_lock(tid_, success);
         VLOG(DEBUG_V14) << "LOCK-write " << *(int*)key << " " << success << " " << readKey.get_dynamic_coordinator_id() << " " << readKey.get_router_value()->get_secondary_coordinator_id_printed() << " " << last_tid;
+
+        // if(remaster == false || context.migration_only > 0) {
+        //   txn->network_size += 50000 * (key_size + value_size);
+        //   // simulate cost of transmit data
+        //   for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+        //     asm("nop");
+        //   } 
+        // } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
+        // }
 
       if(!success){
         LOG(INFO) << "TRANSMIT_RESPONSE !!! AFTER REMASETER, FAILED TO GET LOCK : " << *(int*)key << " " << tid; // 
@@ -887,12 +910,17 @@ public:
         responseMessage.flush();
         return;
       }
-      if(remaster == false || context.migration_only > 0) {
-        // simulate cost of transmit data
-        for (auto i = 0u; i < context.n_nop * 2; i++) {
-          asm("nop");
+        if(remaster == false || context.migration_only > 0) {
+          // txn->network_size += 50000 * (key_size + value_size);
+          // simulate cost of transmit data
+          for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+            asm("nop");
+          } 
+        } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
+            asm("nop");
+          }
         }
-      } 
     }
 
 
@@ -1015,11 +1043,16 @@ public:
         
       } else {
         if(remaster == false || context.migration_only > 0) {
+          // txn->network_size += 50000 * (key_size + value_size);
           // simulate cost of transmit data
-          for (auto i = 0u; i < context.n_nop * 2; i++) {
+          for (auto i = 0u; i < context.n_nop * 2 + context.rn_nop; i++) {
+            asm("nop");
+          } 
+        } else {
+          for (auto i = 0u; i < context.rn_nop; i++) {
             asm("nop");
           }
-        } 
+        }
       }
       if(!remaster){
         // read value message piece

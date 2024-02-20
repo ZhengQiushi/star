@@ -329,13 +329,19 @@ public:
   };
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 1000>& transactions_queue_self_,
+      ShareQueue<simpleTransaction*, LAG_NUM>& transactions_queue_self_,
       int dispatcher_id){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.coordinator_num;
+      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+
+      if(WorkloadType::which_workload == myTestSet::YCSB){
+
+      } else {
+        hot_area_size = context.coordinator_num;
+      }
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
       size_t skew_factor = random.uniform_dist(1, 100);
@@ -380,11 +386,11 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
-    // LOG(INFO) << txn->partition_id << " " 
+    // LOG(INFO) << dispatcher_id << " " 
+    //           << txn->partition_id << " " 
     //           << partition_id_ << " " 
     //           << partition_id << " " 
-    //           << dispatcher_id << " " 
-    //           << txn->keys[0] << " " << txn->keys[1];
+    //           << txn->keys[0] / 200000; //  << " " << txn->keys[1] / 200000 % contex;
 
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }

@@ -1,31 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// ensemble_model.cpp
-//
-// Identification: src/brain/workload/ensemble_model.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/workload/ensemble_model.h"
 #include <numeric>
 #include "brain/util/model_util.h"
 
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// ensemble_model.h
-//
-// Identification: src/include/brain/workload/ensemble_model.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 #include "brain/workload/base_tf.h"

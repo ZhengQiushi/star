@@ -475,6 +475,18 @@ public:
     return message;
   }
 
+  Message * delay_pop_message() override {
+    bool success = false;
+    Message * ret = delay_queue.pop_no_wait(success);
+    if(success) return ret;
+    else return nullptr;
+  };
+
+  void delay_push_message(Message *message) override {
+     delay_queue.push_no_wait(message);
+  }
+
+
   std::size_t process_request() {
 
     std::size_t size = 0;
@@ -692,7 +704,8 @@ protected:
       std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
 
-  ShareQueue<simpleTransaction> router_transactions_queue;           // router
+  ShareQueue<simpleTransaction> router_transactions_queue;
+  ShareQueue<Message*> delay_queue;           // router
   std::deque<int> router_stop_queue;           // router stop-SIGNAL
   // std::deque<std::unique_ptr<TransactionType>> t_transactions_queue; // to transaction
   // std::vector<simpleTransaction> t_simple_txn;

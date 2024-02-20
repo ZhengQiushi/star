@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// eigen_util_test.cpp
-//
-// Identification: test/brain/eigen_util_test.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #include "brain/util/eigen_util.h"
 #include <algorithm>

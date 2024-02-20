@@ -42,6 +42,12 @@ public:
 
   virtual Message *pop_message() = 0;
 
+  virtual void delay_push_message(Message *message){
+    
+  };
+  virtual Message * delay_pop_message(){
+    return nullptr;
+  };
   ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
     // the value is put into the most significant 24 bits
     uint32_t offset = 8;

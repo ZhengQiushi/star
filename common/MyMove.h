@@ -1012,7 +1012,7 @@ namespace star
         }
         
 
-         void metis_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+         void lion_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
             /***
              * 
             */
@@ -1115,7 +1115,111 @@ namespace star
             return ;
         }
 
-        void metis_partiion_read_from_file(const std::string& partition_filename){
+
+         void mmetis_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+            /**** */
+           int file_row_cnt_ = 0;
+            // generate move plans
+            // myMove [source][destination]
+            if(batch_size == -1){
+                if(init_partition_file_ != nullptr){
+                    delete init_partition_file_;
+                    init_partition_file_ = nullptr;
+                }
+                partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                if(init_partition_file_ == nullptr){
+                    LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                    return ;
+                }
+                partition_file_read_ptr_ = init_partition_file_;
+            } else {
+                if(init_partition_file_ == nullptr){
+                    partition_file_size_ = read_file_from_mmap(partition_filename.c_str(), &init_partition_file_);
+                    if(init_partition_file_ == nullptr){
+                        LOG(ERROR) << "FAILED TO DO read_file_from_mmap FROM " << partition_filename;
+                        return ;
+                    }
+                    partition_file_read_ptr_ = init_partition_file_;
+                }
+            }
+
+            
+
+
+            std::size_t nParts = context.coordinator_num * 1000;
+            // std::vector<std::shared_ptr<myMove<WorkloadType>>> metis_move(nParts);
+            // metis_move.clear();
+            // metis_move.resize(nParts);
+            
+            // for(size_t j = 0; j < nParts; j ++ ){
+            //     metis_move[j] = std::make_shared<myMove<WorkloadType>>();
+            //     metis_move[j]->metis_dest_coordinator_id = j;
+            // }
+
+            
+
+            while (partition_file_read_ptr_ != nullptr && partition_file_read_ptr_ - init_partition_file_ < partition_file_size_){
+                //解析每行的数据
+                bool is_in_range_ = true;
+                bool is_break = false;
+
+                char* line_end_ = strchr(partition_file_read_ptr_, '\n');
+                size_t len_ = line_end_ - partition_file_read_ptr_ + 1;
+                char* tmp_line_ = new char[len_];
+                memset(tmp_line_, 0, len_);
+                memcpy(tmp_line_, partition_file_read_ptr_, len_ - 1);
+
+
+                if(line_end_ == nullptr){
+                    break;
+                }
+                
+                int col_cnt_ = 0;
+                // int row_id = 0;
+                int access_frequency = 0;
+                            char * pEnd;
+                            
+                auto metis_move = std::make_shared<myMove<WorkloadType>>();
+                char *per_key_ = strtok_r(tmp_line_, "\t", &saveptr_);
+                while(per_key_ != NULL){
+                    if(col_cnt_ == 0){
+                        // row_id = atoll(per_key_);
+                    // } else if(col_cnt_ == 1){
+                    //     metis_move->access_frequency = strtoull(per_key_, &pEnd, 10);
+                    } else {
+                        uint64_t key_ = strtoull(per_key_, &pEnd, 10);
+
+                        MoveRecord<WorkloadType> new_move_rec;
+                        new_move_rec.set_real_key(key_);
+
+                        metis_move->records.push_back(new_move_rec);
+                    } 
+                    col_cnt_ ++ ;
+                    per_key_ = strtok_r(NULL, "\t", &saveptr_);
+                }
+                
+                if(metis_move->records.size() > 0){
+                    cur_move_plans.push_no_wait(metis_move);
+                    file_row_cnt_ ++ ;
+                    partition_file_read_ptr_ = line_end_ + 1;
+                    if(file_row_cnt_ > batch_size){
+                        return ;
+                    }
+                }
+                
+
+            }
+
+            LOG(INFO) << "file_row_cnt_ : " << " " << file_row_cnt_;
+
+            movable_flag.store(false);
+
+            return ;
+        }
+
+
+
+        void lion_partiion_read_from_file(const std::string& partition_filename){
             /***
              * 
             */

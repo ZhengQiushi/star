@@ -220,42 +220,42 @@ public:
                  .count() / context.workload_time % 6;
 
       for (auto i = 0u; i < workers.size(); i++) {
-        // if(i == 1){
-        //   outfile_excel_breakdown  
-        //                 << workers[i]->txn_statics.nth(10).time_router << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_scheuler << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_local_locks << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_remote_locks << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_execute << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_commit << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_wait4serivce << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_other_module << "\t" 
-        //                 << workers[i]->txn_statics.nth(10).time_latency << "\t" 
-        //                 << workers[i]->total_latency.nth(10) << "\t" 
+        if(i == 1){
+          outfile_excel_breakdown  
+                        << workers[i]->txn_statics.nth(10).time_router << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_scheuler << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_local_locks << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_remote_locks << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_execute << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_commit << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_wait4serivce << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_other_module << "\t" 
+                        << workers[i]->txn_statics.nth(10).time_latency << "\t" 
+                        << workers[i]->total_latency.nth(10) << "\t" 
 
-        //                 << workers[i]->txn_statics.nth(50).time_router << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_scheuler << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_local_locks << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_remote_locks << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_execute << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_commit << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_wait4serivce << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_other_module << "\t" 
-        //                 << workers[i]->txn_statics.nth(50).time_latency << "\t" 
-        //                 << workers[i]->total_latency.nth(50) << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_router << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_scheuler << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_local_locks << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_remote_locks << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_execute << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_commit << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_wait4serivce << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_other_module << "\t" 
+                        << workers[i]->txn_statics.nth(50).time_latency << "\t" 
+                        << workers[i]->total_latency.nth(50) << "\t" 
 
-        //                 << workers[i]->txn_statics.nth(95).time_router << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_scheuler << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_local_locks << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_remote_locks << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_execute << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_commit << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_wait4serivce << "\t" 
-        //                 << workers[i]->txn_statics.nth(95).time_other_module << "\t"
-        //                 << workers[i]->txn_statics.nth(95).time_latency << "\t"
-        //                 << workers[i]->total_latency.nth(95) << "\n" ;
-        //                 ;
-        // }
+                        << workers[i]->txn_statics.nth(95).time_router << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_scheuler << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_local_locks << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_remote_locks << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_execute << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_commit << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_wait4serivce << "\t" 
+                        << workers[i]->txn_statics.nth(95).time_other_module << "\t"
+                        << workers[i]->txn_statics.nth(95).time_latency << "\t"
+                        << workers[i]->total_latency.nth(95) << "\n" ;
+                        ;
+        }
         
         if((context.protocol.find("Lion") != context.protocol.npos || 
             context.protocol.find("LION") != context.protocol.npos ||

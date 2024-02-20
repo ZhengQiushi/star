@@ -1,14 +1,4 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// lstm.cpp
-//
-// Identification: src/brain/workload/lstm.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/workload/lstm.h"
@@ -17,17 +7,7 @@
 #include "brain/util/tf_session_entity/tf_session_entity_input.h"
 #include "brain/util/tf_session_entity/tf_session_entity_output.h"
 // #include "util/file_util.h"
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// lstm.h
-//
-// Identification: src/include/brain/workload/lstm.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 
 #include <numeric>
 #include <string>

@@ -220,9 +220,13 @@ public:
         
         // auto debug = transaction->debug_record_keys();
         // auto debug_master = transaction->debug_record_keys_master();
+        // std::string debug_str = "" + std::to_string(i) + " : ";
+        // for(int ii = 0 ; ii < debug.size(); ii ++ ){
+        //   debug_str += std::to_string(debug[ii]) + " " + std::to_string(debug_master[ii]) + " | ";
+        // }
 
-        // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
-        //                         << debug[1] << " " << debug_master[1]; 
+        // LOG(INFO) << debug_str; 
+
                                     
         auto result = transaction->transmit_execute(id);
 
@@ -253,6 +257,8 @@ public:
         //     // LOG(INFO) << "single_txn_num: " << transaction->get_query_printed();
         //   }
 
+        // LOG(INFO) << transaction->migrate_cnt + transaction->remaster_cnt; 
+        
         if (result == TransactionResult::READY_TO_COMMIT) {
           // // LOG(INFO) << "StarExecutor: "<< id << " " << "commit" << i;
           DCHECK(false);
@@ -266,6 +272,18 @@ public:
             //           << *(int*)transaction->readSet[1].get_key();
             n_commit.fetch_add(1);
             retry_transaction = false;
+            // {
+            //   auto debug = transaction->debug_record_keys();
+            //   auto debug_master = transaction->debug_record_keys_master();
+
+            //   std::string debug_str = "DONE " + std::to_string(i) + " : ";
+            //   for(int ii = 0 ; ii < debug.size(); ii ++ ){
+            //     debug_str += std::to_string(debug[ii]) + " " + std::to_string(debug_master[ii]) + " | ";
+            //   }
+
+            //   LOG(INFO) << debug_str; 
+            // }
+
           } else {
             n_abort_lock.fetch_add(1);
             // LOG(INFO) << "FAIL" 

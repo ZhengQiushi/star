@@ -1,30 +1,7 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// tf_session_entity_input.cpp
-//
-// Identification: src/brain/util/tf_session_entity/tf_session_entity_input.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/util/tf_session_entity/tf_session_entity_input.h"
-
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// tf_session_entity_input.h
-//
-// Identification:
-// src/include/brain/util/tf_session_entity/tf_session_entity_input.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 #include "tf_session_entity_io.h"

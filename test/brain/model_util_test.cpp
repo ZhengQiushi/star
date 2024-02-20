@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// model_util_test.cpp
-//
-// Identification: test/brain/model_util_test.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #include "brain/util/model_util.h"
 #include "brain/workload/kernel_model.h"

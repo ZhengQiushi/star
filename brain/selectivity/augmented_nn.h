@@ -1,25 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// augmented_nn.cpp
-//
-// Identification: src/brain/workload/augmented_nn.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// augmented_nn.h
-//
-// Identification: src/include/brain/workload/augmented_nn.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #pragma once
 

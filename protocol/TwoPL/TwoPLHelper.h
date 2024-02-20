@@ -118,6 +118,24 @@ public:
     DCHECK(ok);
   }
 
+  static void read_lock_release_relax(std::atomic<uint64_t> &a) {
+    uint64_t old_value, new_value;
+    do {
+      old_value = a.load();
+      if(!is_read_locked(old_value)) break;
+      DCHECK(!is_write_locked(old_value));
+      new_value = old_value - (1ull << READ_LOCK_BIT_OFFSET);
+    } while (!a.compare_exchange_weak(old_value, new_value));
+  }
+
+  static void write_lock_release_relax(std::atomic<uint64_t> &a) {
+    uint64_t old_value, new_value;
+    old_value = a.load();
+    if(!is_write_locked(old_value)) return;
+    new_value = old_value - (1ull << WRITE_LOCK_BIT_OFFSET);
+    bool ok = a.compare_exchange_strong(old_value, new_value);
+    DCHECK(ok);
+  }
   // static void read_lock_release(std::atomic<uint64_t> &a, bool& success) {
   //   uint64_t old_value, new_value;
   //   if(!a.compare_exchange_weak(old_value, new_value)){

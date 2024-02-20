@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// query_clusterer_test.cpp
-//
-// Identification: test/brain/query_clusterer_test.cpp
-//
-// Copyright (c) 2017-18, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #include "brain/workload_cluster.h"
 #include "common/harness.h"

@@ -199,6 +199,122 @@ public:
     return cur_move_size;
   }
 
+
+
+  int metis_router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+    // transmit_request_queue
+    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
+
+    auto new_transmit_generate = [&](int idx){ // int n
+      simpleTransaction* s = new simpleTransaction();
+      s->idx_ = idx;
+      s->is_transmit_request = true;
+      s->is_distributed = true;
+      // s->partition_id = n;
+      return s;
+    };
+
+
+    // 一一对应
+    std::vector<simpleTransaction*> metis_txns;
+    std::vector<std::shared_ptr<myMove<WorkloadType>>> cur_moves;
+
+
+
+
+    const int transmit_block_size = 10;
+
+    int cur_move_size = move_plans.size();
+    long long access_freq_aver = 0;
+
+    // pack up move-steps to transmit request
+    double thresh_ratio = 1;
+    for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
+      bool success = false;
+      std::shared_ptr<myMove<WorkloadType>> cur_move;
+      
+      success = move_plans.pop_no_wait(cur_move);
+      DCHECK(success == true);
+      
+      
+      auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
+      metis_new_txn->access_frequency = cur_move->access_frequency;
+
+      access_freq_aver += cur_move->access_frequency;
+
+      for(auto move_record: cur_move->records){
+          metis_new_txn->keys.push_back(move_record.record_key_);
+          metis_new_txn->update.push_back(true);
+      }
+      //
+      metis_txns.push_back(metis_new_txn);
+      cur_moves.push_back(cur_move);
+    }
+    if(cur_move_size == 0){
+      return cur_move_size;
+    }
+    access_freq_aver /= cur_move_size;
+
+    scheduler_transactions_(metis_txns, router_send_txn_cnt, access_freq_aver);
+
+
+    // pull request
+    std::vector<simpleTransaction*> transmit_requests;
+    // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
+    for(size_t i = 0 ; i < metis_txns.size(); i ++ ){
+      // split into sub_transactions
+      auto new_txn = new_transmit_generate(transmit_idx ++ );
+
+      for(auto move_record: cur_moves[i]->records){
+          new_txn->keys.push_back(move_record.record_key_);
+          new_txn->update.push_back(false);
+          if(cur_move_size < 20){
+            new_txn->destination_coordinator = i % context.coordinator_num; 
+          } else {
+            new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
+          }
+          // 
+          new_txn->metis_idx_ = metis_txns[i]->idx_;
+          new_txn->is_real_distributed = metis_txns[i]->is_real_distributed;
+          new_txn->is_distributed = metis_txns[i]->is_distributed;
+
+          if(new_txn->keys.size() > transmit_block_size){
+            // added to the router
+            transmit_requests.push_back(new_txn);
+            new_txn = new_transmit_generate(transmit_idx ++ );
+          }
+      }
+
+      if(new_txn->keys.size() > 0){
+        transmit_requests.push_back(new_txn);
+      }
+    }
+
+
+    move_plans.clear();
+
+    
+    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
+      // outfile_excel << "Send LION Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+
+      router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::TRANSFER);
+      // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
+      // if(i > 5){ // debug
+      //   break;
+      // }
+    }
+
+    outfile_excel << "Done. \n";
+
+    transmit_idx = 0; // split into sub-transactions
+    metis_transmit_idx = 0;
+
+    LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
+
+    return cur_move_size;
+  }
+
+
 void migration(std::string file_name_){
      
 
@@ -208,11 +324,11 @@ void migration(std::string file_name_){
     while(true){
       ShareQueue<std::shared_ptr<myMove<WorkloadType>>> rows;
       if(context.repartition_strategy == "lion"){
-        my_clay->metis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
+        my_clay->lion_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       } else if(context.repartition_strategy == "clay"){
         my_clay->clay_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       } else if(context.repartition_strategy == "metis"){
-        DCHECK(false);
+        my_clay->mmetis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       }
 
       if(rows.size() <= 0){
@@ -242,7 +358,7 @@ void migration(std::string file_name_){
       } else if(context.repartition_strategy == "clay"){
         num = clay_router_transmit_request(rows);
       } else if(context.repartition_strategy == "metis"){
-        DCHECK(false);
+        num = metis_router_transmit_request(rows);
       }
       
       
@@ -259,7 +375,7 @@ void migration(std::string file_name_){
   //   LOG(INFO) << "start read from file";
     
   //   if(context.repartition_strategy == "lion"){
-  //     my_clay->metis_partiion_read_from_file(file_name_.c_str());
+  //     my_clay->lion_partiion_read_from_file(file_name_.c_str());
   //   } else if(context.repartition_strategy == "clay"){
   //     my_clay->clay_partiion_read_from_file(file_name_.c_str());
   //   } else if(context.repartition_strategy == "metis"){
@@ -1271,7 +1387,7 @@ void migration(std::string file_name_){
       map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_0";
       map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_0";
     } else if(context.repartition_strategy == "metis"){
-      DCHECK(false);
+      LOG(INFO) << "metis!!!!!!";
       map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
       map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
       map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
@@ -1299,7 +1415,7 @@ void migration(std::string file_name_){
 
     int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
     // 
-    if(context.repartition_strategy == "clay"){
+    if(context.repartition_strategy == "clay" || context.repartition_strategy == "metis"){
       start_offset = 0; // 30 * 1000 ;
     }
 

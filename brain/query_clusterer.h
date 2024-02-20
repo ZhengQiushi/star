@@ -1,14 +1,4 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// query_clusterer.cpp
-//
-// Identification: src/brain/query_clusterer.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/query_clusterer.h"
@@ -17,17 +7,6 @@
 #include <glog/logging.h>
 #include <numeric>
 
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// query_clusterer.h
-//
-// Identification: src/include/brain/query_clusterer.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 #include <map>

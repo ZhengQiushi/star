@@ -1,30 +1,8 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// eigen_util.cpp
-//
-// Identification: src/brain/util/eigen_util.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
+
 #pragma once
 
 #include "brain/util/eigen_util.h"
 #include <random>
-
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// eigen_util.h
-//
-// Identification: src/include/brain/util/eigen_util.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 
 #include <algorithm>

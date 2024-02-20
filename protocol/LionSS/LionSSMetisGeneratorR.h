@@ -211,11 +211,11 @@ public:
     while(true){
       ShareQueue<std::shared_ptr<myMove<WorkloadType>>> rows;
       if(context.repartition_strategy == "lion"){
-        my_clay->metis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
+        my_clay->lion_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       } else if(context.repartition_strategy == "clay"){
         my_clay->clay_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       } else if(context.repartition_strategy == "metis"){
-        DCHECK(false);
+        my_clay->mmetis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       }
 
       if(rows.size() <= 0){
@@ -240,7 +240,7 @@ public:
       // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
       
       int num = 0;
-      if(context.repartition_strategy == "lion"){
+      if(context.repartition_strategy == "lion" || context.repartition_strategy == "metis"){
         num = router_transmit_request(rows);
       } else {
         DCHECK(false);
@@ -1204,7 +1204,6 @@ public:
       map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_0";
       map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_0";
     } else if(context.repartition_strategy == "metis"){
-      DCHECK(false);
       map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
       map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
       map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";

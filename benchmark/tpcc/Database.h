@@ -991,7 +991,9 @@ public:
 
     if(context.protocol != "Hermes"){
       initialize_database(context, partitioner.get());
-      allocate_router_table(context);
+      if(context.protocol != "Aria"){
+        allocate_router_table(context);
+      }
       if (context.protocol == "Star"){
         init_star_router_table(context);
       } else {

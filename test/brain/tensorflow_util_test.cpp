@@ -1,14 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// tensorflow_test.cpp
-//
-// Identification: test/brain/tensorflow_test.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #include <numeric>
 #include "brain/util/tf_session_entity/tf_session_entity.h"

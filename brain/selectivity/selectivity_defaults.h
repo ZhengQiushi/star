@@ -1,27 +1,5 @@
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// selectivity_defaults.cpp
-//
-// Identification: src/brain/workload/selectivity_defaults.cpp
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #include "brain/selectivity/selectivity_defaults.h"
-//===----------------------------------------------------------------------===//
-//
-//                         Peloton
-//
-// selectivity_defaults.h
-//
-// Identification: src/include/brain/workload/selectivity_defaults.h
-//
-// Copyright (c) 2015-2018, Carnegie Mellon University Database Group
-//
-//===----------------------------------------------------------------------===//
 
 #pragma once
 

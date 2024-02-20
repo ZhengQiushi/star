@@ -54,8 +54,8 @@ add_library(common STATIC ${COMMON_SOURCE_FILES} ${ALL_SOURCE_FILES})
 # endif()
 
 
-add_executable(bench_tpcc bench_tpcc.cpp)
-target_link_libraries(bench_tpcc common)
+# add_executable(bench_tpcc bench_tpcc.cpp)
+# target_link_libraries(bench_tpcc common)
 
 add_executable(zqs_laji bench_ycsb.cpp)
 target_link_libraries(zqs_laji common 
@@ -66,12 +66,12 @@ target_link_libraries(zqs_laji common
 
 
 
-# add_executable(zqs_laji_tpcc bench_tpcc.cpp)
-# target_link_libraries(zqs_laji_tpcc common 
-#                     ${jemalloc_lib} ${glog} ${gflags} 
-#                     ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
-#                     ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
-#                     ${METIS_LIBRARIES}) # -static
+add_executable(zqs_laji_tpcc bench_tpcc.cpp)
+target_link_libraries(zqs_laji_tpcc common 
+                    ${jemalloc_lib} ${glog} ${gflags} 
+                    ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+                    ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
+                    ${METIS_LIBRARIES}) # -static
 
 
 
@@ -84,4 +84,4 @@ target_link_libraries(zqs_laji common
 #                     ${METIS_LIBRARIES}) # -static
 
 # # 
-# add_subdirectory(test)
+add_subdirectory(test)

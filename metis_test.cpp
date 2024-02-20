@@ -216,15 +216,15 @@ int main(int argc, char *argv[]) {
   // LOG(INFO) << "done";
 
   // LOG(INFO) << "start read from file";
-  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_20_40.xls");
+  // my_clay->lion_partiion_read_from_file("/home/star/data/resultss_partition_20_40.xls");
   // LOG(INFO) << "read from file done";
 
   // LOG(INFO) << "start read from file";
-  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_40_60.xls");
+  // my_clay->lion_partiion_read_from_file("/home/star/data/resultss_partition_40_60.xls");
   // LOG(INFO) << "read from file done";
 
   // LOG(INFO) << "start read from file";
-  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_0_20.xls");
+  // my_clay->lion_partiion_read_from_file("/home/star/data/resultss_partition_0_20.xls");
   // LOG(INFO) << "read from file done";
 
   // test done 

@@ -213,13 +213,23 @@ public:
 
     Message *raw_message = worker->pop_message();
     if (raw_message == nullptr) {
-      return;
+      raw_message = worker->delay_pop_message();
+      if(raw_message == nullptr){
+        return;
+      } 
     }
     // wrap the message with a unique pointer.
     std::unique_ptr<Message> message(raw_message);
 
     auto cur_message = message.release();
-
+    if(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count() > cur_message->delay_time){
+      sendMessage(cur_message);
+    } else {
+      worker->delay_push_message(cur_message);
+      // static int a = 0;
+      // a += 1;
+      // LOG(INFO) << "RETRY" << a;
+    }
     // if(from_exe_to_man){
     //       // 是executor, 需要送到本地的manager
     //       if((*(cur_message->begin())).get_message_type() == static_cast<int32_t>(ControlMessage::COUNT)){
@@ -229,7 +239,7 @@ public:
     // }
     // send the message
   //  LOG(INFO) << cur_id << " send message : " << (*(cur_message->begin())).get_message_type() << " to " << cur_message->get_dest_node_id();
-    sendMessage(cur_message);
+    
     // message.get());
     // 
   }

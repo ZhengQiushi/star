@@ -579,13 +579,14 @@ public:
                                                             std::chrono::steady_clock::now() - now)
           .count();
       now = std::chrono::steady_clock::now();
+      txn->b.time_other_module += time_transfer_read;
           
 
       if (!txn->abort_no_retry) {
         bool grant_lock = false;
         auto &readSet = txn->readSet;
         bool is_with_lock_manager = false;
-
+        auto now = std::chrono::steady_clock::now();
         for (auto k = 0u; k < readSet.size(); k++) {
           auto &readKey = readSet[k];
           auto tableId = readKey.get_table_id();
@@ -638,7 +639,7 @@ public:
         }
 
         int lock_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                              std::chrono::steady_clock::now() - txn->b.startTime)
+                                                              std::chrono::steady_clock::now() - now)
                                                               .count();
         txn->b.time_scheuler += lock_time;
 
@@ -756,7 +757,7 @@ public:
 
           //#####
           int before_prepare = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                std::chrono::steady_clock::now() - now)
               .count();
           // time_before_prepare_set += before_prepare;
           now = std::chrono::steady_clock::now();
@@ -767,7 +768,7 @@ public:
 
           //#####
           int prepare_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                std::chrono::steady_clock::now() - now)
               .count();
 
           // time_prepare_read += prepare_read;
@@ -778,7 +779,7 @@ public:
           auto result = transaction->read_execute(id, ReadMethods::REMOTE_READ_WITH_TRANSFER);
           // ####
           int remote_read = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                std::chrono::steady_clock::now() - now)
               .count();
           // time_read_remote += remote_read;
           now = std::chrono::steady_clock::now();
@@ -795,7 +796,7 @@ public:
 
             // ####
             int write_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                  std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                                  std::chrono::steady_clock::now() - now)
                 .count();
             // time_read_remote1 += write_time;
             now = std::chrono::steady_clock::now();
@@ -825,8 +826,9 @@ public:
                         partitioner.replica_group_size);
 
         int commit_time = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                              std::chrono::steady_clock::now() - transaction->b.execStartTime)
+                                                              std::chrono::steady_clock::now() - now)
                                                               .count();
+        now = std::chrono::steady_clock::now();
         transaction->b.time_commit += commit_time;
         // commit_num += 1;
 

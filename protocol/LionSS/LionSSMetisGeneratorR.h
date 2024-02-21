@@ -202,6 +202,124 @@ public:
   }
 
 
+  int metis_router_transmit_request(ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& move_plans){
+    // transmit_request_queue
+    std::vector<int> router_send_txn_cnt(context.coordinator_num, 0);
+
+    auto new_transmit_generate = [&](int idx){ // int n
+      simpleTransaction* s = new simpleTransaction();
+      s->idx_ = idx;
+      s->is_transmit_request = true;
+      s->is_distributed = true;
+      // s->partition_id = n;
+      return s;
+    };
+
+
+    // 一一对应
+    std::vector<simpleTransaction*> metis_txns;
+    std::vector<std::shared_ptr<myMove<WorkloadType>>> cur_moves;
+
+
+
+
+    const int transmit_block_size = 10;
+
+    int cur_move_size = move_plans.size();
+    long long access_freq_aver = 0;
+
+    // pack up move-steps to transmit request
+    double thresh_ratio = 1;
+    for(int i = 0 ; i <  thresh_ratio * cur_move_size; i ++ ){
+      bool success = false;
+      std::shared_ptr<myMove<WorkloadType>> cur_move;
+      
+      success = move_plans.pop_no_wait(cur_move);
+      DCHECK(success == true);
+      
+      
+      auto metis_new_txn = new_transmit_generate(metis_transmit_idx ++ );
+      metis_new_txn->access_frequency = cur_move->access_frequency;
+
+      access_freq_aver += cur_move->access_frequency;
+
+      for(auto move_record: cur_move->records){
+          metis_new_txn->keys.push_back(move_record.record_key_);
+          metis_new_txn->update.push_back(true);
+      }
+      //
+      metis_txns.push_back(metis_new_txn);
+      cur_moves.push_back(cur_move);
+    }
+    if(cur_move_size == 0){
+      return cur_move_size;
+    }
+    access_freq_aver /= cur_move_size;
+
+    scheduler_transactions_(metis_txns, router_send_txn_cnt, access_freq_aver);
+
+
+    // pull request
+    std::vector<simpleTransaction*> transmit_requests;
+    // int64_t coordinator_id_dst = select_best_node(metis_new_txn);
+    for(size_t i = 0 ; i < metis_txns.size(); i ++ ){
+      // split into sub_transactions
+      auto new_txn = new_transmit_generate(transmit_idx ++ );
+
+      for(auto move_record: cur_moves[i]->records){
+          new_txn->keys.push_back(move_record.record_key_);
+          new_txn->update.push_back(false);
+          if(cur_move_size < 20){
+            new_txn->destination_coordinator = i % context.coordinator_num; 
+          } else {
+            new_txn->destination_coordinator = metis_txns[i]->destination_coordinator;
+          }
+          // 
+          new_txn->metis_idx_ = metis_txns[i]->idx_;
+          new_txn->is_real_distributed = metis_txns[i]->is_real_distributed;
+          new_txn->is_distributed = metis_txns[i]->is_distributed;
+
+          if(new_txn->keys.size() > transmit_block_size){
+            // added to the router
+            transmit_requests.push_back(new_txn);
+            new_txn = new_transmit_generate(transmit_idx ++ );
+          }
+      }
+
+      if(new_txn->keys.size() > 0){
+        transmit_requests.push_back(new_txn);
+      }
+    }
+
+
+    move_plans.clear();
+
+    
+    for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
+      // outfile_excel << "Send LION Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      if(context.lion_with_metis_init == 1){
+        router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::ADD_REPLICA);
+      } else {
+        router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::TRANSFER);
+      }
+
+      // metis_migration_router_request(router_send_txn_cnt, transmit_requests[i]);        
+      // if(i > 5){ // debug
+      //   break;
+      // }
+    }
+
+    outfile_excel << "Done. \n";
+
+    transmit_idx = 0; // split into sub-transactions
+    metis_transmit_idx = 0;
+
+    LOG(INFO) << "OMG transmit_requests.size() : " << transmit_requests.size();
+
+    return cur_move_size;
+  }
+
+
   void migration(std::string file_name_){
      
 
@@ -240,8 +358,10 @@ public:
       // std::vector<simpleTransaction*> transmit_requests(context.coordinator_num);
       
       int num = 0;
-      if(context.repartition_strategy == "lion" || context.repartition_strategy == "metis"){
+      if(context.repartition_strategy == "lion"){
         num = router_transmit_request(rows);
+      } else if(context.repartition_strategy == "metis"){
+        num = metis_router_transmit_request(rows);
       } else {
         DCHECK(false);
       }
@@ -1105,7 +1225,16 @@ public:
 
   void func(){
       // return;
-      if(context.repartition_strategy != "lion") return;
+      if(context.repartition_strategy == "lion"){
+
+      } else if(context.repartition_strategy == "clay"){
+        DCHECK(false);
+      } else {
+        // metis
+        if(!context.lion_with_metis_init){
+          return;
+        }
+      }
 
       std::vector<std::shared_ptr<simpleTransaction>> &txns =schedule_meta.node_txns;
       auto & txns_coord_cost   = schedule_meta.txns_coord_cost;
@@ -1204,10 +1333,19 @@ public:
       map_[2] = context.data_src_path_dir + "clay_resultss_partition_60_90.xls_0";
       map_[3] = context.data_src_path_dir + "clay_resultss_partition_90_120.xls_0";
     } else if(context.repartition_strategy == "metis"){
-      map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
-      map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
-      map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
-      map_[3] = context.data_src_path_dir + "metis_resultss_partition_90_120.xls";
+      LOG(INFO) << "metis!!!!!!";
+      if(context.lion_with_metis_init){ // 预测
+        map_[0] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
+        map_[1] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
+        map_[2] = context.data_src_path_dir + "metis_resultss_partition_90_120.xls";
+        map_[3] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
+      } else {
+        map_[0] = context.data_src_path_dir + "metis_resultss_partition_0_30.xls";
+        map_[1] = context.data_src_path_dir + "metis_resultss_partition_30_60.xls";
+        map_[2] = context.data_src_path_dir + "metis_resultss_partition_60_90.xls";
+        map_[3] = context.data_src_path_dir + "metis_resultss_partition_90_120.xls";
+      }
+
     }
 
     std::unordered_map<int, std::string> map_2;
@@ -1232,11 +1370,17 @@ public:
     int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
     // 
     if(context.repartition_strategy == "clay"){
-      start_offset = 0 * 1000 ;
+      start_offset = 0 * 1000;
+    }
+    if(context.repartition_strategy == "metis"){
+      LOG(INFO) << "regular metis!!!!!!";
+      if(!context.lion_with_metis_init){
+        start_offset = 0 * 1000;
+      }
     }
 
     if(context.lion_with_metis_init){
-      LOG(INFO) << "START INIT!";
+      LOG(INFO) << "START INIT! predictor";
       migration(map_[3]);
       while(router_fence() == -1){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
@@ -1277,21 +1421,20 @@ public:
         std::this_thread::sleep_for(std::chrono::microseconds(5));
         continue;
       }
-      if(!context.lion_with_metis_init){
-        continue;
+      if(context.lion_with_metis_init || context.repartition_strategy == "metis"){
+        // directly jump into first phase
+        begin = std::chrono::steady_clock::now();
+        
+
+        migration(map_[cur_workload % workload_num]);
+
+        last_timestamp_ = begin;
+        last_timestamp_int += trigger_time_interval;
+        begin = std::chrono::steady_clock::now();
+
+        cur_workload = (cur_workload + 1) ;
       }
-      // directly jump into first phase
-      begin = std::chrono::steady_clock::now();
-      
 
-      migration(map_[cur_workload % workload_num]);
-
-      last_timestamp_ = begin;
-      last_timestamp_int += trigger_time_interval;
-      begin = std::chrono::steady_clock::now();
-
-      cur_workload = (cur_workload + 1) ;
-      
       // if(context.lion_with_metis_init){
       //   break; // debug
       // }

@@ -552,3 +552,24 @@
 50 16 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionRWB/aws_50.py 200" &
 55 16 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionRWB/aws_80.py 200" &
 00 17 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionRWB/aws_100.py 200" &
+
+
+
+40 08 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionS/aws_10.py 200" &
+35 08 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionS/aws_20.py 200" &
+50 08 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionS/aws_50.py 200" &
+45 08 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionS/aws_80.py 200" &
+55 08 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionS/aws_100.py 200" &
+
+00 09 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionSW/aws_10.py 200" &
+05 09 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionSW/aws_20.py 200" &
+10 09 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionSW/aws_50.py 200" &
+15 09 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionSW/aws_80.py 200" &
+20 09 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lionSW/aws_100.py 200" &
+
+
+20 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_10.py 200" &
+15 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_20.py 200" &
+10 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_50.py 200" &
+05 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_80.py 200" &
+00 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_100.py 200" &

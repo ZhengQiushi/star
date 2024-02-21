@@ -454,11 +454,11 @@ public:
         }
       }
 
-      if(context.random_router > 0){
-        // 
-        // size_t random_value = random.uniform_dist(0, 9);
-        max_node = (query_keys[0] / context.keysPerPartition + 1) % context.coordinator_num;
-      } 
+      // if(context.random_router > 0){
+      //   // 
+      //   // size_t random_value = random.uniform_dist(0, 9);
+      //   max_node = (query_keys[0] / context.keysPerPartition + 1) % context.coordinator_num;
+      // } 
 
 
       t->destination_coordinator = max_node;

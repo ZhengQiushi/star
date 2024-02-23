@@ -573,3 +573,37 @@
 10 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_50.py 200" &
 05 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_80.py 200" &
 00 00 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_module/uniform/lion/aws_100.py 200" &
+
+
+# shift 
+
+
+
+
+30 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/siloS/aws_100.py 300" &
+40 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/leapS/aws_100.py 300" &
+50 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/aria/aws_100.py 300" &
+00 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/calvin/aws_100.py 300" &
+10 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/hermes/aws_100.py 300" &
+20 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/star/aws_100.py 300" &
+
+30 03 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/siloS/aws_100.py 300" &
+40 03 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/leapS/aws_100.py 300" &
+50 03 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/aria/aws_100.py 300" &
+00 03 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/calvin/aws_100.py 300" &
+10 03 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/hermes/aws_100.py 300" &
+20 03 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/star/aws_100.py 300" &
+
+30 04 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/siloS/aws_100.py 300" &
+40 04 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/leapS/aws_100.py 300" &
+50 04 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/aria/aws_100.py 300" &
+00 04 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/calvin/aws_100.py 300" &
+10 04 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/hermes/aws_100.py 300" &
+20 04 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/star/aws_100.py 300" &
+
+
+30 19 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/lionS/aws_100.py 300" &
+10 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/clayS/aws_100.py 300" &
+20 02 * * * docker exec zqs_4 bash -c "bash /home/star/scripts/test.sh 2_2_dm_dist_ratio_shift/uniform/lion/aws_100.py 300" &
+
+bash /home/star/scripts/test.sh 2_1_s_dist_ratio_shift/uniform/lionS/aws_100_.py 300

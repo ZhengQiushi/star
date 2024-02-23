@@ -249,7 +249,7 @@ public:
       }
       unpack_route_transaction(); // 
 
-      LOG(INFO) << txn_meta.transactions_prepared.load();
+      // LOG(INFO) << txn_meta.transactions_prepared.load();
       
       txn_meta.transactions_prepared.fetch_add(1);
       while(txn_meta.transactions_prepared.load() < context.worker_num){
@@ -358,11 +358,11 @@ public:
 
       VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to replication_fence";
 
-      LOG(INFO) << "S_phase done "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
+      // LOG(INFO) << "S_phase done "
+      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
+      //                std::chrono::steady_clock::now() - now)
+      //                .count()
+      //         << " milliseconds.";
       // now = std::chrono::steady_clock::now();
       
       replication_fence(ExecutorStatus::S_PHASE);
@@ -387,11 +387,11 @@ public:
         txn_meta.clear();
       }
       
-      LOG(INFO) << "wait back "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                     std::chrono::steady_clock::now() - now)
-                     .count()
-              << " milliseconds.";
+      // LOG(INFO) << "wait back "
+      //         << std::chrono::duration_cast<std::chrono::milliseconds>(
+      //                std::chrono::steady_clock::now() - now)
+      //                .count()
+      //         << " milliseconds.";
       // now = std::chrono::steady_clock::now();
 
 
@@ -594,15 +594,15 @@ public:
     flush_record_messages();
     flush_sync_messages();
 
-    if(count > 0)
-      LOG(INFO) << "  nums: "    << count 
-                << " pre: "     << time_before_prepare_request / count
-                << " set: "     << time_before_prepare_set / count 
-                << " gap: "     << time_before_prepare_read / count
-                << "  prepare: " << time_prepare_read / count  << " " << time_prepare_read
-                << "  execute: " << time_read_remote / count   << " " << time_read_remote
-                << "  commit: "  << time3 / count              << " " << time3
-                << "  router : " << time1 / count              << " " << time1; 
+    // if(count > 0)
+    //   LOG(INFO) << "  nums: "    << count 
+    //             << " pre: "     << time_before_prepare_request / count
+    //             << " set: "     << time_before_prepare_set / count 
+    //             << " gap: "     << time_before_prepare_read / count
+    //             << "  prepare: " << time_prepare_read / count  << " " << time_prepare_read
+    //             << "  execute: " << time_read_remote / count   << " " << time_read_remote
+    //             << "  commit: "  << time3 / count              << " " << time3
+    //             << "  router : " << time1 / count              << " " << time1; 
 
   }
 

@@ -396,18 +396,56 @@ public:
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_){
+      ShareQueue<simpleTransaction*, 19600>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+      
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+      int workload_type_num = 4;
+      int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num);
+
+
+
+      
+
+      switch (workload_type)
+      {
+      case 0:
+        context.skew_factor = 0;
+        // context.crossPartitionProbability = 0;
+        break;
+      case 1:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 0;
+        break;
+      case 2:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 100;
+        break;
+      case 3:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 100;
+        break;
+      default:
+        break;
+      }
+
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
+        if(workload_type == 1){
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        } else if(workload_type == 2){
+          partition_id = (0 + skew_factor * context.coordinator_num) % (context.partition_num / 2);
+        } else if(workload_type == 3){
+          partition_id = context.partition_num / 2 + (0 + skew_factor * context.coordinator_num) % (context.partition_num / 2);
+        }
       } else {
         // 0 < 50
         //正常
@@ -415,9 +453,11 @@ public:
       // 
       std::size_t partition_id_;
       if(context.skew_factor >= skew_factor) {
-        partition_id_ = partition_id / hot_area_size * hot_area_size;
+        std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+        partition_id_ = partition_id / hot_area_size * hot_area_size + workload_type;
 
       } else {
+        std::size_t hot_area_size = context.partition_num / context.coordinator_num;
         partition_id_ = partition_id / hot_area_size * hot_area_size + 
                                 partition_id / hot_area_size % context.coordinator_num;;
       }
@@ -430,14 +470,18 @@ public:
       txn->update = cur_transaction->get_query_update();
       txn->partition_id = cur_transaction->get_partition_id();
       // 
-      // bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
-      // if(is_cross_txn_static){
-      //   txn->is_distributed = true;
-      // } else {
-      //   DCHECK(txn->is_distributed == false);
-      // }
+      bool is_cross_txn_static  = cur_transaction->check_cross_node_txn(false);
+      if(is_cross_txn_static){
+        txn->is_distributed = true;
+      } else {
+        DCHECK(txn->is_distributed == false);
+      }
     
-
+    // LOG(INFO) << txn->partition_id << " " 
+    //           << partition_id_ << " " 
+    //           << partition_id << " " 
+    //           << dispatcher_id << " ";
+              // << txn->
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
 
@@ -557,9 +601,9 @@ public:
 
       // router_fence(); // wait for coordinator to response
 
-      LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count() * 1.0 / 1000 / 1000;
+      // LOG(INFO) << "Generator Fence: wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
+      //                      std::chrono::steady_clock::now() - test)
+      //                      .count() * 1.0 / 1000 / 1000;
       // test = std::chrono::steady_clock::now();
 
       flush_async_messages();
@@ -777,12 +821,12 @@ protected:
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   mystar::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 40960> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, 19600> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
   std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];

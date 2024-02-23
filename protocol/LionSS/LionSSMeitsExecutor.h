@@ -190,9 +190,9 @@ public:
 
       transaction = std::move(cur_trans[i]);
 
-      if(!transaction->distributed_transaction){
-        continue;
-      }
+      // if(!transaction->distributed_transaction){
+      //   continue;
+      // }
       // int target_coordinator_id_ = -1;
       // if(!check_cross_node_txn(transaction.get(), target_coordinator_id_) && 
       //     target_coordinator_id_ == coordinator_id){
@@ -220,11 +220,7 @@ public:
 
 
         
-        // auto debug = transaction->debug_record_keys();
-        // auto debug_master = transaction->debug_record_keys_master();
 
-        // LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
-        //                         << debug[1] << " " << debug_master[1]; 
         auto r_satrt = std::chrono::steady_clock::now();
 
         auto result = transaction->transmit_execute(id);
@@ -247,7 +243,16 @@ public:
         //   }
         // }
         // if(transaction->is_transmit_requests()){
-        //   LOG(INFO) << "transmit txn: " << i  << " " << transaction->get_query_printed() << " " << (result == TransactionResult::TRANSMIT_REQUEST);
+          // LOG(INFO) << "transmit txn: " << i  << " " << transaction->get_query_printed() << " " << (result == TransactionResult::TRANSMIT_REQUEST);
+        if(transaction->migrate_cnt > 0){
+
+        auto debug = transaction->debug_record_keys();
+        auto debug_master = transaction->debug_record_keys_master();
+
+        LOG(INFO) << i << "(" << transaction->migrate_cnt << ") : " << debug[0] << " " << debug_master[0] << " | "
+                                << debug[1] << " " << debug_master[1]; 
+        }
+
         // }
         //   } else {
         //     single_txn_num ++ ;
@@ -681,7 +686,7 @@ protected:
 
 protected:
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;

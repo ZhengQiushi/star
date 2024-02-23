@@ -188,9 +188,9 @@ public:
 
       transaction = std::move(cur_trans[i]);
 
-      if(!transaction->distributed_transaction){
-        continue;
-      }
+      // if(!transaction->distributed_transaction){
+      //   continue;
+      // }
       // int target_coordinator_id_ = -1;
       // if(!check_cross_node_txn(transaction.get(), target_coordinator_id_) && 
       //     target_coordinator_id_ == coordinator_id){
@@ -673,7 +673,7 @@ protected:
 
 protected:
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;

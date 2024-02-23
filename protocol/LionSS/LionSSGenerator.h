@@ -272,8 +272,7 @@ public:
         
         while(is_full_signal_self[dispatcher_id].load() == false){
             bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-                                  transactions_queue_self[dispatcher_id], 
-                                  dispatcher_id);
+                                  transactions_queue_self[dispatcher_id]);
 
             if(!success){ // full
                 is_full_signal_self[dispatcher_id].store(true);
@@ -296,7 +295,7 @@ public:
           }
 
           bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-            transactions_queue_self[dispatcher_id], dispatcher_id);
+            transactions_queue_self[dispatcher_id]);
           if(!success){ // full
             is_full_signal_self[dispatcher_id].store(true);
           }                    
@@ -327,29 +326,57 @@ public:
     // router_transactions_send.fetch_add(1);
   };
 
+
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, LAG_NUM>& transactions_queue_self_,
-      int dispatcher_id){
+      ShareQueue<simpleTransaction*, 19600>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
-
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-
-      } else {
-        hot_area_size = context.coordinator_num;
-      }
+      
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+      int workload_type_num = 4;
+      int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num);
+
+
+
+      
+
+      switch (workload_type)
+      {
+      case 0:
+        context.skew_factor = 0;
+        // context.crossPartitionProbability = 0;
+        break;
+      case 1:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 0;
+        break;
+      case 2:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 100;
+        break;
+      case 3:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 100;
+        break;
+      default:
+        break;
+      }
+
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
-        if(WorkloadType::which_workload == myTestSet::YCSB){
+        if(workload_type == 1){
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
-        } else {
-          partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        } else if(workload_type == 2){
+          partition_id = (0 + skew_factor * context.coordinator_num) % (context.partition_num / 2);
+        } else if(workload_type == 3){
+          partition_id = context.partition_num / 2 + (0 + skew_factor * context.coordinator_num) % (context.partition_num / 2);
         }
       } else {
         // 0 < 50
@@ -357,17 +384,14 @@ public:
       }
       // 
       std::size_t partition_id_;
-      if(WorkloadType::which_workload == myTestSet::YCSB){
-        partition_id_ = partition_id / hot_area_size * hot_area_size + 
-                                  partition_id / hot_area_size % context.coordinator_num;
-      } else {
-        if(context.skew_factor >= skew_factor) {
-          partition_id_ = partition_id / hot_area_size * hot_area_size;
+      if(context.skew_factor >= skew_factor) {
+        std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+        partition_id_ = partition_id / hot_area_size * hot_area_size + workload_type;
 
-        } else {
-          partition_id_ = partition_id / hot_area_size * hot_area_size + 
-                                  partition_id / hot_area_size % context.coordinator_num;;
-        }
+      } else {
+        std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+        partition_id_ = partition_id / hot_area_size * hot_area_size + 
+                                partition_id / hot_area_size % context.coordinator_num;;
       }
 
       // 
@@ -385,14 +409,14 @@ public:
         DCHECK(txn->is_distributed == false);
       }
     
-    // LOG(INFO) << dispatcher_id << " " 
-    //           << txn->partition_id << " " 
+    // LOG(INFO) << txn->partition_id << " " 
     //           << partition_id_ << " " 
     //           << partition_id << " " 
-    //           << txn->keys[0] / 200000; //  << " " << txn->keys[1] / 200000 % contex;
-
+    //           << dispatcher_id << " ";
+              // << txn->
     return transactions_queue_self_.push_no_wait(txn); // txn->partition_id % context.coordinator_num [0]
   }
+
 
   void txn_nodes_involved(simpleTransaction* t) {
       
@@ -935,12 +959,12 @@ protected:
   std::mutex mm;
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   lionss::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, LAG_NUM> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, 19600> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
 

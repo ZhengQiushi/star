@@ -228,7 +228,7 @@ public:
 
         execute_latency.add(execution_schedule_time);
 
-      LOG(INFO) << "router_recv_txn_num: " << router_recv_txn_num << " need_remote_read_num: " << need_remote_read_num;
+      // LOG(INFO) << "router_recv_txn_num: " << router_recv_txn_num << " need_remote_read_num: " << need_remote_read_num;
 
       n_complete_workers.fetch_add(1);
 
@@ -250,7 +250,7 @@ public:
 
       // time_total.add(batch_time * 1000.0 / commit_num);
       
-      LOG(INFO) << "done, send: " << batch_time  << "ms,  " << commit_num << " " << sync_commit_num;
+      // LOG(INFO) << "done, send: " << batch_time  << "ms,  " << commit_num << " " << sync_commit_num;
 
       if(id == 0){
         txn_meta.clear();
@@ -494,12 +494,12 @@ void unpack_route_transaction(){
                                                             .count();
 
     // LOG(INFO) << " transaction recv : " << transactions.size() << " " << real_num << " " << skip_num;
-    LOG(INFO) << " transaction recv : " << transactions.size() << " " 
-              << real_num << " " << skip_num << " "
-              << time_locking * 1.0 / real_num << " "
-              << last * 1.0 / real_num << " "
-              << write_lock_num * 1.0 / real_num << " "
-              << read_lock_num * 1.0 / real_num;
+    // LOG(INFO) << " transaction recv : " << transactions.size() << " " 
+    //           << real_num << " " << skip_num << " "
+    //           << time_locking * 1.0 / real_num << " "
+    //           << last * 1.0 / real_num << " "
+    //           << write_lock_num * 1.0 / real_num << " "
+    //           << read_lock_num * 1.0 / real_num;
 
     set_lock_manager_bit(id);
   }

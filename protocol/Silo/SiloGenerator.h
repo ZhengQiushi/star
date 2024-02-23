@@ -105,8 +105,7 @@ public:
         LOG(INFO) << n << " " << worker_id * context.coordinator_num;
         while(is_full_signal_self[dispatcher_id].load() == false){
             bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-                                  transactions_queue_self[dispatcher_id],
-                                  dispatcher_id);
+                                  transactions_queue_self[dispatcher_id]);
 
             if(!success){ // full
                 is_full_signal_self[dispatcher_id].store(true);
@@ -126,8 +125,7 @@ public:
           }
 
           bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-            transactions_queue_self[dispatcher_id], 
-            dispatcher_id);
+            transactions_queue_self[dispatcher_id]);
           if(!success){ // full
             is_full_signal_self[dispatcher_id].store(true);
           }                    
@@ -143,19 +141,56 @@ public:
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 40960>& transactions_queue_self_, 
-      int dispatcher_id){
+      ShareQueue<simpleTransaction*, 1960>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
      */
-      std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+      
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
       // 
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+      int workload_type_num = 4;
+      int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num);
+
+
+
+      
+
+      switch (workload_type)
+      {
+      case 0:
+        context.skew_factor = 0;
+        // context.crossPartitionProbability = 0;
+        break;
+      case 1:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 0;
+        break;
+      case 2:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 100;
+        break;
+      case 3:
+        context.skew_factor = 80;
+        // context.crossPartitionProbability = 100;
+        break;
+      default:
+        break;
+      }
+
       size_t skew_factor = random.uniform_dist(1, 100);
       if (context.skew_factor >= skew_factor) {
         // 0 >= 50 
+        if(workload_type == 1){
           partition_id = (0 + skew_factor * context.coordinator_num) % context.partition_num;
+        } else if(workload_type == 2){
+          partition_id = (0 + skew_factor * context.coordinator_num) % (context.partition_num / 2);
+        } else if(workload_type == 3){
+          partition_id = context.partition_num / 2 + (0 + skew_factor * context.coordinator_num) % (context.partition_num / 2);
+        }
       } else {
         // 0 < 50
         //正常
@@ -163,9 +198,11 @@ public:
       // 
       std::size_t partition_id_;
       if(context.skew_factor >= skew_factor) {
-        partition_id_ = partition_id / hot_area_size * hot_area_size;
+        std::size_t hot_area_size = context.partition_num / context.coordinator_num;
+        partition_id_ = partition_id / hot_area_size * hot_area_size + workload_type;
 
       } else {
+        std::size_t hot_area_size = context.partition_num / context.coordinator_num;
         partition_id_ = partition_id / hot_area_size * hot_area_size + 
                                 partition_id / hot_area_size % context.coordinator_num;;
       }
@@ -268,7 +305,7 @@ public:
       // }
 
 
-      max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
+      max_node = (query_keys[0] / context.keysPerPartition + 1) % context.coordinator_num;
 
       // LOG(INFO) << max_node << " " << query_keys[0];
       t->destination_coordinator = max_node;
@@ -734,13 +771,13 @@ protected:
   
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
 
   silo::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 40960> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, 1960> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
   std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];

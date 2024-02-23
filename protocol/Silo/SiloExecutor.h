@@ -217,8 +217,10 @@ void unpack_route_transaction(){
             retry_transaction = false;
 
               if(transaction->distributed_transaction > 0){
-                distributed_num.fetch_add(1);
-                // LOG(INFO) << distributed_num.load();
+                // distributed_num.fetch_add(1);
+                // LOG(INFO) << distributed_num.load() 
+                //           << " " << *(int*)(transaction->readSet[0].get_key())
+                //           << " " << *(int*)(transaction->readSet[1].get_key());
               } else {
                 singled_num.fetch_add(1);
               }
@@ -568,7 +570,7 @@ protected:
 
 protected:
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   silo::TransactionMeta<WorkloadType> txn_meta;

@@ -667,6 +667,7 @@ public:
       } 
       if(op == RouterTxnOps::ADD_REPLICA){
         txn->network_size += 50000 * (key_size + value_size);
+        // LOG(INFO) << *(int*)key << " RouterTxnOps::ADD_REPLICA ";
       } else {
         if(remaster == false || context.migration_only > 0) {
           txn->network_size += 50000 * (key_size + value_size);
@@ -788,7 +789,7 @@ public:
     }
 
     // if(context.coordinator_id == context.coordinator_num){
-    //   LOG(INFO) << "transmit_router_only_request_handler : " << *(int*)key << " " << coordinator_id_old << " -> " << coordinator_id_new;
+      // LOG(INFO) << "transmit_router_only_request_handler : " << *(int*)key << " " << coordinator_id_old << " -> " << coordinator_id_new;
     // }
     responseMessage.flush();
   }

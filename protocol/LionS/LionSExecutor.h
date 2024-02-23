@@ -157,6 +157,8 @@ public:
     uint64_t last_seed = 0;
 
     auto count = 0u;
+    int cross_cnt = 0;
+    int single_cnt = 0;
     size_t cur_queue_size = cur_trans.size();
     int router_txn_num = 0;
 
@@ -186,6 +188,11 @@ public:
       
       count += 1;
       auto& transaction = cur_trans[i];
+      if(transaction->distributed_transaction){
+        cross_cnt += 1;
+      } else {
+        single_cnt += 1;
+      }
       auto txnStartTime = transaction->b.startTime
                         = std::chrono::steady_clock::now();
 
@@ -240,7 +247,13 @@ public:
           now = std::chrono::steady_clock::now();
           transaction->b.time_remote_locks += remote_read;
           // #### 
-          
+          // if(i < 5){
+          //   auto debug = transaction->debug_record_keys();
+          //   auto debug_master = transaction->debug_record_keys_master();
+
+          //   LOG(INFO) << i << " : " << debug[0] << " " << debug_master[0] << " | "
+          //                           << debug[1] << " " << debug_master[1]; 
+          // }
           if(result != TransactionResult::READY_TO_COMMIT){
             retry_transaction = false;
             protocol->abort(*transaction, sync_messages);
@@ -366,8 +379,10 @@ public:
     //   // LOG(INFO) << "remaster_delay_transactions: " << remaster_delay_transactions;
     //   // remaster_delay_transactions = 0;
     // }
-      
-
+    if(count > 500){
+      LOG(INFO) << "CROSS: " << cross_cnt << " SINGLE: " << single_cnt;
+    }
+    
     ////  // LOG(INFO) << "router_txn_num: " << router_txn_num << "  local solved: " << cur_queue_size - router_txn_num;
   }
 

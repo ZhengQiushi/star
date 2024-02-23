@@ -407,7 +407,7 @@ public:
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+          cur_c_id = (query_keys[j] / context.keysPerPartition + 1) % context.coordinator_num;
         }
         from_nodes_id.insert(cur_c_id);
       }
@@ -428,7 +428,7 @@ public:
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+          cur_c_id = (query_keys[j] / context.keysPerPartition + 1) % context.coordinator_num;
         }
         if(!from_nodes_id.count(cur_c_id)){
           from_nodes_id[cur_c_id] = 1;
@@ -461,7 +461,7 @@ public:
           cur_c_id = db.get_dynamic_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+          cur_c_id = (query_keys[j] / context.keysPerPartition + 1) % context.coordinator_num;
         }
         nodes[cur_c_id] += 1;
       }

@@ -35,15 +35,15 @@ public:
   // const int hot_area_size = 6;
   static const double get_thresh(const Context &context){
     if(context.protocol == "MyClay"){
-      return 0.05;
+      return 0.02;
     } else {
-      return 0.05;
+      return 0.02;
     }
   }
   static int get_workload_type(const Context &context, double cur_timestamp){
-    int workload_type_num = 3;
-    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// 
-    return 4 - workload_type;
+    int workload_type_num = 4;
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num);// 
+    return workload_type;
   }
   static int round(int a, int b){
     return a / b * b;
@@ -98,20 +98,46 @@ public:
     }
 
     int cross_partition_probalility = context.crossPartitionProbability ; 
+
+      switch (workload_type)
+      {
+      case 0:
+        // context.skew_factor = 0;
+        cross_partition_probalility = 0;
+        break;
+      case 1:
+        // context.skew_factor = 80;
+        cross_partition_probalility = 0;
+        break;
+      case 2:
+        // context.skew_factor = 80;
+        cross_partition_probalility = 100;
+        break;
+      case 3:
+        // context.skew_factor = 80;
+        cross_partition_probalility = 100;
+        break;
+      default:
+        break;
+      }
+
     if(cur_timestamp < context.init_time){
       cross_partition_probalility = 0;
     }
     
+    int range = my_threshold * (static_cast<int>(context.keysPerPartition) - 1);
     // generate a key in a partition
     if (crossPartition <= cross_partition_probalility &&
         context.partition_num > 1) {
         first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
-                random.uniform_dist(0, my_threshold * (static_cast<int>(context.keysPerPartition) - 1));
+                random.uniform_dist(0, range);
     } else {
       // 单分区
+      int offset = context.keysPerPartition / 2 + range;
+
       first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
-                random.uniform_dist(context.keysPerPartition / 2 + my_threshold * (static_cast<int>(context.keysPerPartition) - 1),
-                                    (static_cast<int>(context.keysPerPartition) - 1)) / 10 * 10;
+                random.uniform_dist(offset,
+                                    offset + range * 10) / 10 * 10;
     }
 
     int first_key_index = random.uniform_dist(0, query_size - 1);
@@ -142,7 +168,7 @@ public:
             context.partition_num > 1) {
           // 跨分区
           int32_t key_num =  first_key % static_cast<int32_t>(context.keysPerPartition); // 分区内偏移
-          int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition) + workload_type; // 分区偏移
+          int32_t key_partition_num = first_key / static_cast<int32_t>(context.keysPerPartition) + 2; // 分区偏移
           
 
           if(key_partition_num < 0){

@@ -855,7 +855,7 @@ protected:
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   clay::ScheduleMeta &schedule_meta;

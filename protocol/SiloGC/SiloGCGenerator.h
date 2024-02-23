@@ -403,7 +403,7 @@ public:
         // judge if is cross txn
         size_t cur_c_id = -1;
         size_t secondary_c_ids;
-        cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+        cur_c_id = (query_keys[j] / context.keysPerPartition + 1) % context.coordinator_num;
         if(!from_nodes_id.count(cur_c_id)){
           from_nodes_id[cur_c_id] = 1;
           // 
@@ -443,7 +443,7 @@ public:
       }
 
 
-      max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
+      max_node = (query_keys[0] / context.keysPerPartition + 1) % context.coordinator_num;
 
 
       t->destination_coordinator = max_node;
@@ -881,7 +881,7 @@ protected:
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
 

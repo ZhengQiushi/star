@@ -302,7 +302,7 @@ public:
     
     success = table.contains(key);
     if(!success){
-      LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
+      // LOG(INFO) << "  dont Exist " << *(int*)key ; // << " " << tid_int;
       encoder << latest_tid 
               << key_offset 
               << txn_id

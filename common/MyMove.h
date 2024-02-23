@@ -156,9 +156,12 @@ namespace star
         }
 
         std::pair<int, int> CalIdleNodes(const std::unordered_map<size_t, int>& idle_node, 
-                                         bool migrate_only){
-            int idle_coord_id = -1;                        
+                                         bool migrate_only, bool lion_with_metis_init = 0){
+            int idle_coord_id = -1;  
             int min_cost = INT_MAX;
+            if(lion_with_metis_init){
+                min_cost = -149;
+            }
             // int idle_coord_id = -1;
             for(auto& idle: idle_node){
                 int cur_min_cost = 0;

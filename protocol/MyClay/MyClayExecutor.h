@@ -866,7 +866,7 @@ protected:
 
 protected:
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::atomic<uint32_t> &transactions_prepared;

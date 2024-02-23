@@ -181,7 +181,7 @@ public:
 
     
     for(size_t i = 0 ; i < transmit_requests.size(); i ++ ){ // 
-      // outfile_excel << "Send LION Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
+      // LOG(INFO) << "Send LION Metis migration transaction ID(" << transmit_requests[i]->idx_ << " " << transmit_requests[i]->metis_idx_ << " " << transmit_requests[i]->keys[0] << " ) to " << transmit_requests[i]->destination_coordinator << "\n";
 
       router_request(router_send_txn_cnt, transmit_requests[i], RouterTxnOps::ADD_REPLICA);
       delete transmit_requests[i];
@@ -413,14 +413,16 @@ public:
         } else {
           from_nodes_id[cur_c_id] += 1;
         }
-
+        // str += "(";
         // key on which node
         for(size_t i = 0; i <= context.coordinator_num; i ++ ){
             if(secondary_c_ids & 1 && i != cur_c_id){
                 from_nodes_id_secondary[i] += 1;
+                // str += std::to_string(i) + ",";
             }
             secondary_c_ids = secondary_c_ids >> 1;
         }
+        // str += ")";
       }
 
       int max_cnt = INT_MIN;
@@ -457,7 +459,7 @@ public:
         }
 
         txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
-
+        
         // str += " | " + std::to_string(txns_coord_cost_[t->idx_][cur_c_id]);
 
         replicate_busy_local[cur_c_id] += cnt_secondary;
@@ -469,8 +471,8 @@ public:
         // size_t random_value = random.uniform_dist(0, 9);
         max_node = (query_keys[0] / context.keysPerPartition + 1) % context.coordinator_num;
       } 
-
-      // LOG(INFO) << str;
+      // if(t->idx_ < 10)
+      //   LOG(INFO) << str;
 
       t->destination_coordinator = max_node;
       t->old_dest = t->destination_coordinator;
@@ -692,6 +694,7 @@ public:
               // LOG(INFO) << "rebalanced " << t->idx_ << " " << t->keys[0] << " " << t->keys[1] << " " << t->destination_coordinator << "->" << idle.first;
               
               t->destination_coordinator = idle.first;
+              t->is_real_distributed = true;
               busy_[t->destination_coordinator] += t->access_frequency;
               idle.second -= t->access_frequency;
               if(idle.second <= 0){
@@ -969,25 +972,27 @@ public:
     for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
       // if((long long) (busy[j] - aver_val) * (busy[j] - aver_val) > threshold){
         if((busy[j] - aver_val) > 0){
-          if(busy[j] - aver_val > overloaded_num){
-            overloaded_num = busy[j] - aver_val;
-            overloaded_id = j;
-          }
+          // if(busy[j] - aver_val > overloaded_num){
+          //   overloaded_num = 
+          overload_node[j] = busy[j] - aver_val;
+          //   overloaded_id = j;
+          // }
           // overload_node[j] = busy[j] - aver_val;
-        } else {
-          if(aver_val - busy[j]  > idle_num){
-            idle_num = aver_val - busy[j];
-            idle_id = j;
-          }
+        } else if((aver_val - busy[j]) > 0){
+          // if(aver_val - busy[j]  > idle_num){
+          //   idle_num = aver_val - busy[j];
+          //   idle_id = j;
+          // }
+          idle_node[j] = aver_val - busy[j];;
         } 
       // }
     }    
-    if(overloaded_id != -1){
-      overload_node[overloaded_id] = overloaded_num;
-    }
-    if(idle_id != -1){
-      idle_node[idle_id] = idle_num;
-    }
+    // if(overloaded_id != -1){
+    //   overload_node[overloaded_id] = overloaded_num;
+    // }
+    // if(idle_id != -1){
+    //   idle_node[idle_id] = idle_num;
+    // }
   }
 
   long long cal_load_distribute(int aver_val, 
@@ -1071,9 +1076,12 @@ public:
 
           if(overload_node.count(cur.dest)){
             // find minial cost in idle_node
-            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node, context.migration_only);
+            auto [idle_coord_id, min_cost] = cur.CalIdleNodes(idle_node, context.migration_only, context.lion_with_metis_init);
             if(idle_coord_id == -1){
               continue;
+            }
+            if(min_cost > -150){
+              LOG(INFO) << "NO";
             }
             used[cur_idx] = true;
             useClump = true;
@@ -1263,7 +1271,7 @@ public:
           send_migrate_request += 1;
           txns[idx]->global_id_ = ++global_id;
 
-          // auto debug_master = debug_record_keys_master(txns[idx]->keys);
+          auto debug_master = debug_record_keys_master(txns[idx]->keys);
 
           // LOG(INFO) << j << " " << txns[idx]->global_id_ 
           //           << " router to [" << txns[idx]->destination_coordinator
@@ -1381,7 +1389,7 @@ public:
 
     if(context.lion_with_metis_init){
       LOG(INFO) << "START INIT! predictor";
-      migration(map_[3]);
+      // migration(map_[3]);
       while(router_fence() == -1){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
@@ -1670,7 +1678,7 @@ protected:
   int metis_transmit_idx = 0;
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
 

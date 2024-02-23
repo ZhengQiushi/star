@@ -119,7 +119,8 @@ public:
           // secondary_c_ids = db.get_secondary_coordinator_id(context.coordinator_num, ycsbTableID, (void*)& query_keys[j]);
         } else {
           // cal the partition to figure out the coordinator-id
-          cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
+          DCHECK(false);
+          cur_c_id = (query_keys[j] / context.keysPerPartition + 1) % context.coordinator_num;
         }
         if(!from_nodes_id.count(cur_c_id)){
           from_nodes_id[cur_c_id] = 1;
@@ -824,7 +825,7 @@ protected:
   std::atomic<uint32_t> router_transactions_send, router_transaction_done;
 
   DatabaseType &db;
-  const ContextType &context;
+  ContextType context;
   std::atomic<uint32_t> &worker_status;
   std::atomic<uint32_t> &n_complete_workers, &n_started_workers;
   std::unique_ptr<Partitioner> partitioner;

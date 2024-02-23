@@ -17,7 +17,22 @@
 
 namespace star {
 namespace tpcc {
+static thread_local std::vector<Storage*> storage_cache;
 
+Storage* get_storage() {
+  if (storage_cache.empty()) {
+    for (size_t i = 0; i < 10; ++i) {
+      storage_cache.push_back(new Storage());
+    }
+  }
+  Storage * last = storage_cache.back();
+  storage_cache.pop_back();
+  return last;
+}
+
+void put_storage(Storage * s) {
+  storage_cache.push_back(s);
+}
 template <class Transaction> class NewOrder : public Transaction {
 public:
   using DatabaseType = Database;
@@ -29,25 +44,36 @@ public:
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context, RandomType &random,
            Partitioner &partitioner, Storage &storage, 
-           double cur_timestamp, std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+           double cur_timestamp)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
-        context(context), random(random), storage(storage),
+        context(context), random(random), storage(&storage),
         partition_id(partition_id),
-        query(makeNewOrderQuery()(context, partition_id + 1, cur_timestamp, random)) {
+        query(makeNewOrderQuery()(context, partition_id + 1, random, cur_timestamp)) {
           DCHECK(this->partition_id < (1 << 30));
         }
 
+  NewOrder(std::size_t coordinator_id, std::size_t partition_id,
+          std::atomic<uint32_t> &worker_status, 
+           DatabaseType &db, const ContextType &context, RandomType &random,
+           Partitioner &partitioner, std::size_t ith_replica)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random),
+        partition_id(partition_id),
+        query(makeNewOrderQuery()(context, partition_id + 1, random)) {
+          storage = get_storage();
+        }
+  virtual ~NewOrder() { put_storage(storage); storage = nullptr; }
 
   NewOrder(std::size_t coordinator_id, std::size_t partition_id,  
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context,
            RandomType &random, Partitioner &partitioner,
-           Storage &storage, simpleTransaction& simple_txn, bool is_transmit,
-           std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+           Storage &storage, simpleTransaction& simple_txn, bool is_transmit)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
-        context(context), random(random), storage(storage),
+        context(context), random(random), storage(&storage),
         query(makeNewOrderQuery()(simple_txn.keys, is_transmit)) {
           // size_t size_ = simple_txn.keys.size();
           // DCHECK(simple_txn.keys.size() == 13);
@@ -62,10 +88,10 @@ public:
            std::atomic<uint32_t> &worker_status, 
            DatabaseType &db, const ContextType &context,
            RandomType &random, Partitioner &partitioner,
-           Storage &storage, simpleTransaction& simple_txn, std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+           Storage &storage, simpleTransaction& simple_txn)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
-        context(context), random(random), storage(storage),
+        context(context), random(random), storage(&storage),
         query(makeNewOrderQuery()(simple_txn.keys)) {
           this->partition_id = query.W_ID - 1;
           DCHECK(this->partition_id < (1 << 30));
@@ -78,11 +104,10 @@ public:
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, 
-                  Transaction& txn,  
-                  std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+                  Transaction& txn)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
-        context(context), random(random), storage(storage),
+        context(context), random(random), storage(&storage),
         partition_id(partition_id), 
         query(makeNewOrderQuery()(txn.get_query())) {
           /**
@@ -96,7 +121,6 @@ public:
           // LOG(INFO) << "reset ! " << txn.on_replica_id;
         }
 
-  virtual ~NewOrder() override = default;
   bool is_transmit_requests() override {
     return is_transmit_request;
   }
@@ -113,9 +137,9 @@ public:
     // the warehouse tax rate, is retrieved.
 
     auto warehouseTableID = warehouse::tableID;
-    storage.warehouse_key = warehouse::key(W_ID);
-    this->search_for_read(warehouseTableID, W_ID - 1, storage.warehouse_key,
-                          storage.warehouse_value, wid_to_granule_id(W_ID, context));
+    storage->warehouse_key = warehouse::key(W_ID);
+    this->search_for_read(warehouseTableID, W_ID - 1, storage->warehouse_key,
+                          storage->warehouse_value, wid_to_granule_id(W_ID, context));
 
     // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
     // D_TAX, the district tax rate, is retrieved, and D_NEXT_O_ID, the next
@@ -123,9 +147,9 @@ public:
     // one.
 
     auto districtTableID = district::tableID;
-    storage.district_key = district::key(W_ID, D_ID);
-    this->search_for_update(districtTableID, W_ID - 1, storage.district_key,
-                            storage.district_value, did_to_granule_id(D_ID, context));
+    storage->district_key = district::key(W_ID, D_ID);
+    this->search_for_update(districtTableID, W_ID - 1, storage->district_key,
+                            storage->district_value, did_to_granule_id(D_ID, context));
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
     // selected and C_DISCOUNT, the customer's discount rate, C_LAST, the
@@ -133,9 +157,9 @@ public:
     // retrieved.
 
     auto customerTableID = customer::tableID;
-    storage.customer_key = customer::key(W_ID, D_ID, C_ID);
-    this->search_for_read(customerTableID, W_ID - 1, storage.customer_key,
-                          storage.customer_value, did_to_granule_id(D_ID, context));
+    storage->customer_key = customer::key(W_ID, D_ID, C_ID);
+    this->search_for_read(customerTableID, W_ID - 1, storage->customer_key,
+                          storage->customer_value, did_to_granule_id(D_ID, context));
 
     auto itemTableID = item::tableID;
     auto stockTableID = stock::tableID;
@@ -152,26 +176,26 @@ public:
       int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
       int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
 
-      storage.item_keys[i] = item::key(OL_I_ID);
+      storage->item_keys[i] = item::key(OL_I_ID);
 
       // If I_ID has an unused value, rollback.
       // In OCC, rollback can return without going through commit protocal
 
-      if (storage.item_keys[i].I_ID == 0) {
+      if (storage->item_keys[i].I_ID == 0) {
         // abort();
         return TransactionResult::ABORT_NORETRY;
       }
 
-      // this->search_local_index(itemTableID, 0, storage.item_keys[i],
-      //                          storage.item_values[i]);
+      // this->search_local_index(itemTableID, 0, storage->item_keys[i],
+      //                          storage->item_values[i]);
 
       // The row in the STOCK table with matching S_I_ID (equals OL_I_ID) and
       // S_W_ID (equals OL_SUPPLY_W_ID) is selected.
 
-      storage.stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
+      storage->stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
 
       this->search_for_update(stockTableID, OL_SUPPLY_W_ID - 1,
-                              storage.stock_keys[i], storage.stock_values[i]);
+                              storage->stock_keys[i], storage->stock_values[i]);
     }
 
     if (this->process_requests(worker_id)) {
@@ -180,40 +204,40 @@ public:
     if(is_transmit_request == true){
       return TransactionResult::TRANSMIT_REQUEST;
     }
-    float W_TAX = storage.warehouse_value.W_YTD;
+    float W_TAX = storage->warehouse_value.W_YTD;
 
-    float D_TAX = storage.district_value.D_TAX;
-    int32_t D_NEXT_O_ID = storage.district_value.D_NEXT_O_ID;
+    float D_TAX = storage->district_value.D_TAX;
+    int32_t D_NEXT_O_ID = storage->district_value.D_NEXT_O_ID;
 
-    storage.district_value.D_NEXT_O_ID += 1;
+    storage->district_value.D_NEXT_O_ID += 1;
 
-    this->update(districtTableID, W_ID - 1, storage.district_key,
-                 storage.district_value);
+    this->update(districtTableID, W_ID - 1, storage->district_key,
+                 storage->district_value);
 
     if (context.operation_replication) {
       Encoder encoder(this->operation.data);
       this->operation.partition_id = this->partition_id;
-      encoder << true << storage.district_key.D_W_ID
-              << storage.district_key.D_ID
-              << storage.district_value.D_NEXT_O_ID;
+      encoder << true << storage->district_key.D_W_ID
+              << storage->district_key.D_ID
+              << storage->district_value.D_NEXT_O_ID;
     }
 
-    float C_DISCOUNT = storage.customer_value.C_DISCOUNT;
+    float C_DISCOUNT = storage->customer_value.C_DISCOUNT;
 
     // A new row is inserted into both the NEW-ORDER table and the ORDER table
     // to reflect the creation of the new order. O_CARRIER_ID is set to a null
     // value. If the order includes only home order-lines, then O_ALL_LOCAL is
     // set to 1, otherwise O_ALL_LOCAL is set to 0.
 
-    storage.new_order_key = new_order::key(W_ID, D_ID, D_NEXT_O_ID);
+    storage->new_order_key = new_order::key(W_ID, D_ID, D_NEXT_O_ID);
 
-    storage.order_key = order::key(W_ID, D_ID, D_NEXT_O_ID);
+    storage->order_key = order::key(W_ID, D_ID, D_NEXT_O_ID);
 
-    storage.order_value.O_ENTRY_D = Time::now();
-    storage.order_value.O_CARRIER_ID = 0;
-    storage.order_value.O_OL_CNT = query.O_OL_CNT;
-    storage.order_value.O_C_ID = query.C_ID;
-    storage.order_value.O_ALL_LOCAL = !query.isRemote();
+    storage->order_value.O_ENTRY_D = Time::now();
+    storage->order_value.O_CARRIER_ID = 0;
+    storage->order_value.O_OL_CNT = query.O_OL_CNT;
+    storage->order_value.O_C_ID = query.C_ID;
+    storage->order_value.O_ALL_LOCAL = !query.isRemote();
 
     float total_amount = 0;
 
@@ -225,7 +249,7 @@ public:
       int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
       int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
 
-      float I_PRICE = storage.item_values[i].I_PRICE;
+      float I_PRICE = storage->item_values[i].I_PRICE;
 
       // S_QUANTITY, the quantity in stock, S_DIST_xx, where xx represents the
       // district number, and S_DATA are retrieved. If the retrieved value for
@@ -235,83 +259,83 @@ public:
       // S_ORDER_CNT is incremented by 1. If the order-line is remote, then
       // S_REMOTE_CNT is incremented by 1.
 
-      if (storage.stock_values[i].S_QUANTITY >= OL_QUANTITY + 10) {
-        storage.stock_values[i].S_QUANTITY -= OL_QUANTITY;
+      if (storage->stock_values[i].S_QUANTITY >= OL_QUANTITY + 10) {
+        storage->stock_values[i].S_QUANTITY -= OL_QUANTITY;
       } else {
-        storage.stock_values[i].S_QUANTITY =
-            storage.stock_values[i].S_QUANTITY - OL_QUANTITY + 91;
+        storage->stock_values[i].S_QUANTITY =
+            storage->stock_values[i].S_QUANTITY - OL_QUANTITY + 91;
       }
 
-      storage.stock_values[i].S_YTD += OL_QUANTITY;
-      storage.stock_values[i].S_ORDER_CNT++;
+      storage->stock_values[i].S_YTD += OL_QUANTITY;
+      storage->stock_values[i].S_ORDER_CNT++;
 
       if (OL_SUPPLY_W_ID != W_ID) {
-        storage.stock_values[i].S_REMOTE_CNT++;
+        storage->stock_values[i].S_REMOTE_CNT++;
       }
 
-      this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage.stock_keys[i],
-                   storage.stock_values[i]);
+      this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage->stock_keys[i],
+                   storage->stock_values[i]);
 
       if (context.operation_replication) {
         Encoder encoder(this->operation.data);
-        encoder << storage.stock_keys[i].S_W_ID << storage.stock_keys[i].S_I_ID
-                << storage.stock_values[i].S_QUANTITY
-                << storage.stock_values[i].S_YTD
-                << storage.stock_values[i].S_ORDER_CNT
-                << storage.stock_values[i].S_REMOTE_CNT;
+        encoder << storage->stock_keys[i].S_W_ID << storage->stock_keys[i].S_I_ID
+                << storage->stock_values[i].S_QUANTITY
+                << storage->stock_values[i].S_YTD
+                << storage->stock_values[i].S_ORDER_CNT
+                << storage->stock_values[i].S_REMOTE_CNT;
       }
 
       if (this->execution_phase) {
         float OL_AMOUNT = I_PRICE * OL_QUANTITY;
-        storage.order_line_keys[i] =
+        storage->order_line_keys[i] =
             order_line::key(W_ID, D_ID, D_NEXT_O_ID, i + 1);
 
-        storage.order_line_values[i].OL_I_ID = OL_I_ID;
-        storage.order_line_values[i].OL_SUPPLY_W_ID = OL_SUPPLY_W_ID;
-        storage.order_line_values[i].OL_DELIVERY_D = 0;
-        storage.order_line_values[i].OL_QUANTITY = OL_QUANTITY;
-        storage.order_line_values[i].OL_AMOUNT = OL_AMOUNT;
+        storage->order_line_values[i].OL_I_ID = OL_I_ID;
+        storage->order_line_values[i].OL_SUPPLY_W_ID = OL_SUPPLY_W_ID;
+        storage->order_line_values[i].OL_DELIVERY_D = 0;
+        storage->order_line_values[i].OL_QUANTITY = OL_QUANTITY;
+        storage->order_line_values[i].OL_AMOUNT = OL_AMOUNT;
 
         switch (D_ID) {
         case 1:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_01;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_01;
           break;
         case 2:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_02;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_02;
           break;
         case 3:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_03;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_03;
           break;
         case 4:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_04;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_04;
           break;
         case 5:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_05;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_05;
           break;
         case 6:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_06;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_06;
           break;
         case 7:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_07;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_07;
           break;
         case 8:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_08;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_08;
           break;
         case 9:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_09;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_09;
           break;
         case 10:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_10;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_10;
           break;
         default:
           DCHECK(false);
@@ -372,35 +396,35 @@ public:
   }
 
   TransactionResult transmit_execute(std::size_t worker_id) override {
-    storage.key_value.reserve(query.record_keys.size());
+    storage->key_value.reserve(query.record_keys.size());
     for(int i = 0 ; i < query.record_keys.size(); i ++ ){
-      storage.key_value[i].set_real_key(query.record_keys[i]);;
+      storage->key_value[i].set_real_key(query.record_keys[i]);;
 
-      switch (storage.key_value[i].table_id)
+      switch (storage->key_value[i].table_id)
       {
       case tpcc::warehouse::tableID:
-          this->search_for_update(storage.key_value[i].table_id, 
-                                  storage.key_value[i].key.w_key.W_ID - 1, 
-                                  storage.key_value[i].key.w_key, 
-                                  storage.key_value[i].value.w_val);
+          this->search_for_update(storage->key_value[i].table_id, 
+                                  storage->key_value[i].key.w_key.W_ID - 1, 
+                                  storage->key_value[i].key.w_key, 
+                                  storage->key_value[i].value.w_val);
           break;
       case tpcc::district::tableID:
-          this->search_for_update(storage.key_value[i].table_id, 
-                                  storage.key_value[i].key.d_key.D_W_ID - 1, 
-                                  storage.key_value[i].key.d_key, 
-                                  storage.key_value[i].value.d_val);
+          this->search_for_update(storage->key_value[i].table_id, 
+                                  storage->key_value[i].key.d_key.D_W_ID - 1, 
+                                  storage->key_value[i].key.d_key, 
+                                  storage->key_value[i].value.d_val);
           break;
       case tpcc::customer::tableID:
-          this->search_for_update(storage.key_value[i].table_id, 
-                                  storage.key_value[i].key.c_key.C_W_ID - 1, 
-                                  storage.key_value[i].key.c_key, 
-                                  storage.key_value[i].value.c_val);
+          this->search_for_update(storage->key_value[i].table_id, 
+                                  storage->key_value[i].key.c_key.C_W_ID - 1, 
+                                  storage->key_value[i].key.c_key, 
+                                  storage->key_value[i].value.c_val);
           break;
       case tpcc::stock::tableID:
-          this->search_for_update(storage.key_value[i].table_id, 
-                                  storage.key_value[i].key.s_key.S_W_ID - 1, 
-                                  storage.key_value[i].key.s_key, 
-                                  storage.key_value[i].value.s_val);
+          this->search_for_update(storage->key_value[i].table_id, 
+                                  storage->key_value[i].key.s_key.S_W_ID - 1, 
+                                  storage->key_value[i].key.s_key, 
+                                  storage->key_value[i].value.s_val);
           break;
       default:
           DCHECK(false);
@@ -432,15 +456,15 @@ public:
     // the warehouse tax rate, is retrieved.
 
     auto warehouseTableID = warehouse::tableID;
-    storage.warehouse_key = warehouse::key(W_ID);
+    storage->warehouse_key = warehouse::key(W_ID);
 
-    auto key_partition_id = this->partition_id; // db.getPartitionID(context, warehouseTableID, storage.warehouse_key);
+    auto key_partition_id = this->partition_id; // db.getPartitionID(context, warehouseTableID, storage->warehouse_key);
     // if(key_partition_id == context.partition_num){
     //   return TransactionResult::ABORT_NORETRY;
     // }
     DCHECK(key_partition_id < (1 << 30));
-    this->search_for_read(warehouseTableID, key_partition_id, storage.warehouse_key,
-                          storage.warehouse_value, wid_to_granule_id(W_ID, context));
+    this->search_for_read(warehouseTableID, key_partition_id, storage->warehouse_key,
+                          storage->warehouse_value, wid_to_granule_id(W_ID, context));
 
     // The row in the DISTRICT table with matching D_W_ID and D_ ID is selected,
     // D_TAX, the district tax rate, is retrieved, and D_NEXT_O_ID, the next
@@ -448,13 +472,13 @@ public:
     // one.
 
     auto districtTableID = district::tableID;
-    storage.district_key = district::key(W_ID, D_ID);
-    key_partition_id = this->partition_id; // db.getPartitionID(context, districtTableID, storage.district_key);
+    storage->district_key = district::key(W_ID, D_ID);
+    key_partition_id = this->partition_id; // db.getPartitionID(context, districtTableID, storage->district_key);
     // if(key_partition_id == context.partition_num){
     //   return TransactionResult::ABORT_NORETRY;
     // }
-    this->search_for_update(districtTableID, key_partition_id, storage.district_key,
-                            storage.district_value, did_to_granule_id(D_ID, context));
+    this->search_for_update(districtTableID, key_partition_id, storage->district_key,
+                            storage->district_value, did_to_granule_id(D_ID, context));
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
     // selected and C_DISCOUNT, the customer's discount rate, C_LAST, the
@@ -462,13 +486,13 @@ public:
     // retrieved.
 
     auto customerTableID = customer::tableID;
-    storage.customer_key = customer::key(W_ID, D_ID, C_ID);
-    key_partition_id = this->partition_id; // db.getPartitionID(context, customerTableID, storage.customer_key);
+    storage->customer_key = customer::key(W_ID, D_ID, C_ID);
+    key_partition_id = this->partition_id; // db.getPartitionID(context, customerTableID, storage->customer_key);
     // if(key_partition_id == context.partition_num){
     //   return TransactionResult::ABORT_NORETRY;
     // }
-    this->search_for_read(customerTableID, key_partition_id, storage.customer_key,
-                          storage.customer_value, did_to_granule_id(D_ID, context));
+    this->search_for_read(customerTableID, key_partition_id, storage->customer_key,
+                          storage->customer_value, did_to_granule_id(D_ID, context));
 
     auto itemTableID = item::tableID;
     auto stockTableID = stock::tableID;
@@ -485,30 +509,30 @@ public:
       int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
       int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
 
-      storage.item_keys[i] = item::key(OL_I_ID);
+      storage->item_keys[i] = item::key(OL_I_ID);
 
       // If I_ID has an unused value, rollback.
       // In OCC, rollback can return without going through commit protocal
 
-      if (storage.item_keys[i].I_ID == 0) {
+      if (storage->item_keys[i].I_ID == 0) {
         // abort();
         return TransactionResult::ABORT_NORETRY;
       }
 
-      // this->search_local_index(itemTableID, 0, storage.item_keys[i],
-      //                          storage.item_values[i]);
+      // this->search_local_index(itemTableID, 0, storage->item_keys[i],
+      //                          storage->item_values[i]);
 
       // The row in the STOCK table with matching S_I_ID (equals OL_I_ID) and
       // S_W_ID (equals OL_SUPPLY_W_ID) is selected.
 
-      storage.stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
+      storage->stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
 
-      key_partition_id = OL_SUPPLY_W_ID - 1;//this->partition_id; // db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      key_partition_id = OL_SUPPLY_W_ID - 1;//this->partition_id; // db.getPartitionID(context, stockTableID, storage->stock_keys[i]);
       // if(key_partition_id == context.partition_num){
       //   return TransactionResult::ABORT_NORETRY;
       // }
       this->search_for_update(stockTableID, key_partition_id,
-                              storage.stock_keys[i], storage.stock_values[i],
+                              storage->stock_keys[i], storage->stock_values[i],
                               id_to_granule_id(OL_I_ID, context));
     }
 
@@ -558,44 +582,44 @@ public:
     auto customerTableID = customer::tableID;
     auto itemTableID = item::tableID;
     auto stockTableID = stock::tableID;
-    float W_TAX = storage.warehouse_value.W_YTD;
+    float W_TAX = storage->warehouse_value.W_YTD;
 
-    float D_TAX = storage.district_value.D_TAX;
-    int32_t D_NEXT_O_ID = storage.district_value.D_NEXT_O_ID;
+    float D_TAX = storage->district_value.D_TAX;
+    int32_t D_NEXT_O_ID = storage->district_value.D_NEXT_O_ID;
 
-    storage.district_value.D_NEXT_O_ID += 1;
+    storage->district_value.D_NEXT_O_ID += 1;
 
-    auto key_partition_id = this->partition_id;// db.getPartitionID(context, districtTableID, storage.district_key);
+    auto key_partition_id = this->partition_id;// db.getPartitionID(context, districtTableID, storage->district_key);
     // if(key_partition_id == context.partition_num){
     //   return TransactionResult::ABORT_NORETRY;
     // }
-    this->update(districtTableID, key_partition_id, storage.district_key,
-                 storage.district_value, did_to_granule_id(D_ID, context));
+    this->update(districtTableID, key_partition_id, storage->district_key,
+                 storage->district_value, did_to_granule_id(D_ID, context));
 
     if (context.operation_replication) {
       Encoder encoder(this->operation.data);
       this->operation.partition_id = this->partition_id;
-      encoder << true << storage.district_key.D_W_ID
-              << storage.district_key.D_ID
-              << storage.district_value.D_NEXT_O_ID;
+      encoder << true << storage->district_key.D_W_ID
+              << storage->district_key.D_ID
+              << storage->district_value.D_NEXT_O_ID;
     }
 
-    float C_DISCOUNT = storage.customer_value.C_DISCOUNT;
+    float C_DISCOUNT = storage->customer_value.C_DISCOUNT;
 
     // A new row is inserted into both the NEW-ORDER table and the ORDER table
     // to reflect the creation of the new order. O_CARRIER_ID is set to a null
     // value. If the order includes only home order-lines, then O_ALL_LOCAL is
     // set to 1, otherwise O_ALL_LOCAL is set to 0.
 
-    storage.new_order_key = new_order::key(W_ID, D_ID, D_NEXT_O_ID);
+    storage->new_order_key = new_order::key(W_ID, D_ID, D_NEXT_O_ID);
 
-    storage.order_key = order::key(W_ID, D_ID, D_NEXT_O_ID);
+    storage->order_key = order::key(W_ID, D_ID, D_NEXT_O_ID);
 
-    storage.order_value.O_ENTRY_D = Time::now();
-    storage.order_value.O_CARRIER_ID = 0;
-    storage.order_value.O_OL_CNT = query.O_OL_CNT;
-    storage.order_value.O_C_ID = query.C_ID;
-    storage.order_value.O_ALL_LOCAL = !query.isRemote();
+    storage->order_value.O_ENTRY_D = Time::now();
+    storage->order_value.O_CARRIER_ID = 0;
+    storage->order_value.O_OL_CNT = query.O_OL_CNT;
+    storage->order_value.O_C_ID = query.C_ID;
+    storage->order_value.O_ALL_LOCAL = !query.isRemote();
 
     float total_amount = 0;
 
@@ -607,7 +631,7 @@ public:
       int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
       int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
 
-      float I_PRICE = storage.item_values[i].I_PRICE;
+      float I_PRICE = storage->item_values[i].I_PRICE;
 
       // S_QUANTITY, the quantity in stock, S_DIST_xx, where xx represents the
       // district number, and S_DATA are retrieved. If the retrieved value for
@@ -617,87 +641,87 @@ public:
       // S_ORDER_CNT is incremented by 1. If the order-line is remote, then
       // S_REMOTE_CNT is incremented by 1.
 
-      if (storage.stock_values[i].S_QUANTITY >= OL_QUANTITY + 10) {
-        storage.stock_values[i].S_QUANTITY -= OL_QUANTITY;
+      if (storage->stock_values[i].S_QUANTITY >= OL_QUANTITY + 10) {
+        storage->stock_values[i].S_QUANTITY -= OL_QUANTITY;
       } else {
-        storage.stock_values[i].S_QUANTITY =
-            storage.stock_values[i].S_QUANTITY - OL_QUANTITY + 91;
+        storage->stock_values[i].S_QUANTITY =
+            storage->stock_values[i].S_QUANTITY - OL_QUANTITY + 91;
       }
 
-      storage.stock_values[i].S_YTD += OL_QUANTITY;
-      storage.stock_values[i].S_ORDER_CNT++;
+      storage->stock_values[i].S_YTD += OL_QUANTITY;
+      storage->stock_values[i].S_ORDER_CNT++;
 
       if (OL_SUPPLY_W_ID != W_ID) {
-        storage.stock_values[i].S_REMOTE_CNT++;
+        storage->stock_values[i].S_REMOTE_CNT++;
       }
 
-      key_partition_id = OL_SUPPLY_W_ID - 1; // db.getPartitionID(context, stockTableID, storage.stock_keys[i]);
+      key_partition_id = OL_SUPPLY_W_ID - 1; // db.getPartitionID(context, stockTableID, storage->stock_keys[i]);
       // if(key_partition_id == context.partition_num){
       //   return TransactionResult::ABORT_NORETRY;
       // }
-      this->update(stockTableID, key_partition_id, storage.stock_keys[i],
-                   storage.stock_values[i], id_to_granule_id(OL_I_ID, context));
+      this->update(stockTableID, key_partition_id, storage->stock_keys[i],
+                   storage->stock_values[i], id_to_granule_id(OL_I_ID, context));
 
       if (context.operation_replication) {
         Encoder encoder(this->operation.data);
-        encoder << storage.stock_keys[i].S_W_ID << storage.stock_keys[i].S_I_ID
-                << storage.stock_values[i].S_QUANTITY
-                << storage.stock_values[i].S_YTD
-                << storage.stock_values[i].S_ORDER_CNT
-                << storage.stock_values[i].S_REMOTE_CNT;
+        encoder << storage->stock_keys[i].S_W_ID << storage->stock_keys[i].S_I_ID
+                << storage->stock_values[i].S_QUANTITY
+                << storage->stock_values[i].S_YTD
+                << storage->stock_values[i].S_ORDER_CNT
+                << storage->stock_values[i].S_REMOTE_CNT;
       }
 
       if (this->execution_phase) {
         float OL_AMOUNT = I_PRICE * OL_QUANTITY;
-        storage.order_line_keys[i] =
+        storage->order_line_keys[i] =
             order_line::key(W_ID, D_ID, D_NEXT_O_ID, i + 1);
 
-        storage.order_line_values[i].OL_I_ID = OL_I_ID;
-        storage.order_line_values[i].OL_SUPPLY_W_ID = OL_SUPPLY_W_ID;
-        storage.order_line_values[i].OL_DELIVERY_D = 0;
-        storage.order_line_values[i].OL_QUANTITY = OL_QUANTITY;
-        storage.order_line_values[i].OL_AMOUNT = OL_AMOUNT;
+        storage->order_line_values[i].OL_I_ID = OL_I_ID;
+        storage->order_line_values[i].OL_SUPPLY_W_ID = OL_SUPPLY_W_ID;
+        storage->order_line_values[i].OL_DELIVERY_D = 0;
+        storage->order_line_values[i].OL_QUANTITY = OL_QUANTITY;
+        storage->order_line_values[i].OL_AMOUNT = OL_AMOUNT;
 
         switch (D_ID) {
         case 1:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_01;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_01;
           break;
         case 2:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_02;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_02;
           break;
         case 3:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_03;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_03;
           break;
         case 4:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_04;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_04;
           break;
         case 5:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_05;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_05;
           break;
         case 6:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_06;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_06;
           break;
         case 7:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_07;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_07;
           break;
         case 8:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_08;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_08;
           break;
         case 9:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_09;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_09;
           break;
         case 10:
-          storage.order_line_values[i].OL_DIST_INFO =
-              storage.stock_values[i].S_DIST_10;
+          storage->order_line_values[i].OL_DIST_INFO =
+              storage->stock_values[i].S_DIST_10;
           break;
         default:
           DCHECK(false);
@@ -714,7 +738,7 @@ public:
   
 
   void reset_query() override {
-    query = makeNewOrderQuery()(context, partition_id, 0, random);
+    query = makeNewOrderQuery()(context, partition_id, random);
   }
   const std::vector<bool> get_query_update() override {
     std::vector<bool> ret;
@@ -950,7 +974,7 @@ private:
   DatabaseType &db;
   const ContextType &context;
   RandomType &random;
-  Storage &storage;
+  Storage *storage;
   std::size_t partition_id;
   NewOrderQuery query;
   bool is_transmit_request;
@@ -967,13 +991,25 @@ public:
 
   Payment(std::size_t coordinator_id, std::size_t partition_id,
           DatabaseType &db, const ContextType &context, RandomType &random,
-          Partitioner &partitioner, Storage &storage, std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), db(db),
-        context(context), random(random), storage(storage),
+          Partitioner &partitioner, Storage &storage)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), db(db),
+        context(context), random(random), storage(&storage),
         partition_id(partition_id),
         query(makePaymentQuery()(context, partition_id + 1, random)) {}
 
-  virtual ~Payment() override = default;
+  Payment(std::size_t coordinator_id, std::size_t partition_id,
+          DatabaseType &db, const ContextType &context, RandomType &random,
+          Partitioner &partitioner, std::size_t ith_replica)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), db(db),
+        context(context), random(random),
+        partition_id(partition_id),
+        query(makePaymentQuery()(context, partition_id + 1, random)) {
+          storage = get_storage();
+        }
+  virtual ~Payment() {
+    put_storage(storage); storage = nullptr; 
+  }
+
   bool is_transmit_requests() override {
     return is_transmit_request;
   }
@@ -994,18 +1030,18 @@ public:
     // and W_YTD,
 
     auto warehouseTableID = warehouse::tableID;
-    storage.warehouse_key = warehouse::key(W_ID);
-    this->search_for_update(warehouseTableID, W_ID - 1, storage.warehouse_key,
-                            storage.warehouse_value);
+    storage->warehouse_key = warehouse::key(W_ID);
+    this->search_for_update(warehouseTableID, W_ID - 1, storage->warehouse_key,
+                            storage->warehouse_value);
 
     // The row in the DISTRICT table with matching D_W_ID and D_ID is selected.
     // D_NAME, D_STREET_1, D_STREET_2, D_CITY, D_STATE, and D_ZIP are retrieved
     // and D_YTD,
 
     auto districtTableID = district::tableID;
-    storage.district_key = district::key(W_ID, D_ID);
-    this->search_for_update(districtTableID, W_ID - 1, storage.district_key,
-                            storage.district_value);
+    storage->district_key = district::key(W_ID, D_ID);
+    this->search_for_update(districtTableID, W_ID - 1, storage->district_key,
+                            storage->district_value);
 
     // The row in the CUSTOMER table with matching C_W_ID, C_D_ID, and C_ID is
     // selected and C_DISCOUNT, the customer's discount rate, C_LAST, the
@@ -1015,20 +1051,20 @@ public:
     auto customerNameIdxTableID = customer_name_idx::tableID;
 
     if (C_ID == 0) {
-      storage.customer_name_idx_key =
+      storage->customer_name_idx_key =
           customer_name_idx::key(C_W_ID, C_D_ID, query.C_LAST);
       // this->search_local_index(customerNameIdxTableID, C_W_ID - 1,
-      //                          storage.customer_name_idx_key,
-      //                          storage.customer_name_idx_value);
+      //                          storage->customer_name_idx_key,
+      //                          storage->customer_name_idx_value);
 
       this->process_requests(worker_id);
-      C_ID = storage.customer_name_idx_value.C_ID;
+      C_ID = storage->customer_name_idx_value.C_ID;
     }
 
     auto customerTableID = customer::tableID;
-    storage.customer_key = customer::key(C_W_ID, C_D_ID, C_ID);
-    this->search_for_update(customerTableID, C_W_ID - 1, storage.customer_key,
-                            storage.customer_value);
+    storage->customer_key = customer::key(C_W_ID, C_D_ID, C_ID);
+    this->search_for_update(customerTableID, C_W_ID - 1, storage->customer_key,
+                            storage->customer_value);
 
     if (this->process_requests(worker_id)) {
       return TransactionResult::ABORT;
@@ -1038,32 +1074,32 @@ public:
     }
 
     // the warehouse's year-to-date balance, is increased by H_ AMOUNT.
-    storage.warehouse_value.W_YTD += H_AMOUNT;
-    this->update(warehouseTableID, W_ID - 1, storage.warehouse_key,
-                 storage.warehouse_value);
+    storage->warehouse_value.W_YTD += H_AMOUNT;
+    this->update(warehouseTableID, W_ID - 1, storage->warehouse_key,
+                 storage->warehouse_value);
 
     if (context.operation_replication) {
       this->operation.partition_id = this->partition_id;
       Encoder encoder(this->operation.data);
-      encoder << false << storage.warehouse_key.W_ID
-              << storage.warehouse_value.W_YTD;
+      encoder << false << storage->warehouse_key.W_ID
+              << storage->warehouse_value.W_YTD;
     }
 
     // the district's year-to-date balance, is increased by H_AMOUNT.
-    storage.district_value.D_YTD += H_AMOUNT;
-    this->update(districtTableID, W_ID - 1, storage.district_key,
-                 storage.district_value);
+    storage->district_value.D_YTD += H_AMOUNT;
+    this->update(districtTableID, W_ID - 1, storage->district_key,
+                 storage->district_value);
 
     if (context.operation_replication) {
       Encoder encoder(this->operation.data);
-      encoder << storage.district_key.D_W_ID << storage.district_key.D_ID
-              << storage.district_value.D_YTD;
+      encoder << storage->district_key.D_W_ID << storage->district_key.D_ID
+              << storage->district_value.D_YTD;
     }
 
     char C_DATA[501];
     int total_written = 0;
     if (this->execution_phase) {
-      if (storage.customer_value.C_CREDIT == "BC") {
+      if (storage->customer_value.C_CREDIT == "BC") {
         int written;
 
         written = std::sprintf(C_DATA + total_written, "%d ", C_ID);
@@ -1084,45 +1120,45 @@ public:
         written = std::sprintf(C_DATA + total_written, "%.2f ", H_AMOUNT);
         total_written += written;
 
-        const char *old_C_DATA = storage.customer_value.C_DATA.c_str();
+        const char *old_C_DATA = storage->customer_value.C_DATA.c_str();
 
         std::memcpy(C_DATA + total_written, old_C_DATA, 500 - total_written);
         C_DATA[500] = 0;
 
-        storage.customer_value.C_DATA.assign(C_DATA);
+        storage->customer_value.C_DATA.assign(C_DATA);
       }
 
-      storage.customer_value.C_BALANCE -= H_AMOUNT;
-      storage.customer_value.C_YTD_PAYMENT += H_AMOUNT;
-      storage.customer_value.C_PAYMENT_CNT += 1;
+      storage->customer_value.C_BALANCE -= H_AMOUNT;
+      storage->customer_value.C_YTD_PAYMENT += H_AMOUNT;
+      storage->customer_value.C_PAYMENT_CNT += 1;
     }
 
-    this->update(customerTableID, C_W_ID - 1, storage.customer_key,
-                 storage.customer_value);
+    this->update(customerTableID, C_W_ID - 1, storage->customer_key,
+                 storage->customer_value);
 
     if (context.operation_replication) {
       Encoder encoder(this->operation.data);
-      encoder << storage.customer_key.C_W_ID << storage.customer_key.C_D_ID
-              << storage.customer_key.C_ID;
+      encoder << storage->customer_key.C_W_ID << storage->customer_key.C_D_ID
+              << storage->customer_key.C_ID;
       encoder << uint32_t(total_written);
       encoder.write_n_bytes(C_DATA, total_written);
-      encoder << storage.customer_value.C_BALANCE
-              << storage.customer_value.C_YTD_PAYMENT
-              << storage.customer_value.C_PAYMENT_CNT;
+      encoder << storage->customer_value.C_BALANCE
+              << storage->customer_value.C_YTD_PAYMENT
+              << storage->customer_value.C_PAYMENT_CNT;
     }
 
     char H_DATA[25];
     int written;
     if (this->execution_phase) {
       written = std::sprintf(H_DATA, "%s    %s",
-                             storage.warehouse_value.W_NAME.c_str(),
-                             storage.district_value.D_NAME.c_str());
+                             storage->warehouse_value.W_NAME.c_str(),
+                             storage->district_value.D_NAME.c_str());
       H_DATA[written] = 0;
 
-      storage.h_key =
+      storage->h_key =
           history::key(W_ID, D_ID, C_W_ID, C_D_ID, C_ID, Time::now());
-      storage.h_value.H_AMOUNT = H_AMOUNT;
-      storage.h_value.H_DATA.assign(H_DATA, written);
+      storage->h_value.H_AMOUNT = H_AMOUNT;
+      storage->h_value.H_DATA.assign(H_DATA, written);
     }
     return TransactionResult::READY_TO_COMMIT;
   }
@@ -1247,7 +1283,7 @@ private:
   DatabaseType &db;
   const ContextType &context;
   RandomType &random;
-  Storage &storage;
+  Storage * storage;
   std::size_t partition_id;
   PaymentQuery query;
   bool is_transmit_request;

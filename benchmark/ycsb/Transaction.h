@@ -46,15 +46,24 @@ public:
   static constexpr std::size_t keys_num = 10;
 
   // static constexpr std::size_t transmit_keys_num = 120;
-  
+  ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::size_t granule_id,
+                  std::atomic<uint32_t> &worker_status, DatabaseType &db, const ContextType &context,
+                  RandomType &random, Partitioner &partitioner,
+                  std::size_t ith_replica)
+      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+        worker_status_(worker_status), db(db),
+        context(context), random(random),
+        partition_id(partition_id), granule_id(granule_id),
+        query(makeYCSBQuery()(context, partition_id, granule_id, random, partitioner)) {
+          storage = get_storage();
+  }
+
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::atomic<uint32_t> &worker_status,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
-                  Storage &storage, double cur_timestamp,
-                  std::size_t granule_id,
-                  std::size_t ith_replica = 0
+                  Storage &storage, double cur_timestamp
                   )
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
         context(context), random(random), // storage(storage),
         partition_id(partition_id), granule_id(granule_id),
@@ -71,9 +80,8 @@ public:
                   std::atomic<uint32_t> &worker_status,
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
-                  Storage &storage, simpleTransaction& simple_txn, 
-                  std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+                  Storage &storage, simpleTransaction& simple_txn)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
         context(context), random(random), // storage(storage),
         partition_id(partition_id),
@@ -93,9 +101,8 @@ public:
                   DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
                   Storage &storage, 
-                  Transaction& txn,
-                  std::size_t ith_replica = 0)
-      : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
+                  Transaction& txn)
+      : Transaction(coordinator_id, partition_id, partitioner, 0), 
         worker_status_(worker_status), db(db),
         context(context), random(random), // storage(storage),
         partition_id(partition_id),

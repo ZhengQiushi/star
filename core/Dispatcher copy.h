@@ -207,7 +207,7 @@ public:
     Percentile<uint64_t> msg_disp_ltc;
     bool is_hstore = context.protocol == "HStore";
     std::vector<std::vector<Message*>> messages_by_cooridnator;
-    messages_by_cooridnator.resize(context.coordinator_num + 1);
+    messages_by_cooridnator.resize(context.coordinator_num);
     while (!stopFlag.load()) {
 
       // check coordinator

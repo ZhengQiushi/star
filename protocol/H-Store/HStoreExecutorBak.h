@@ -80,6 +80,22 @@ class HStoreExecutor
     : public Executor<Workload, HStore<typename Workload::DatabaseType>>
 
 {
+public:
+  using WorkloadType = Workload;
+  using ProtocolType = HStore<typename Workload::DatabaseType>;
+  using DatabaseType = typename WorkloadType::DatabaseType;
+  using TransactionType = typename WorkloadType::TransactionType;
+  using ContextType = typename DatabaseType::ContextType;
+  using RandomType = typename DatabaseType::RandomType;
+  using MessageType = typename ProtocolType::MessageType;
+  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
+  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
+
+  using StorageType = typename WorkloadType::StorageType;
+
+  StorageType storage;
+  hstore::TransactionMeta<WorkloadType>& txn_meta;
+
 private:
   std::unique_ptr<Partitioner> hash_partitioner;
   std::vector<std::unique_ptr<Message>> cluster_worker_messages;
@@ -188,17 +204,6 @@ public:
     return ss.str();
   }
 
-  using WorkloadType = Workload;
-  using ProtocolType = HStore<typename Workload::DatabaseType>;
-  using DatabaseType = typename WorkloadType::DatabaseType;
-  using TransactionType = typename WorkloadType::TransactionType;
-  using ContextType = typename DatabaseType::ContextType;
-  using RandomType = typename DatabaseType::RandomType;
-  using MessageType = typename ProtocolType::MessageType;
-  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
-  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
-
-  using StorageType = typename WorkloadType::StorageType;
 
   int this_cluster_worker_id;
   int replica_cluster_worker_id = -1;
@@ -465,9 +470,11 @@ public:
                 const ContextType &context,
                 std::atomic<uint32_t> &worker_status,
                 std::atomic<uint32_t> &n_complete_workers,
-                std::atomic<uint32_t> &n_started_workers)
-      : base_type(coordinator_id, worker_id, db, context, worker_status,
-                  n_complete_workers, n_started_workers), window_persistence_latency(5000),window_txn_latency(5000),window_queued_lock_req_latency(5000), window_lock_req_latency(5000), window_active_mps(5000),
+                std::atomic<uint32_t> &n_started_workers,
+                hstore::TransactionMeta<WorkloadType>& txn_meta)
+      : base_type(coordinator_id, worker_id, db, context, worker_status,n_complete_workers, n_started_workers), 
+      txn_meta(txn_meta),
+      window_persistence_latency(5000),window_txn_latency(5000),window_queued_lock_req_latency(5000), window_lock_req_latency(5000), window_active_mps(5000),
                   lock_bm(this->context.partition_num * this->context.granules_per_partition)
                    {
                         transaction_lengths.resize(context.straggler_num_txn_len);
@@ -1063,9 +1070,7 @@ public:
     }
   }
 
-  void setupHandlers(TransactionType &txn)
-
-      override {
+  void setupHandlers(TransactionType &txn){
     txn.lock_request_handler =
         [this, &txn](std::size_t table_id, std::size_t partition_id, std::size_t granule_id,
                      uint32_t key_offset, const void *key, void *value,
@@ -1437,6 +1442,7 @@ public:
             cmd_mp.is_cow_begin = false;
             cmd_mp.is_cow_end = false;
             DCHECK(mp_txn->lock_status.num_locks() > 0);
+            // LOG(INFO) << partition_id << " " << granule_id << " " << lock_id;
             auto lock_index = mp_txn->lock_status.get_lock_index_no_write(lock_id);
             DCHECK(lock_index != -1);
             cmd_mp.last_writer = mp_txn->lock_status.get_lock(lock_index).get_last_writer();
@@ -1592,7 +1598,7 @@ public:
           dec_sp_data >> command_data_size;
           std::string command_data(dec_sp_data.get_raw_ptr(), command_data_size);
           dec_sp_data.remove_prefix(command_data_size);
-          auto mp_txn = this->workload.deserialize_from_raw(this->context, command_data).release();
+          auto mp_txn = this->workload.deserialize_from_raw(this->context, storage, command_data).release();
           mp_txn->context = &this->context;
           CHECK(mp_txn->is_single_partition());
           bm->inc_ref();
@@ -1606,7 +1612,7 @@ public:
         }
       } else { // place into multiple partition command queues for replay
         DCHECK(cmd.partition_id == -1);
-        auto mp_txn = this->workload.deserialize_from_raw(this->context, command_data).release();
+        auto mp_txn = this->workload.deserialize_from_raw(this->context, storage, command_data).release();
         mp_txn->startTime = std::chrono::steady_clock::now();
         mp_txn->context = &this->context;
         enqueue_mp_transaction(cmd, mp_txn);
@@ -1617,6 +1623,7 @@ public:
       //replay_points.push_back(std::make_pair(max_posisiton_in_log_this_batch, mp_count_this_batch));
     }
   }
+
   void spread_replicated_commands(const std::string & buffer) {
     DCHECK(is_replica_worker);
     Decoder dec(buffer);
@@ -1764,7 +1771,7 @@ public:
           dec_sp_data >> command_data_size;
           std::string command_data(dec_sp_data.get_raw_ptr(), command_data_size);
           dec_sp_data.remove_prefix(command_data_size);
-          auto mp_txn = this->workload.deserialize_from_raw(this->context, command_data).release();
+          auto mp_txn = this->workload.deserialize_from_raw(this->context, storage, command_data).release();
           mp_txn->context = &this->context;
           CHECK(mp_txn->is_single_partition());
           bm->inc_ref();
@@ -1778,7 +1785,7 @@ public:
         }
       } else { // place into multiple partition command queues for replay
         DCHECK(cmd.partition_id == -1);
-        auto mp_txn = this->workload.deserialize_from_raw(this->context, command_data).release();
+        auto mp_txn = this->workload.deserialize_from_raw(this->context, storage, command_data).release();
         mp_txn->startTime = std::chrono::steady_clock::now();
         mp_txn->context = &this->context;
         enqueue_mp_transaction(cmd, mp_txn);
@@ -2864,6 +2871,7 @@ public:
       for (int j = 0; j < granules_count; ++j) {
         int granule_id = txn->get_granule(i, j);
         int lock_id = to_lock_id(partition_id, granule_id);
+        // LOG(INFO) << partition_id << " " << granule_id << " " << lock_id;
         lock_ids1.insert(lock_id);
       }
     }
@@ -2876,6 +2884,7 @@ public:
       if (key.get_local_index_read_bit())
         continue;
       auto lock_id = to_lock_id(key.get_partition_id(), key.get_granule_id());
+      // LOG(INFO) << key.get_partition_id() << " " << key.get_granule_id() << " " << lock_id;
       lock_ids2.insert(lock_id);
     }
 
@@ -2893,6 +2902,7 @@ public:
     auto s2 = get_granule_set_from_rset(txn);
     bool res = s1 == s2;
     DCHECK(res);
+    // LOG(INFO) << "PASS ";
     return res;
   }
 
@@ -2903,6 +2913,10 @@ public:
   void process_mp_transactions(std::vector<TransactionType*> & mp_txns) {
     {
       for (size_t i = 0; i < mp_txns.size(); ++i) {
+        auto status = static_cast<ExecutorStatus>(this->worker_status.load());
+        if(status != ExecutorStatus::START) {
+          break;
+        }
         execute_transaction(mp_txns[i]);
         //handle_requests(false);
       }
@@ -3222,7 +3236,10 @@ public:
       });
       // MEST for multi-partition transactions
       process_mp_transactions(mp_txns);
-      if (mp_txns.empty() == false) {
+      auto status = static_cast<ExecutorStatus>(this->worker_status.load());
+      if(status != ExecutorStatus::START) {
+          
+      } else if (mp_txns.empty() == false) {
         {
           ScopedTimer t0([&, this](uint64_t us) {
               commit_persistence_us = us;
@@ -3632,6 +3649,8 @@ public:
     //LOG(INFO) << "This cluster worker " << this_cluster_worker_id << " sent " << command_buffer_outgoing.size() << " commands to replia worker " <<  replica_cluster_worker_id;
     command_buffer_outgoing_data.clear();
   }
+
+  void push_message(Message *message) override { this->in_queue.push(message); }
 
   void push_replica_message(Message *message) override {
     DCHECK(is_replica_worker == true);
@@ -4198,9 +4217,9 @@ public:
       //std::this_thread::sleep_for(std::chrono::microseconds(10));
       return nullptr;
     } else {
-      auto partition_id = managed_partitions[this->random.next() % managed_partitions.size()];
+      size_t partition_id = managed_partitions[this->random.next() % managed_partitions.size()];
       auto granule_id = this->random.next() % this->context.granules_per_partition;
-      auto txn = this->workload.next_transaction(this->context, partition_id, this->this_cluster_worker_id, granule_id).release();
+      auto txn = this->workload.next_transaction(this->context, partition_id, this->this_cluster_worker_id, storage, granule_id).release();
       txn->context = &this->context;
       auto total_batch_size = this->partitioner->num_coordinator_for_one_replica() * this->context.batch_size;
       if (this->context.stragglers_per_batch) {
@@ -4411,7 +4430,7 @@ public:
 
 protected:
 
-  virtual void flush_messages() override {
+  virtual void flush_messages() {
     DCHECK(cluster_worker_messages.size() == (size_t)cluster_worker_num);
     //int end_num = is_replica_worker ? cluster_worker_messages.size() : active_replica_worker_num_end;
     // int end_num = cluster_worker_messages.size();

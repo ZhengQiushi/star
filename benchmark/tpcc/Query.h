@@ -118,8 +118,8 @@ class makeNewOrderQuery {
 public:
   NewOrderQuery operator()(const Context &context, 
                            int32_t W_ID,
-                           double cur_timestamp,
-                           Random &random) const {
+                           Random &random,
+                           double cur_timestamp = 0) const {
 
     int workload_type_num = 3;
     int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// which_workload_(crossPartition, (int)cur_timestamp);

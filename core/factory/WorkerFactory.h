@@ -210,16 +210,30 @@ public:
       using WorkloadType =
           typename InferType<Context>::template WorkloadType<TransactionType>;
 
-      auto manager = std::make_shared<HStoreManager<WorkloadType>>(
+      auto manager = std::make_shared<Manager>(
           coordinator_id, context.worker_num, context, stop_flag);
 
       for (auto i = 0u; i < context.worker_num; i++) {
         workers.push_back(std::make_shared<HStoreExecutor<WorkloadType>>(
             coordinator_id, i, db, context, manager->worker_status,
-            manager->n_completed_workers, manager->n_started_workers,
-            manager->txn_meta));
+            manager->n_completed_workers, manager->n_started_workers));
       }
       workers.push_back(manager);
+      // using TransactionType = star::HStoreTransaction;
+      // using WorkloadType =
+      //     typename InferType<Context>::template WorkloadType<TransactionType>;
+
+      // auto manager = std::make_shared<HStoreManager<WorkloadType>>(
+      //     coordinator_id, context.worker_num, context, stop_flag);
+
+      // for (auto i = 0u; i < context.worker_num; i++) {
+      //   workers.push_back(std::make_shared<HStoreExecutor<WorkloadType>>(
+      //       coordinator_id, i, db, context, manager->worker_status,
+      //       manager->n_completed_workers, manager->n_started_workers,
+      //       manager->txn_meta));
+      // }
+      // workers.push_back(manager);
+
     } 
     else if (context.protocol == "Star") {
 

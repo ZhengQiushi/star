@@ -94,11 +94,11 @@ public:
     for (auto i = 0u; i < context.io_thread_num; i++) {
 
       iDispatchers[i] = std::make_unique<IncomingDispatcher>(
-          id, i, context.io_thread_num, peers_ip, inSockets[i], workers, in_queue,
-          ioStopFlag);
+          id, i, context.io_thread_num, inSockets[i], workers, in_queue,
+          out_to_in_queue, ioStopFlag, context);
       oDispatchers[i] = std::make_unique<OutgoingDispatcher>(
-          id, i, context.io_thread_num, peers_ip, outSockets[i], workers, out_queue,
-          ioStopFlag);
+          id, i, context.io_thread_num, outSockets[i], workers, out_queue,
+          out_to_in_queue, ioStopFlag, context);
 
       iDispatcherThreads.emplace_back(&IncomingDispatcher::start,
                                       iDispatchers[i].get());
@@ -600,5 +600,6 @@ private:
   std::vector<std::unique_ptr<IncomingDispatcher>> iDispatchers;
   std::vector<std::unique_ptr<OutgoingDispatcher>> oDispatchers;
   LockfreeQueue<Message *> in_queue, out_queue;
+  LockfreeQueue<Message *> out_to_in_queue; 
 };
 } // namespace star

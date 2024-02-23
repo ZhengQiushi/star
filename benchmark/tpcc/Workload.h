@@ -39,6 +39,50 @@ public:
         worker_status(worker_status), db(db), random(random),
         partitioner(partitioner), start_time(start_time) {}
 
+
+  std::unique_ptr<TransactionType> next_transaction(ContextType &context,
+                                                    std::size_t partition_id,
+                                                    std::size_t worker_id,
+                                                    std::size_t granule_id = 0) {
+
+    int x = random.uniform_dist(1, 100);
+    std::unique_ptr<TransactionType> p;
+
+    static std::atomic<uint64_t> tid_cnt(0);
+    long long transactionId = tid_cnt.fetch_add(1);
+    auto random_seed = Time::now();
+
+
+    std::string transactionType;
+    random.set_seed(random_seed);
+    if (context.workloadType == TPCCWorkloadType::MIXED) {
+      if (x <= 50) {
+        p = std::make_unique<NewOrder<Transaction>>(
+            coordinator_id, partition_id, worker_status, db, context, random, partitioner, 0);
+        transactionType = "TPCC NewOrder";
+      } else {
+        p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
+                                                   db, context, random,
+                                                   partitioner, 0);
+        transactionType = "TPCC Payment";
+      }
+    } else if (context.workloadType == TPCCWorkloadType::NEW_ORDER_ONLY) {
+      p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
+                                                  worker_status, db, context, random,
+                                                  partitioner, 0);
+      transactionType = "TPCC NewOrder";
+    } else {
+      p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
+                                                 db, context, random,
+                                                 partitioner, 0);
+      transactionType = "TPCC NewOrder";
+    }
+    p->txn_random_seed_start = random_seed;
+    p->transaction_id = next_transaction_id(coordinator_id);
+    return p;
+  }
+
+
   std::unique_ptr<TransactionType> next_transaction(const ContextType &context,
                                                     std::size_t &partition_id,
                                                     std::size_t worker_id,
@@ -72,25 +116,23 @@ public:
             coordinator_id, partition_id, 
             worker_status,
             db, context, random, partitioner,
-            storage, cur_timestamp, 
-            granule_id);
+            storage, cur_timestamp);
       } else {
         p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
                                                    db, context, random,
-                                                   partitioner, storage, 
-                                                   granule_id);
+                                                   partitioner, storage);
       }
     } else if (context.workloadType == TPCCWorkloadType::NEW_ORDER_ONLY) {
       p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
                                                   worker_status, 
                                                   db, context, random,
                                                   partitioner, storage, 
-                                                  cur_timestamp, granule_id);
+                                                  cur_timestamp);
     } else {
       p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
                                                  db, context, random,
-                                                 partitioner, storage, 
-                                                 granule_id);
+                                                 partitioner, storage
+                                                 );
     }
     p->txn_random_seed_start = random_seed;
     p->transaction_id = next_transaction_id(coordinator_id);
@@ -104,7 +146,7 @@ public:
     std::unique_ptr<TransactionType>  p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
      worker_status,
      db, context, random,
-     partitioner, storage, simple_txn, granule_id);
+     partitioner, storage, simple_txn);
     return p;
   }
 
@@ -115,7 +157,7 @@ public:
     std::unique_ptr<TransactionType>  p = std::make_unique<NewOrder<Transaction>>(coordinator_id, partition_id,
      worker_status,
      db, context, random,
-     partitioner, storage, simple_txn, is_transmit, granule_id);
+     partitioner, storage, simple_txn, is_transmit);
     return p;
   }
 
@@ -129,23 +171,14 @@ public:
             coordinator_id, partition_id, 
             worker_status, 
             db, context, random, 
-            partitioner, storage, txn, granule_id);
+            partitioner, storage, txn);
             
     p->startTime = txn.startTime;
 
     return p;
   }
 
-
-  std::unique_ptr<TransactionType> deserialize_from_raw(const ContextType &context, 
-                                                        StorageType &storage, 
-                                                        const std::string & data) {
-
-    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - start_time)
-                 .count() * 1.0 / 1000 / 1000;
-
-
+  std::unique_ptr<TransactionType> deserialize_from_raw(ContextType &context, const std::string & data) {
     Decoder decoder(data);
     uint64_t seed;
     uint32_t txn_type;
@@ -159,10 +192,8 @@ public:
 
     if (txn_type == 0) {
       auto p = std::make_unique<NewOrder<Transaction>>(
-            coordinator_id, partition_id, 
-            worker_status,
-            db, context, random, partitioner,
-            storage, cur_timestamp, ith_replica);
+            coordinator_id, partition_id, worker_status, db, context, random, partitioner,
+             ith_replica);
       p->txn_random_seed_start = seed;
       p->transaction_id = transaction_id;
       p->straggler_wait_time = straggler_wait_time;
@@ -171,8 +202,7 @@ public:
     } else {
       auto p = std::make_unique<Payment<Transaction>>(coordinator_id, partition_id,
                                                    db, context, random,
-                                                   partitioner, storage,
-                                                   ith_replica);
+                                                   partitioner, ith_replica);
       p->txn_random_seed_start = seed;
       p->transaction_id = transaction_id;
       p->straggler_wait_time = straggler_wait_time;

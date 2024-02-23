@@ -39,11 +39,33 @@ public:
         worker_status(worker_status), db(db), random(random),
         partitioner(partitioner), start_time(start_time) {}
 
+  std::unique_ptr<TransactionType> next_transaction(ContextType &context,
+                                                    std::size_t partition_id,
+                                                    std::size_t worker_id,
+                                                    std::size_t granule_id) {
+    // const static uint32_t num_workers_per_node = context.partition_num / context.coordinator_num;
+    // int cluster_worker_id = coordinator_id * num_workers_per_node + worker_id;
+    // if (cluster_worker_id == 1) {
+    //   context.crossPartitionProbability = 100;
+    // }
+
+    static std::atomic<uint64_t> tid_cnt(0);
+    long long transactionId = tid_cnt.fetch_add(1);
+    auto random_seed = Time::now();
+    random.set_seed(random_seed);
+    std::unique_ptr<TransactionType> p =
+        std::make_unique<ReadModifyWrite<Transaction>>(
+            coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, 0);
+    p->txn_random_seed_start = random_seed;
+    p->transaction_id = next_transaction_id(coordinator_id, worker_id);
+    return p;
+  }
+
+
   std::unique_ptr<TransactionType> next_transaction(const ContextType &context,
                                                     std::size_t &partition_id,
                                                     std::size_t worker_id,
-                                                    StorageType &storage,
-                                                    std::size_t granule_id = 0) {
+                                                    StorageType &storage) {
     
     double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
                  std::chrono::steady_clock::now() - start_time)
@@ -64,8 +86,7 @@ public:
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
             coordinator_id, partition_id, worker_status, db, context, random, partitioner,
-            storage, cur_timestamp,
-            granule_id);
+            storage, cur_timestamp);
     p->txn_random_seed_start = random_seed;
     p->transaction_id = next_transaction_id(coordinator_id, worker_id);
     return p;
@@ -73,13 +94,12 @@ public:
 
   std::unique_ptr<TransactionType> unpack_transaction(const ContextType &context,
                                                     std::size_t partition_id,
-                                                    StorageType &storage, simpleTransaction& simple_txn, 
-                                                    std::size_t granule_id = 0) {
+                                                    StorageType &storage, simpleTransaction& simple_txn) {
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
             coordinator_id, partition_id, worker_status, db, context, random, partitioner,
-            storage, simple_txn, granule_id);
+            storage, simple_txn);
 
     return p;
   }
@@ -87,13 +107,12 @@ public:
 
   std::unique_ptr<TransactionType> unpack_transaction(const ContextType &context,
                                                     std::size_t partition_id,
-                                                    StorageType &storage, simpleTransaction& simple_txn, bool is_transmit, 
-                                                    std::size_t granule_id = 0) {
+                                                    StorageType &storage, simpleTransaction& simple_txn, bool is_transmit) {
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
             coordinator_id, partition_id, worker_status, db, context, random, partitioner,
-            storage, simple_txn, granule_id);
+            storage, simple_txn);
 
     return p;
   }
@@ -101,29 +120,20 @@ public:
   std::unique_ptr<TransactionType> reset_transaction(const ContextType &context,
                                                     std::size_t partition_id,
                                                     StorageType &storage, 
-                                                    TransactionType& txn, 
-                                                    std::size_t granule_id = 0) {
+                                                    TransactionType& txn) {
 
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
             coordinator_id, partition_id, worker_status, db, context, random, partitioner,
             storage, 
-            txn, granule_id);
+            txn);
             
     p->startTime = txn.startTime;
 
     return p;
   }
 
-
-  std::unique_ptr<TransactionType> deserialize_from_raw(const ContextType &context, 
-                                                        StorageType &storage, 
-                                                        const std::string & data) {
-
-    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - start_time)
-                 .count() * 1.0 / 1000 / 1000;
-
+  std::unique_ptr<TransactionType> deserialize_from_raw(ContextType &context, const std::string & data) {
     Decoder decoder(data);
     uint64_t seed;
     std::size_t ith_replica;
@@ -150,13 +160,9 @@ public:
     RandomType random;
     random.set_seed(seed);
  
-    // std::unique_ptr<TransactionType> p =
-    //     std::make_unique<ReadModifyWrite<Transaction>>(
-    //         coordinator_id, partition_id, granule_id, db, context, random, partitioner, ith_replica);
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
-            coordinator_id, partition_id, worker_status, db, context, random, partitioner,
-            storage, cur_timestamp, granule_id, ith_replica);
+            coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, ith_replica);
     p->txn_random_seed_start = seed;
     DCHECK(p->get_partition_count() == partition_count);
     // std::vector<int32_t> partitions, granules;
@@ -177,6 +183,7 @@ public:
     p->deserialize_lock_status(decoder);
     return p;
   }
+
 
 private:
   std::size_t coordinator_id;

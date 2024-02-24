@@ -53,6 +53,10 @@ public:
   }
 
   virtual Message *pop_message() = 0;
+  
+  virtual Message *pop_transaction_message(){
+    return nullptr;
+  };
 
   ExecutorStatus merge_value_to_signal(uint32_t value, ExecutorStatus signal) {
     // the value is put into the most significant 24 bits

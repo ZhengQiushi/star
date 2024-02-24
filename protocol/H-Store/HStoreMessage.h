@@ -36,7 +36,7 @@ struct TxnCommand: public TxnCommandBase {
 };
 
 enum class HStoreMessage {
-  ABORT_REQUEST,
+  ABORT_REQUEST = static_cast<int>(ControlMessage::NFIELDS),
   WRITE_REQUEST,
   WRITE_RESPONSE,
   REPLICATION_REQUEST,

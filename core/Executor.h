@@ -273,6 +273,27 @@ public:
     return message;
   }
 
+  Message *pop_transaction_message() override {
+    if (out_transaction_queue.empty())
+      return nullptr;
+
+    Message *message = out_transaction_queue.front();
+
+    if (delay->delay_enabled()) {
+      auto now = std::chrono::steady_clock::now();
+      if (std::chrono::duration_cast<std::chrono::microseconds>(now -
+                                                                message->time)
+              .count() < delay->message_delay()) {
+        return nullptr;
+      }
+    }
+
+    bool ok = out_transaction_queue.pop();
+    CHECK(ok);
+
+    return message;
+  }
+
   std::size_t process_request() {
 
     std::size_t size = 0;
@@ -371,7 +392,7 @@ protected:
   std::deque<std::unique_ptr<TransactionType>> r_transactions_queue; // to transaction
 
   std::vector<std::size_t> message_stats, message_sizes;
-  LockfreeQueue<Message *> in_queue, out_queue;
+  LockfreeQueue<Message *, 100860> in_queue, out_queue, out_transaction_queue;
 
   // Percentile<int64_t> time_router;
   // Percentile<int64_t> time_scheuler;

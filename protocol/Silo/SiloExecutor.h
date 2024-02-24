@@ -266,26 +266,6 @@ void unpack_route_transaction(){
       LOG(INFO) << "cur_queue_size: " << cur_queue_size;
   }
 
-  bool is_router_stopped(int& router_recv_txn_num){
-    bool ret = false;
-    size_t num = 1; // context.coordinator_num
-    if(router_stop_queue.size() < num){
-      ret = false;
-    } else {
-      //
-      int i = num; // context.coordinator_num;
-      while(i > 0){
-        i --;
-        DCHECK(router_stop_queue.size() > 0);
-        int recv_txn_num = router_stop_queue.front();
-        router_stop_queue.pop_front();
-        router_recv_txn_num += recv_txn_num;
-        VLOG(DEBUG_V8) << " RECV : " << recv_txn_num;
-      }
-      ret = true;
-    }
-    return ret;
-  }
 
   void start() override {
 
@@ -312,6 +292,7 @@ void unpack_route_transaction(){
       process_request();
 
       unpack_route_transaction(); // 
+
       run_transaction(txn_meta.s_transactions_queue,
                       txn_meta.s_txn_id_queue); // 
 

@@ -45,8 +45,8 @@ public:
         n_complete_workers(n_complete_workers),
         n_started_workers(n_started_workers),
         schedule_meta(schedule_meta),
-        partitioner(std::make_unique<LionDynamicPartitioner<Workload> >(
-            coordinator_id, context.coordinator_num, db)),
+        partitioner(PartitionerFactory::create_partitioner(
+            context.partitioner, coordinator_id, context.coordinator_num)),
         random(reinterpret_cast<uint64_t>(this)),
         protocol(db, context, *partitioner),
         workload(coordinator_id, worker_status, db, random, *partitioner, start_time),
@@ -96,216 +96,55 @@ public:
     dispatcher_num = context.worker_num * context.coordinator_num;
     cur_txn_num = context.batch_size / dispatcher_num ; // * context.coordinator_num
 
+
     for (auto n = 0u; n < context.coordinator_num; n++) {
-          
-            dispatcher.emplace_back([&](int n, int worker_id) {
-              
-              ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
-              do {
-                status = static_cast<ExecutorStatus>(worker_status.load());
-                std::this_thread::sleep_for(std::chrono::microseconds(5));
-              } while (status != ExecutorStatus::START);  
-            
+      // 处理
+      dispatcher.emplace_back([&](int n, int worker_id) {
+        ExecutorStatus status = static_cast<ExecutorStatus>(worker_status.load());
+        int dispatcher_id  = worker_id * context.coordinator_num + n;
+        LOG(INFO) << n << " " << worker_id * context.coordinator_num;
+        while(is_full_signal_self[dispatcher_id].load() == false){
+            bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
+                                  transactions_queue_self[dispatcher_id]);
 
-            int dispatcher_id  = worker_id * context.coordinator_num + n;
+            if(!success){ // full
+                is_full_signal_self[dispatcher_id].store(true);
+            } 
+        }
 
-///
-            // int dispatcher_id;
-            // int replica_cluster_worker_id = -1;
-            // cluster_worker_num = this->context.worker_num * this->context.coordinator_num;
-            // active_replica_worker_num_end = this->context.worker_num * this->partitioner->num_coordinator_for_one_replica();
-            // DCHECK(this->context.partition_num % this->partitioner->num_coordinator_for_one_replica() == 0);
-            // DCHECK(this->context.partition_num % this->context.worker_num == 0);
-            // DCHECK(worker_id < context.worker_num);
-            // dispatcher_id = worker_id + coordinator_id * context.worker_num;
-            
-            // std::string managed_granules_str;
-            // if (is_replica_worker == false) {
-            //   hash_partitioner = PartitionerFactory::create_partitioner(
-            //       "hash", coordinator_id, this->partitioner->num_coordinator_for_one_replica());
-            //   for (int p = 0; p < (int)this->context.partition_num; ++p) {
-            //     if (dispatcher_id == partition_owner_cluster_worker(p, 0)) {
-            //       managed_granules_str += std::to_string(p) + ",";
-            //       managed_partitions.push_back(p);
-            //       for (std::size_t j = 0; j < this->context.granules_per_partition; ++j) {
-            //         auto lock_id = to_lock_id(p, j);
-            //         //managed_granules_str += lock_id_to_string(lock_id) + ",";
-            //         if (replica_num > 1) {
-            //           auto standby_replica_cluster_worker_id = partition_owner_cluster_worker(p, 1);
-            //           DCHECK(replica_cluster_worker_id == -1 || standby_replica_cluster_worker_id == replica_cluster_worker_id);
-            //           replica_cluster_worker_id = standby_replica_cluster_worker_id;
-            //         }
-            //       }
-            //     }
-            //   }
-            //   DCHECK(managed_partitions.empty() == false);
-            //   managed_granules_str.pop_back(); // Remove last ,
-            //   if (coordinator_id == 0) {
-            //     rtt_test_target_cluster_worker = dispatcher_id + this->context.worker_num;
-            //   } else {
-            //     rtt_test_target_cluster_worker = dispatcher_id - this->context.worker_num;
-            //   }
-            // }
-            
-            // std::string managed_replica_granules_str;
-            // if (is_replica_worker) {
-            //   if (coordinator_id == 2) {
-            //     rtt_test_target_cluster_worker = dispatcher_id + this->context.worker_num;
-            //   } else {
-            //     rtt_test_target_cluster_worker = dispatcher_id - this->context.worker_num;
-            //   }
-            //   granule_to_cmd_queue_index.resize(this->context.partition_num * this->context.granules_per_partition, -1);
-            //   DCHECK(managed_partitions.empty());
-            //   size_t cmd_queue_idx = 0;
-            //   for (int p = 0; p < (int)this->context.partition_num; ++p) {
-            //     for (size_t i = 1; i < this->partitioner->replica_num(); ++i) {
-            //       if (dispatcher_id == partition_owner_cluster_worker(p, i)) {
-            //         managed_partitions.push_back(p);
-            //         managed_replica_granules_str += std::to_string(p) + ",";
-            //         for (size_t j = 0; j < this->context.granules_per_partition; ++j) {
-            //           auto lock_id = to_lock_id(p, j);
-            //           lock_ids_by_this_replica_executor.push_back(lock_id);
-            //           granule_command_queues.push_back(std::deque<TxnCommandBase>());
-            //           granule_lock_time.push_back(0);
-            //           granule_lock_request_queues.push_back(std::deque<MessagePiece>());
-            //           granule_command_queue_processing.push_back(false);
-            //           granule_replayed_log_index.push_back(-1);
-            //           lock_buckets.push_back(Lock());
-            //           granule_to_cmd_queue_index[lock_id] = cmd_queue_idx++;
-            //           granule_command_queues.back().resize(16);
-            //           granule_command_queues.back().clear();
-            //           CHECK(cmd_queue_idx == granule_command_queues.size());
-            //           CHECK(cmd_queue_idx == granule_replayed_log_index.size());
-            //           auto active_replica_cluster_worker_id = partition_owner_cluster_worker(p, 0);
-            //           CHECK(replica_cluster_worker_id == -1 || active_replica_cluster_worker_id == replica_cluster_worker_id);
-            //           replica_cluster_worker_id = active_replica_cluster_worker_id;
-            //           //managed_replica_granules_str += lock_id_to_string(lock_id) + ",";
-            //         }
-            //       }
-            //     }
-            //   }
-            //   managed_replica_granules_str.pop_back(); // Remove last ,
-            // } else {
-            //   granule_to_cmd_queue_index.resize(this->context.partition_num * this->context.granules_per_partition, -1);
-            //   size_t cmd_queue_idx = 0;
-            //   for (int p = 0; p < (int)this->context.partition_num; ++p) {
-            //     if (dispatcher_id == partition_owner_cluster_worker(p, 0)) {
-            //       for (size_t j = 0; j < this->context.granules_per_partition; ++j) {
-            //         auto lock_id = to_lock_id(p, j);
-            //         lock_buckets.push_back(Lock());
-            //         granule_to_cmd_queue_index[lock_id] = cmd_queue_idx++;
-            //         CHECK(cmd_queue_idx == lock_buckets.size());
-            //       }
-            //     }
-            //   }
-            // }
-            // //managed_granules_str = managed_replica_granules_str = "";
-            // LOG(INFO) << "Cluster worker id " << dispatcher_id << " node worker id "<< worker_id
-            //           << " partitions managed [" << managed_granules_str 
-            //           << "], replica granules maanged [" << managed_replica_granules_str << "]" 
-            //           << " is_replica_worker " << is_replica_worker << " replica_cluster_worker_id" << replica_cluster_worker_id;
-            // batch_per_worker = std::max(this->context.batch_size / this->context.worker_num, (std::size_t)1);
-            // this->context.hstore_active_active = batch_per_worker == 1;
-            // if (this->context.hstore_active_active) {
-            //   LOG(INFO) << "HStore active active mode";
-            // }
-            // //lock_buckets.resize(this->context.partition_num * this->context.granules_per_partition);
-            // cluster_worker_messages.resize(cluster_worker_num);
-            // cluster_worker_messages_filled_in.resize(cluster_worker_num, false);
-            // for (int i = 0; i < (int)cluster_worker_num; ++i) {
-            //   cluster_worker_messages[i] = std::make_unique<Message>();
-            //   init_message(cluster_worker_messages[i].get(), i);
-            // }
-            // cluster_worker_messages.shrink_to_fit();
-            // this->message_stats.resize((size_t)HStoreMessage::NFIELDS, 0);
-            // this->message_sizes.resize((size_t)HStoreMessage::NFIELDS, 0);
-            // mp_concurrency_max = 2000;
+        do {
+          status = static_cast<ExecutorStatus>(worker_status.load());
+          std::this_thread::sleep_for(std::chrono::microseconds(5));
+        } while (status != ExecutorStatus::START);  
+        
+        while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
+          status = static_cast<ExecutorStatus>(worker_status.load());
+          if(is_full_signal_self[dispatcher_id].load() == true){
+            std::this_thread::sleep_for(std::chrono::microseconds(5));
+            continue;
+          }
 
+          bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
+            transactions_queue_self[dispatcher_id]);
+          if(!success){ // full
+            is_full_signal_self[dispatcher_id].store(true);
+          }                    
+        }
+      }, n, this->id);
 
-///
-
-            while(is_full_signal_self[dispatcher_id].load() == false){
-                // bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-                //                       transactions_queue_self[dispatcher_id]
-                //                     );
-                // if(!success){ // full
-                    is_full_signal_self[dispatcher_id].store(true);
-                // } 
-            }
-            
-            while(status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
-                  // wait for start
-                  while(schedule_meta.start_schedule.load() == 0 && status != ExecutorStatus::EXIT && status != ExecutorStatus::CLEANUP){
-                    status = static_cast<ExecutorStatus>(worker_status.load());
-                    if(is_full_signal_self[dispatcher_id].load() == true){
-                      std::this_thread::sleep_for(std::chrono::microseconds(5));
-                      continue;
-                    }
-
-                    // bool success = prepare_transactions_to_run(workload, storages[dispatcher_id],
-                    //   transactions_queue_self[dispatcher_id]
-                    // );
-                    // if(!success){ // full
-                      is_full_signal_self[dispatcher_id].store(true);
-                    // }                    
-                  }
-                  
-                  if(status == ExecutorStatus::EXIT || status == ExecutorStatus::CLEANUP){
-                    break;
-                  }
-
-                  std::vector<std::shared_ptr<simpleTransaction>> &txns = schedule_meta.node_txns;
-
-                  scheduler_transactions(dispatcher_num, dispatcher_id);
-
-                  int idx_offset = dispatcher_id * cur_txn_num;
-
-                  for(int j = 0; j < cur_txn_num; j ++ ){
-                    int idx = idx_offset + j;
-                    coordinator_send[txns[idx]->destination_coordinator] ++ ;
-                    router_request(router_send_txn_cnt, txns[idx]);   
-
-                    if(j % context.batch_flush == 0){
-                      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-                        messages_mutex[i]->lock();
-                        flush_message(async_messages, i);
-                        messages_mutex[i]->unlock();
-                      }
-                    }
-                  }
-                  for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-                    messages_mutex[i]->lock();
-                    flush_message(async_messages, i);
-                    messages_mutex[i]->unlock();
-                  }
-
-                  schedule_meta.done_schedule.fetch_add(1);
-                  status = static_cast<ExecutorStatus>(worker_status.load());
-
-                  // wait for end
-                  while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
-                    std::this_thread::sleep_for(std::chrono::microseconds(5));
-                    status = static_cast<ExecutorStatus>(worker_status.load());
-                  }
-
-                  is_full_signal_self[dispatcher_id].store(false);
-
-                  schedule_meta.start_schedule.store(0);
-                }
-            }, n, this->id);
-
-            if (context.cpu_affinity) {
-            LOG(INFO) << "dispatcher_core_id[n]: " << dispatcher_core_id[n] 
-                      << " work_id" << this->id;
-              ControlMessageFactory::pin_thread_to_core(context, dispatcher[n], dispatcher_core_id[n]);
-            }
-        }    
+      if (context.cpu_affinity) {
+      LOG(INFO) << "dispatcher_core_id[n]: " << dispatcher_core_id[n] 
+                << " work_id" << this->id;
+        ControlMessageFactory::pin_thread_to_core(context, dispatcher[n], dispatcher_core_id[n]);
+      }
+    }     
+  
   }
 
   ~HStoreGenerator(){
-    for (auto i = 0u; i < dispatcher.size(); i++) {
-      dispatcher[i].join();
-    }
+    // for (auto i = 0u; i < dispatcher.size(); i++) {
+    //   dispatcher[i].join();
+    // }
   }
   // std::unique_ptr<TransactionType> get_next_transaction() {
   //   if (is_replica_worker) {
@@ -397,22 +236,20 @@ public:
   }
 
 
-    void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn) {
+  void router_request(std::vector<int>& router_send_txn_cnt, std::shared_ptr<simpleTransaction> txn){
     // router transaction to coordinators
     size_t coordinator_id_dst = txn->destination_coordinator;
 
-    messages_mutex[coordinator_id_dst]->lock();
     size_t router_size = ControlMessageFactory::new_router_transaction_message(
         *async_messages[coordinator_id_dst], 0, *txn, 
         RouterTxnOps::TRANSFER);
-    // flush_message(async_messages, coordinator_id_dst);
-    messages_mutex[coordinator_id_dst]->unlock();
+    flush_message(async_messages, coordinator_id_dst);
 
-    router_send_txn_cnt[coordinator_id_dst]++;
+    // router_send_txn_cnt[coordinator_id_dst]++;
     n_network_size.fetch_add(router_size);
-    router_transactions_send.fetch_add(1);
+    // router_transactions_send.fetch_add(1);
+    coordinator_send[txn->destination_coordinator] ++ ;
   };
-
 
   void scheduler_transactions(int dispatcher_num, int dispatcher_id){    
 
@@ -499,21 +336,7 @@ public:
   }
 
   int pin_thread_id_ = 3;
-  void router_request(std::vector<int>& router_send_txn_cnt, simpleTransaction* txn) {
-  // auto router_request = [&]( std::shared_ptr<simpleTransaction> txn) {
-    size_t coordinator_id_dst = txn->destination_coordinator;
-    // router transaction to coordinators
-    messages_mutex[coordinator_id_dst]->lock();
-    size_t router_size = ControlMessageFactory::new_router_transaction_message(
-        *async_messages[coordinator_id_dst].get(), 0, *txn, 
-        RouterTxnOps::TRANSFER);
-    flush_message(async_messages, coordinator_id_dst);
-    messages_mutex[coordinator_id_dst]->unlock();
-    // LOG(INFO) << "TXN : " << txn->keys[0] << " " << txn->keys[1] << " -> " << coordinator_id_dst;
-    router_send_txn_cnt[coordinator_id_dst]++;
-    n_network_size.fetch_add(router_size);
-    router_transactions_send.fetch_add(1);
-  };
+
 
 
 
@@ -555,162 +378,33 @@ public:
     
   }
 
+  int partition_owner_cluster_coordinator(int partition_id, std::size_t ith_replica) {
+    auto ret = this->partitioner->get_ith_replica_coordinator(partition_id, ith_replica);
+    // if (is_replica_worker == false && ith_replica == 0) {
+    //   DCHECK(ret == this->hash_partitioner->get_ith_replica_coordinator(partition_id, ith_replica));
+    // }
+
+    return ret;
+  }
+
   void txn_nodes_involved(simpleTransaction* t, 
                           std::vector<std::vector<int>>& txns_coord_cost) {
     
-      std::unordered_map<int, int> from_nodes_id;           // dynamic replica nums
-      std::unordered_map<int, int> from_nodes_id_secondary; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      std::vector<int> coordi_nums_;
-
-      
-      size_t ycsbTableID = ycsb::ycsb::tableID;
-      auto query_keys = t->keys;
-
-
-      for (size_t j = 0 ; j < query_keys.size(); j ++ ){
-        // LOG(INFO) << "query_keys[j] : " << query_keys[j];
-        // judge if is cross txn
-        size_t cur_c_id = -1;
-        size_t secondary_c_ids;
-        cur_c_id = query_keys[j] / context.keysPerPartition % context.coordinator_num;
-        if(!from_nodes_id.count(cur_c_id)){
-          from_nodes_id[cur_c_id] = 1;
-          // 
-          coordi_nums_.push_back(cur_c_id);
-        } else {
-          from_nodes_id[cur_c_id] += 1;
-        }
-
-        // key on which node
-        for(size_t i = 0; i <= context.coordinator_num; i ++ ){
-            if(secondary_c_ids & 1 && i != cur_c_id){
-                from_nodes_id_secondary[i] += 1;
-            }
-            secondary_c_ids = secondary_c_ids >> 1;
-        }
-      }
 
       int max_cnt = INT_MIN;
       int max_node = -1;
 
-      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
-        int cur_score = 0;
-        size_t cnt_master = from_nodes_id[cur_c_id];
-        size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
-        if(cnt_master == query_keys.size()){
-          cur_score = 100 * (int)query_keys.size();
-        // } else if(cnt_secondary + cnt_master == query_keys.size()){
-        //   cur_score = 50 * cnt_master;// + 25 * cnt_secondary;
-        } else {
-          cur_score = 25 * cnt_master;// + 15 * cnt_secondary;
-        }
-        if(cur_score > max_cnt){
-          max_node = cur_c_id;
-          max_cnt = cur_score;
-        }
-        txns_coord_cost[t->idx_][cur_c_id] = 10 * (int)query_keys.size() - cur_score;
-      }
-
-
-      max_node = query_keys[0] / context.keysPerPartition % context.coordinator_num;
-
-
+      max_node = partition_owner_cluster_coordinator(t->partition_id, 0);
+      
       t->destination_coordinator = max_node;
-      t->execution_cost = 10 * (int)query_keys.size() - max_cnt;
-
      return;
    }
 
   void txn_nodes_involved_tpcc(simpleTransaction* t, 
                           std::vector<std::vector<int>>& txns_coord_cost_) {
     
-      int from_nodes_id[MAX_COORDINATOR_NUM] = {0};              // dynamic replica nums
-      int from_nodes_id_secondary[MAX_COORDINATOR_NUM] = {0};; // secondary replica nums
-      // std::unordered_map<int, int> nodes_cost;              // cost on each node
-      int weight_w = 10;
-      int weight_d = 5;
-      int weight_c = 1;
-      int weight_s = 1;
 
-      size_t weight_sum = 0;
-
-      std::vector<int> query_keys;
-      star::tpcc::NewOrderQuery keys;
-      keys.unpack_transaction(*t);
-      // warehouse_key
-      auto warehouse_key = tpcc::warehouse::key(keys.W_ID);
-        size_t warehouse_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::warehouse::tableID)->search_value((void*)&warehouse_key))->get_dynamic_coordinator_id();
-      from_nodes_id[warehouse_coordinator_id] += weight_w;
-      weight_sum += weight_w;
-      query_keys.push_back(warehouse_coordinator_id);
-      // district_key
-      auto district_key = tpcc::district::key(keys.W_ID, keys.D_ID);
-        size_t district_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::district::tableID)->search_value((void*)&district_key))->get_dynamic_coordinator_id();
-      from_nodes_id[district_coordinator_id] += weight_d;
-      weight_sum += weight_d;
-      query_keys.push_back(district_coordinator_id);
-      // customer_key
-      auto customer_key = tpcc::customer::key(keys.W_ID, keys.D_ID, keys.C_ID);
-        size_t customer_coordinator_id = static_cast<RouterValue*>(db.find_router_table(tpcc::customer::tableID)->search_value((void*)&customer_key))->get_dynamic_coordinator_id();
-      from_nodes_id[customer_coordinator_id] += weight_c;
-      weight_sum += weight_c;
-      query_keys.push_back(customer_coordinator_id);
-        
-      for(size_t i = 0 ; i < t->keys.size() - 3; i ++ ){
-        auto router_table = db.find_router_table(tpcc::stock::tableID);
-
-        auto stock_key = tpcc::stock::key(keys.INFO[i].OL_SUPPLY_W_ID, keys.INFO[i].OL_I_ID);
-        auto tab = static_cast<RouterValue*>(router_table->search_value((void*)&stock_key));
-        size_t stock_coordinator_id = tab->get_dynamic_coordinator_id();
-
-        
-        from_nodes_id[stock_coordinator_id] += weight_s;
-        weight_sum += weight_s;
-        query_keys.push_back(stock_coordinator_id);
-      }
-
-      int max_cnt = INT_MIN;
       int max_node = -1;
-
-      int replica_most_cnt = INT_MIN;
-      int replica_max_node = -1;
-
-
-
-
-      for(size_t cur_c_id = 0 ; cur_c_id < context.coordinator_num; cur_c_id ++ ){
-        int cur_score = 0; // 5 - 5 * (busy_local[cur_c_id] * 1.0 / cur_txn_num); // 1 ~ 10
-
-        size_t cnt_master = from_nodes_id[cur_c_id];
-        size_t cnt_secondary = from_nodes_id_secondary[cur_c_id];
-        if(context.migration_only){
-          cur_score += 100 * cnt_master;
-        } else {
-          if(cnt_master == weight_sum){
-            cur_score += 100 * weight_sum;
-          } else if(cnt_secondary + cnt_master == weight_sum){
-            cur_score += 50 * cnt_master + 25 * cnt_secondary;
-          } else {
-            cur_score += 25 * cnt_master + 15 * cnt_secondary;
-          }
-        }
-
-        if(cur_score > max_cnt){
-          max_node = cur_c_id;
-          max_cnt = cur_score;
-        }
-
-        if(cnt_secondary > replica_most_cnt){
-          replica_max_node = cur_c_id;
-          replica_most_cnt = cnt_secondary;
-        }
-
-        txns_coord_cost_[t->idx_][cur_c_id] = 10 * (int)weight_sum - cur_score;
-        // replicate_busy_local[cur_c_id] += cnt_secondary;
-      }
-
-
       // if(context.random_router > 0){
       //   // 
       //   // size_t random_value = random.uniform_dist(0, 9);
@@ -718,82 +412,15 @@ public:
       //   max_node = coordinator_id; // query_keys[0];
         
       // } 
-
-      max_node = query_keys[query_keys.size() - 1];
+      max_node = partition_owner_cluster_coordinator(t->partition_id, 0);
 
       t->destination_coordinator = max_node;
-      t->execution_cost = 10 * weight_sum - max_cnt;
-      t->is_real_distributed = (max_cnt == 100 * weight_sum) ? false : true;
-
-      t->replica_heavy_node = replica_max_node;
-      // if(t->is_real_distributed){
-      //   std::string debug = "";
-      //   for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-      //     debug += std::to_string(txns_coord_cost_[t->idx_][i]) + " ";
-      //   }
-      //   LOG(INFO) << t->keys[0] << " " << t->keys[1] << " " << debug;
-      // }
-      size_t cnt_master = from_nodes_id[max_node];
-      size_t cnt_secondary = from_nodes_id_secondary[max_node];
-
-      // if(cnt_secondary + cnt_master != query_keys.size()){
-      // LOG(INFO) << t->keys[0] << "\t" << t->keys[1] << "\t" << max_node << "\n";
-      // }
-
      return;
    }
 
   void start() override {
-    // last_mp_arrival = std::chrono::steady_clock::now();
-    // LOG(INFO) << "Executor " << (is_replica_worker ? "Replica" : "") << this->id << " starts with thread id" << gettid();
 
-    // last_commit = std::chrono::steady_clock::now();
-    uint64_t last_seed = 0;
-    // active_mp_limit = batch_per_worker /3;
-    ExecutorStatus status;
-
-    while ((status = static_cast<ExecutorStatus>(this->worker_status.load())) !=
-           ExecutorStatus::START) {
-      std::this_thread::yield();
-    }
-
-    this->n_started_workers.fetch_add(1);
-    
-    int cnt = 0;
-    
-    // worker_commit = 0;
-    int try_times = 0;
-    // executor_start_time = std::chrono::steady_clock::now();
-    bool retry_transaction = false;
-    int partition_id;
-    bool is_sp = false;
-    do {
-      // drive_event_loop();
-      process_request();
-      status = static_cast<ExecutorStatus>(this->worker_status.load());
-    } while (status != ExecutorStatus::STOP);
-    
-    // LOG(INFO) << "stats memory usage:\n" << memory_usage_from_stats();
-    this->n_complete_workers.fetch_add(1);
-
-    // once all workers are stopped, we need to process the replication
-    // requests
-
-    while (static_cast<ExecutorStatus>(this->worker_status.load()) !=
-           ExecutorStatus::CLEANUP) {
-      // drive_event_loop(false);
-      process_request();
-    }
-
-    // drive_event_loop(false);
-    process_request();
-    this->n_complete_workers.fetch_add(1);
-    LOG(INFO) << "Executor " << this->id << " exits.";
-  }
-
-  void start1()  {
-
-    LOG(INFO) << "HStoreGenerator " << id << " starts.";
+    LOG(INFO) << "SiloGenerator " << id << " starts.";
     start_time = std::chrono::steady_clock::now();
     workload.start_time = start_time;
     
@@ -808,83 +435,68 @@ public:
     // main loop
     for (;;) {
       ExecutorStatus status;
-      do {
-        // exit 
-        status = static_cast<ExecutorStatus>(worker_status.load());
 
-        if (status == ExecutorStatus::EXIT) {
-          LOG(INFO) << "Executor " << id << " exits.";
-
+      while ((status = static_cast<ExecutorStatus>(worker_status.load())) !=
+            ExecutorStatus::START) {
+        if(status == ExecutorStatus::CLEANUP){
           for(auto& n: dispatcher){
             n.join();
           }
           return;
         }
-      } while (status != ExecutorStatus::START);
-
-      while (!q.empty()) {
-        auto &ptr = q.front();
-        auto latency = std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - ptr->startTime)
-                           .count();
-        commit_latency.add(latency);
-        q.pop();
+        std::this_thread::yield();
       }
 
       n_started_workers.fetch_add(1);
-      
-      auto test = std::chrono::steady_clock::now();
 
-      
-      // thread to router the transaction generated by LionGenerator
-      for(int i = 0 ; i < MAX_COORDINATOR_NUM; i ++ ){
-        coordinator_send[i] = 0;
-      }
-      
-      router_send_txn_cnt.resize(context.coordinator_num, 0);
+      auto t = std::chrono::steady_clock::now();
+      std::vector<int> send_num(context.coordinator_num, 0);
 
-      schedule_meta.start_schedule.store(1);
-      // wait for end
-      while(schedule_meta.done_schedule.load() < context.worker_num * context.coordinator_num && status != ExecutorStatus::EXIT){
-        std::this_thread::sleep_for(std::chrono::microseconds(5));
-        status = static_cast<ExecutorStatus>(worker_status.load());
-      }
+      do {
+        process_request();
+        for(int i = 0 ; i < context.coordinator_num; i ++ ){
+          int cur = schedule_meta.router_transaction_done[i].load();
+          int b_sz = context.batch_size;
+          if(cur >= b_sz){
+            continue;
+          }
+          // consumed one transaction and route one
+          int dispatcher_id  = this->id * context.coordinator_num + i;
 
-      auto cur_timestamp__ = std::chrono::duration_cast<std::chrono::microseconds>(
-                  std::chrono::steady_clock::now() - test)
-                  .count() * 1.0 / 1000;
-      LOG(INFO) << "send : " << cur_timestamp__;
+          auto & busy_           = schedule_meta.node_busy;
+          auto & txns_coord_cost = schedule_meta.txns_coord_cost;
+          
+          // get one transaction from queue
+          bool success = false;
+          std::shared_ptr<simpleTransaction> new_txn(transactions_queue_self[dispatcher_id].pop_no_wait(success)); 
 
-      // 
-      for (auto l = 0u; l < context.coordinator_num; l++){
-        if(l == context.coordinator_id){
-          continue;
+          DCHECK(success == true);
+          // determine its ideal destination
+          if(WorkloadType::which_workload == myTestSet::YCSB){
+            txn_nodes_involved(new_txn.get(), txns_coord_cost);
+          } else {
+            txn_nodes_involved_tpcc(new_txn.get(), txns_coord_cost);
+          }
+
+          // router the transaction
+          router_request(router_send_txn_cnt, new_txn);   
+          send_num[new_txn->destination_coordinator] += 1;
+
+          // inform generator to create new transactions
+          is_full_signal_self[dispatcher_id].store(false);
+          schedule_meta.router_transaction_done[i].fetch_add(1);
         }
-        LOG(INFO) << "SEND ROUTER_STOP " << id << " -> " << l;
-        messages_mutex[l]->lock();
-        ControlMessageFactory::router_stop_message(*async_messages[l].get(), router_send_txn_cnt[l]);
-        flush_message(async_messages, l);
-        messages_mutex[l]->unlock();
-      }
-
-      for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
-        LOG(INFO) << "Coord[" << i << "]: " << coordinator_send[i];
-      }
-
-      VLOG_IF(DEBUG_V, id==0) << "worker " << id << " ready to process_request";
-
-
-      // router_fence(); // wait for coordinator to response
-
-      LOG(INFO) << "wait for coordinator to response: " << std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::steady_clock::now() - test)
-                           .count();
-      test = std::chrono::steady_clock::now();
-
-      // process replication request after all workers stop.
-      process_request();
-
-      flush_async_messages();
+        auto now = std::chrono::steady_clock::now();
+        if(std::chrono::duration_cast<std::chrono::seconds>(now - t).count() > 3){
+          t = now;
+          LOG(INFO) << "SEND OUT";
+          for(int i = 0 ; i < context.coordinator_num; i ++ ){
+            LOG(INFO) << " coord[" << i << "]" << send_num[i];
+            send_num[i] = 0;
+          }
+        }
+        status = static_cast<ExecutorStatus>(worker_status.load());
+      } while (status != ExecutorStatus::STOP);
 
       n_complete_workers.fetch_add(1);
 
@@ -897,15 +509,60 @@ public:
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }
 
-      if(id == 0){
-        schedule_meta.clear();
-      }
-
       process_request();
       n_complete_workers.fetch_add(1);
     }
     // not end here!
   }
+
+  // void start() override {
+  //   // last_mp_arrival = std::chrono::steady_clock::now();
+  //   // LOG(INFO) << "Executor " << (is_replica_worker ? "Replica" : "") << this->id << " starts with thread id" << gettid();
+
+  //   // last_commit = std::chrono::steady_clock::now();
+  //   uint64_t last_seed = 0;
+  //   // active_mp_limit = batch_per_worker /3;
+  //   ExecutorStatus status;
+
+  //   while ((status = static_cast<ExecutorStatus>(this->worker_status.load())) !=
+  //          ExecutorStatus::START) {
+  //     std::this_thread::yield();
+  //   }
+
+  //   this->n_started_workers.fetch_add(1);
+    
+  //   int cnt = 0;
+    
+  //   // worker_commit = 0;
+  //   int try_times = 0;
+  //   // executor_start_time = std::chrono::steady_clock::now();
+  //   bool retry_transaction = false;
+  //   int partition_id;
+  //   bool is_sp = false;
+  //   do {
+  //     // drive_event_loop();
+  //     process_request();
+  //     status = static_cast<ExecutorStatus>(this->worker_status.load());
+  //   } while (status != ExecutorStatus::STOP);
+    
+  //   // LOG(INFO) << "stats memory usage:\n" << memory_usage_from_stats();
+  //   this->n_complete_workers.fetch_add(1);
+
+  //   // once all workers are stopped, we need to process the replication
+  //   // requests
+
+  //   while (static_cast<ExecutorStatus>(this->worker_status.load()) !=
+  //          ExecutorStatus::CLEANUP) {
+  //     // drive_event_loop(false);
+  //     process_request();
+  //   }
+
+  //   // drive_event_loop(false);
+  //   process_request();
+  //   this->n_complete_workers.fetch_add(1);
+  //   LOG(INFO) << "Executor " << this->id << " exits.";
+  // }
+
 
   void onExit() override {
 
@@ -959,10 +616,11 @@ public:
       auto message_type = messagePiece.get_message_type();
 
       if (message_type == static_cast<int>(ControlMessage::ROUTER_TRANSACTION_RESPONSE)){
-        router_transaction_done.fetch_add(1);
+        size_t from = message->get_source_node_id();
+        schedule_meta.router_transaction_done[from].fetch_sub(1);
+        // LOG(INFO) << schedule_meta.router_transaction_done[from].load();
       }
     }
-    
     in_queue.push(message); 
   }
 

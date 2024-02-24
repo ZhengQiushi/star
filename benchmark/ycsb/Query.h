@@ -250,7 +250,7 @@ public:
     return query;
   }
     YCSBQuery operator()(const Context &context, uint32_t partitionID, uint32_t granuleID,
-                          Random &random, const Partitioner & partitioner) const {
+                          Random &random, const Partitioner & partitioner, double current_timestamp) const {
     const int N = 10;
     YCSBQuery query(N);
     

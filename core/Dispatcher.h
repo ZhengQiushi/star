@@ -57,6 +57,7 @@ public:
         CHECK(ok);
         auto workerId = message->get_worker_id();
         auto dest_node_id = message->get_dest_node_id();
+        // LOG(INFO) << "out_to_in_queue : "<< workerId << " " << dest_node_id; // for distributed transactions. 
         DCHECK(dest_node_id == coord_id);
         if (context.enable_hstore_master && workerId > context.worker_num) {
           //LOG(INFO) << "message coming at worker id " << workerId;
@@ -105,7 +106,7 @@ public:
         // check coordinator message
         if (is_coordinator_message(message.get())) {
 
-          //LOG(INFO) << "coord " << coord_id << " message";
+          LOG(INFO) << "coord " << coord_id << " message";
           coordinator_queue.push(message.release());
           CHECK(group_id == 0);
           continue;
@@ -113,7 +114,7 @@ public:
 
         auto workerId = message->get_worker_id();
         if (context.enable_hstore_master && workerId > context.worker_num) {
-          //LOG(INFO) << "message coming at worker id " << workerId;
+          // LOG(INFO) << "message coming at worker id " << workerId;
           DCHECK(coord_id == 0);
           DCHECK(workerId == context.worker_num + 1 || workerId == context.worker_num + 2);
           // release the unique ptr
@@ -123,7 +124,7 @@ public:
             workers[context.worker_num + 1]->push_master_special_message(message.release());
           }
         } else {
-          //LOG(INFO) << " message for workerId " << workerId;
+          // LOG(INFO) << " message for workerId " << workerId << " " << message->get_is_replica();
           CHECK(workerId % io_thread_num == group_id);
           // release the unique ptr
           if (message->get_is_replica()) {
@@ -237,16 +238,16 @@ public:
 
       dispatchGroupMessages(messages_by_cooridnator);
       
-      //auto start = Time::now();
-      // for (auto i = group_id; i < numWorkers; i += io_thread_num) {
-      //   dispatchMessage(workers[i]);
-      // }
-      //auto spent = (Time::now() - start) / 1000;
+      auto start = Time::now();
+      for (auto i = group_id; i < numWorkers; i += io_thread_num) {
+        dispatchMessage(workers[i]);
+      }
+      // auto spent = (Time::now() - start) / 1000;
       // if (spent > 100) {
       //   LOG(INFO) << "Dispatching messsaegs took " << spent;
       // }
-      //msg_disp_ltc.add(spent);
-      //std::this_thread::yield();
+      // msg_disp_ltc.add(spent);
+      std::this_thread::yield();
     }
 
     LOG(INFO) << "Outgoing Dispatcher exits, network size: " << network_size
@@ -288,6 +289,7 @@ public:
     DCHECK(dest_node_id >= 0 && dest_node_id < sockets.size() &&
            dest_node_id != coord_id);
     //DCHECK(message->get_message_length() == message->data.length());
+    // LOG(INFO) << "out : "<< message->get_worker_id() << " " << dest_node_id;
     auto message_length = message->get_message_length();
     sockets[dest_node_id].write_n_bytes(message->get_raw_ptr(),
                                         message_length);
@@ -355,7 +357,7 @@ public:
   void dispatchMessage(const std::shared_ptr<Worker> &worker) {
     auto message_get_start = Time::now();
     uint64_t ltc;
-    Message *raw_message = worker->pop_message();
+    Message *raw_message = worker->pop_transaction_message();
     if (raw_message == nullptr) {
       return;
     }

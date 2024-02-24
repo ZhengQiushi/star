@@ -48,6 +48,9 @@ public:
     // if (cluster_worker_id == 1) {
     //   context.crossPartitionProbability = 100;
     // }
+    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time)
+                 .count() * 1.0 / 1000 / 1000;
 
     static std::atomic<uint64_t> tid_cnt(0);
     long long transactionId = tid_cnt.fetch_add(1);
@@ -55,7 +58,7 @@ public:
     random.set_seed(random_seed);
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
-            coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, 0);
+            coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, 0, cur_timestamp);
     p->txn_random_seed_start = random_seed;
     p->transaction_id = next_transaction_id(coordinator_id, worker_id);
     return p;
@@ -159,10 +162,14 @@ public:
     // }
     RandomType random;
     random.set_seed(seed);
- 
+
+     double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time)
+                 .count() * 1.0 / 1000 / 1000;
+
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
-            coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, ith_replica);
+            coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, ith_replica, cur_timestamp);
     p->txn_random_seed_start = seed;
     DCHECK(p->get_partition_count() == partition_count);
     // std::vector<int32_t> partitions, granules;

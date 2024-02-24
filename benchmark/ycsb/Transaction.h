@@ -49,12 +49,12 @@ public:
   ReadModifyWrite(std::size_t coordinator_id, std::size_t partition_id, std::size_t granule_id,
                   std::atomic<uint32_t> &worker_status, DatabaseType &db, const ContextType &context,
                   RandomType &random, Partitioner &partitioner,
-                  std::size_t ith_replica)
+                  std::size_t ith_replica, double cur_timestamp)
       : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
         worker_status_(worker_status), db(db),
         context(context), random(random),
         partition_id(partition_id), granule_id(granule_id),
-        query(makeYCSBQuery()(context, partition_id, granule_id, random, partitioner)) {
+        query(makeYCSBQuery()(context, partition_id, granule_id, random, partitioner, cur_timestamp)) {
           storage = get_storage();
   }
 

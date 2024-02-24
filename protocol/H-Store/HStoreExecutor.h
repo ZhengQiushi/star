@@ -4,7 +4,7 @@
 
 #pragma once
 #include <vector>
-
+#include "core/Defs.h"
 #include "core/Macros.h"
 #include "common/DeferCode.h"
 #include "core/Executor.h"
@@ -80,9 +80,28 @@ class HStoreExecutor
     : public Executor<Workload, HStore<typename Workload::DatabaseType>>
 
 {
+public:
+  using WorkloadType = Workload;
+  using ProtocolType = HStore<typename Workload::DatabaseType>;
+  using DatabaseType = typename WorkloadType::DatabaseType;
+  using TransactionType = typename WorkloadType::TransactionType;
+  using ContextType = typename DatabaseType::ContextType;
+  using RandomType = typename DatabaseType::RandomType;
+  using MessageType = typename ProtocolType::MessageType;
+  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
+  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
+
+  using StorageType = typename WorkloadType::StorageType;
+
 private:
   std::unique_ptr<Partitioner> hash_partitioner;
   std::vector<std::unique_ptr<Message>> cluster_worker_messages;
+  
+  std::vector<std::unique_ptr<Message>> async_messages;
+  std::vector<
+      std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
+      controlMessageHandlers;
+
   std::vector<bool> cluster_worker_messages_filled_in;
   std::deque<int> cluster_worker_messages_ready;
   int cluster_worker_num = -1;
@@ -151,6 +170,9 @@ private:
   std::vector<int> transaction_lengths;
   std::vector<int> transaction_lengths_count;
 
+  ShareQueue<simpleTransaction> router_transactions_queue;           // router
+  std::deque<int> router_stop_queue;           // router stop-SIGNAL
+
   std::size_t mp_concurrency_max = 0;
 public:
   using base_type = Executor<Workload, HStore<typename Workload::DatabaseType>>;
@@ -188,17 +210,6 @@ public:
     return ss.str();
   }
 
-  using WorkloadType = Workload;
-  using ProtocolType = HStore<typename Workload::DatabaseType>;
-  using DatabaseType = typename WorkloadType::DatabaseType;
-  using TransactionType = typename WorkloadType::TransactionType;
-  using ContextType = typename DatabaseType::ContextType;
-  using RandomType = typename DatabaseType::RandomType;
-  using MessageType = typename ProtocolType::MessageType;
-  using MessageFactoryType = typename ProtocolType::MessageFactoryType;
-  using MessageHandlerType = typename ProtocolType::MessageHandlerType;
-
-  using StorageType = typename WorkloadType::StorageType;
 
   int this_cluster_worker_id;
   int replica_cluster_worker_id = -1;
@@ -580,7 +591,19 @@ public:
                 << " partitions managed [" << managed_granules_str 
                 << "], replica granules maanged [" << managed_replica_granules_str << "]" 
                 << " is_replica_worker " << is_replica_worker << " replica_cluster_worker_id" << replica_cluster_worker_id;
+
+      // int total_batch_size = this->context.batch_size * this->context.coordinator_num;
+      // int this_node_batch_size = 0;
+      // if(this->context.coordinator_id == 0){
+      //   this_node_batch_size = total_batch_size * 1.0 * context.skew_factor / 100;
+      // } else {
+      //   this_node_batch_size = total_batch_size * 1.0 * (100 - context.skew_factor) / 100 / 3;
+      // }
+      // this->context.skew_factor
       batch_per_worker = std::max(this->context.batch_size / this->context.worker_num, (std::size_t)1);
+
+      LOG(INFO) << "batch_per_worker: " << batch_per_worker << " " << " " << this->context.batch_size << " * " << this->context.coordinator_num;
+
       this->context.hstore_active_active = batch_per_worker == 1;
       if (this->context.hstore_active_active) {
         LOG(INFO) << "HStore active active mode";
@@ -593,6 +616,19 @@ public:
         init_message(cluster_worker_messages[i].get(), i);
       }
       cluster_worker_messages.shrink_to_fit();
+
+      for (auto i = 0u; i <= this->context.coordinator_num; i++) {
+        async_messages.emplace_back(std::make_unique<Message>());
+        init_message_normal(async_messages[i].get(), i);
+
+        // messages.emplace_back(std::make_unique<Message>());
+        // init_message(messages[i].get(), i);
+      }
+
+      // messageHandlers = MessageHandlerType::get_message_handlers();
+      controlMessageHandlers = ControlMessageHandler<DatabaseType>::get_message_handlers();
+
+
       this->message_stats.resize((size_t)HStoreMessage::NFIELDS, 0);
       this->message_sizes.resize((size_t)HStoreMessage::NFIELDS, 0);
       mp_concurrency_max = 2000;
@@ -2474,11 +2510,26 @@ public:
     //   << " pending responses " << txn->pendingResponses;
   }
   void fill_pending_txns(std::size_t limit) {
-    while (pending_txns.size() < limit) {
+    // while (pending_txns.size() < limit) {
+    //   auto t = get_next_transaction();
+    //   if (t == nullptr)
+    //     break;
+    //   pending_txns.push_back(t);
+    // }
+
+    while(true){
+      bool success = false;
+      simpleTransaction simple_txn = 
+        this->router_transactions_queue.pop_no_wait(success);
+      if(!success) break;
+      
+      this->n_network_size.fetch_add(simple_txn.size);
+
       auto t = get_next_transaction();
       if (t == nullptr)
-        break;
+        break;    
       pending_txns.push_back(t);
+      if(pending_txns.size() > limit) break;
     }
   }
 
@@ -2732,7 +2783,7 @@ public:
       return 2;
     }
   }
-
+  
   int is_cross_node_mp(TransactionType * txn) {
     auto t = mp_type(txn); 
     return t == 0;
@@ -3260,6 +3311,9 @@ public:
         } else {
           mp_txns.push_back(txns[i]);
         }
+        // fetch new transaction
+        ControlMessageFactory::router_transaction_response_message(*(this->async_messages[this->context.coordinator_num]));
+        flush_messages_normal(this->async_messages);
       }
     }
     
@@ -3295,13 +3349,17 @@ public:
       ScopedTimer t([&, this](uint64_t us) {
           scheduling_time += us;
         });
-      if (pending_txns.size() < batch_per_worker) {
+      // if (pending_txns.size() < batch_per_worker) {
         fill_pending_txns(batch_per_worker);
-      }
+      // }
     }
     if (pending_txns.empty()) {
       return;
     }
+    if(pending_txns.size() > 500){
+      LOG(INFO) << " BATCH SIZE: " << pending_txns.size();
+    }
+
     process_batch_of_transactions();
     scheduling_cost.add(scheduling_time);
     return;
@@ -3774,8 +3832,17 @@ public:
                                       messagePiece.get_partition_id());
 //        DCHECK(message->get_source_cluster_worker_id() != this_cluster_worker_id);
         //DCHECK(message->get_source_cluster_worker_id() < (int32_t)this->context.partition_num);
-
-        if (type == (int)HStoreMessage::ACQUIRE_LOCK_AND_READ_REQUEST) {
+        // LOG(INFO) << type << " " << this->controlMessageHandlers.size();
+        if(type < this->controlMessageHandlers.size()){
+          // transaction router from Generator
+          this->controlMessageHandlers[type](
+            messagePiece,
+            *this->async_messages[message->get_source_node_id()], this->db,
+            &this->router_transactions_queue,
+            &this->router_stop_queue
+          );
+        }
+        else if (type == (int)HStoreMessage::ACQUIRE_LOCK_AND_READ_REQUEST) {
           bool res = acquire_lock_and_read_request_handler(*message, messagePiece,
                                                  *cluster_worker_messages[message->get_source_cluster_worker_id()], *table,
                                                  txn);
@@ -3866,6 +3933,7 @@ public:
         this->message_stats[type]++;
         this->message_sizes[type] += messagePiece.get_message_length();
       }
+      flush_async_messages();
       add_outgoing_message(message->get_source_cluster_worker_id());
       }
       if (is_replica_worker && acquire_partition_lock_requests_successful == false) {
@@ -3930,7 +3998,25 @@ public:
     }
     return false;
   }
+  void flush_messages_normal(std::vector<std::unique_ptr<Message>> &messages) {
+    for (auto i = 0u; i < messages.size(); i++) {
+      if (i == this->context.coordinator_id) {
+        continue;
+      }
 
+      if (messages[i]->get_message_count() == 0) {
+        continue;
+      }
+
+      auto message = messages[i].release();
+
+      this->out_transaction_queue.push(message);
+      messages[i] = std::make_unique<Message>();
+      init_message_normal(messages[i].get(), i);
+    }
+  }
+
+  void flush_async_messages() { flush_messages_normal(async_messages); }
   struct CheckpointInstruction {
     int source_cluster_id;
     CheckpointAction action;
@@ -4118,6 +4204,7 @@ public:
     if (is_replica_worker == false) {
       if (stage == ExecutorStage::NORMAL) {
         if (new_transaction && is_replica_worker == false) {
+          // LOG(INFO) << this->id << " " << "ExecutorStage::NORMAL";
           process_new_transactions();
         }
         if (this_cluster_worker_id == 0 && this->context.lotus_checkpoint &&  time_to_checkpoint()) {
@@ -4129,6 +4216,7 @@ public:
         }
       } else if (stage == ExecutorStage::CHECKPOINT_COW) {
         if (new_transaction && is_replica_worker == false) {
+          LOG(INFO) << this->id << " " << "ExecutorStage::CHECKPOINT_COW";
           process_new_transactions();
         }
         if (this->db.checkpoint_work_finished(managed_partitions)) {
@@ -4140,6 +4228,7 @@ public:
         }
       } else if (stage == ExecutorStage::CHECKPOINT_COW_DUMP_FINISHED) {
         if (new_transaction && is_replica_worker == false) {
+          LOG(INFO) << this->id << " " << "ExecutorStage::CHECKPOINT_COW_DUMP_FINISHED";
           process_new_transactions();
         }
       } else {
@@ -4166,7 +4255,7 @@ public:
     
   }
 
-  Message* pop_message_internal(LockfreeQueue<Message *> & queue) {
+  Message* pop_message_internal(LockfreeQueue<Message *, 100860> & queue) {
     if (queue.empty())
       return nullptr;
 
@@ -4198,9 +4287,16 @@ public:
       //std::this_thread::sleep_for(std::chrono::microseconds(10));
       return nullptr;
     } else {
-      auto partition_id = managed_partitions[this->random.next() % managed_partitions.size()];
+      auto partition_id_ = managed_partitions[this->random.next() % managed_partitions.size()];
+
+      size_t skew_factor = this->random.uniform_dist(1, 100);
+      if (this->context.skew_factor >= skew_factor) {
+        // 0 >= 50 
+        partition_id_ = managed_partitions[0];
+      }
+
       auto granule_id = this->random.next() % this->context.granules_per_partition;
-      auto txn = this->workload.next_transaction(this->context, partition_id, this->this_cluster_worker_id, granule_id).release();
+      auto txn = this->workload.next_transaction(this->context, partition_id_, this->this_cluster_worker_id, granule_id).release();
       txn->context = &this->context;
       auto total_batch_size = this->partitioner->num_coordinator_for_one_replica() * this->context.batch_size;
       if (this->context.stragglers_per_batch) {
@@ -4483,6 +4579,11 @@ protected:
     return dest_cluster_worker_id % this->context.worker_num;
   }
 
+  void init_message_normal(Message *message, std::size_t dest_node_id) {
+    message->set_source_node_id(this->context.coordinator_id);
+    message->set_dest_node_id(dest_node_id);
+    message->set_worker_id(this->id);
+  }
 
   void init_message(Message *message, int dest_cluster_worker_id) {
     //DCHECK(dest_cluster_worker_id >= 0 && dest_cluster_worker_id < (int)this->context.partition_num);

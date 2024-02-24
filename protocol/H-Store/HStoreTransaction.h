@@ -302,7 +302,7 @@ public:
     readKey.set_read_lock_request_bit();
     auto lock_id = to_lock_id(partition_id, granule_id);
     auto lock_status_idx = lock_status.get_lock_index(lock_id);
-    // LOG(INFO) << "write : " << partition_id << " " << granule_id << " " << lock_id;
+    // LOG(INFO) << "write : " << *(uint32_t*)&key << " " << partition_id << " " << granule_id << " " << lock_id;
     DCHECK(lock_status.get_lock(lock_status_idx).get_success() != LockStatus::SuccessState::REQUESTED);
     //DCHECK(lock_status.get_lock(lock_status_idx).get_success() == LockStatus::SuccessState::INIT);
     readKey.set_lock_index(lock_status_idx);
@@ -329,7 +329,7 @@ public:
 
     auto lock_id = to_lock_id(partition_id, granule_id);
     auto lock_status_idx = lock_status.get_lock_index(lock_id);
-    // LOG(INFO) << "write : " << partition_id << " " << granule_id << " " << lock_id;
+    // LOG(INFO) << "write : " << *(uint32_t*)&key << " " << partition_id << " " << granule_id << " " << lock_id;
 
     readKey.set_lock_index(lock_status_idx);
     DCHECK(lock_status.get_lock(lock_status_idx).get_success() != LockStatus::SuccessState::REQUESTED);

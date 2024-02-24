@@ -66,12 +66,12 @@ target_link_libraries(zqs_laji common
 
 
 
-# add_executable(zqs_laji_tpcc bench_tpcc.cpp)
-# target_link_libraries(zqs_laji_tpcc common 
-#                     ${jemalloc_lib} ${glog} ${gflags} 
-#                     ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
-#                     ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
-#                     ${METIS_LIBRARIES}) # -static
+add_executable(zqs_laji_tpcc bench_tpcc.cpp)
+target_link_libraries(zqs_laji_tpcc common 
+                    ${jemalloc_lib} ${glog} ${gflags} 
+                    ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
+                    ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 
+                    ${METIS_LIBRARIES}) # -static
 
 
 

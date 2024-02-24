@@ -124,9 +124,14 @@ public:
   bool is_transmit_requests() override {
     return is_transmit_request;
   }
-  TransactionResult execute(std::size_t worker_id) override {
 
-    int32_t W_ID = query.W_ID;
+  TransactionResult execute(std::size_t worker_id) override {
+    std::size_t granules_per_partition = this->context.granules_per_partition;
+
+    // ScopedTimer t_local_work([&, this](uint64_t us) {
+    //   this->record_local_work_time(us);
+    // });
+    int32_t W_ID = this->partition_id + 1;
 
     // The input data (see Clause 2.4.3.2) are communicated to the SUT.
 
@@ -187,7 +192,7 @@ public:
       }
 
       // this->search_local_index(itemTableID, 0, storage->item_keys[i],
-      //                          storage->item_values[i]);
+      //                          storage->item_values[i], true);
 
       // The row in the STOCK table with matching S_I_ID (equals OL_I_ID) and
       // S_W_ID (equals OL_SUPPLY_W_ID) is selected.
@@ -195,15 +200,28 @@ public:
       storage->stock_keys[i] = stock::key(OL_SUPPLY_W_ID, OL_I_ID);
 
       this->search_for_update(stockTableID, OL_SUPPLY_W_ID - 1,
-                              storage->stock_keys[i], storage->stock_values[i]);
+                              storage->stock_keys[i], storage->stock_values[i], 
+                              id_to_granule_id(OL_I_ID, context));
+    }
+    
+    this->update(districtTableID, W_ID - 1, storage->district_key,
+              storage->district_value, did_to_granule_id(D_ID, context));
+    for (int i = 0; i < query.O_OL_CNT; i++) {
+
+      int32_t OL_I_ID = query.INFO[i].OL_I_ID;
+      int8_t OL_QUANTITY = query.INFO[i].OL_QUANTITY;
+      int32_t OL_SUPPLY_W_ID = query.INFO[i].OL_SUPPLY_W_ID;
+
+      this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage->stock_keys[i],
+                   storage->stock_values[i], id_to_granule_id(OL_I_ID, context));
     }
 
+    // t_local_work.end();
     if (this->process_requests(worker_id)) {
       return TransactionResult::ABORT;
     }
-    if(is_transmit_request == true){
-      return TransactionResult::TRANSMIT_REQUEST;
-    }
+
+    // t_local_work.reset();
     float W_TAX = storage->warehouse_value.W_YTD;
 
     float D_TAX = storage->district_value.D_TAX;
@@ -211,8 +229,8 @@ public:
 
     storage->district_value.D_NEXT_O_ID += 1;
 
-    this->update(districtTableID, W_ID - 1, storage->district_key,
-                 storage->district_value);
+    // this->update(districtTableID, W_ID - 1, storage->district_key,
+    //              storage->district_value, D_ID % granules_per_partition);
 
     if (context.operation_replication) {
       Encoder encoder(this->operation.data);
@@ -273,8 +291,8 @@ public:
         storage->stock_values[i].S_REMOTE_CNT++;
       }
 
-      this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage->stock_keys[i],
-                   storage->stock_values[i]);
+      // this->update(stockTableID, OL_SUPPLY_W_ID - 1, storage->stock_keys[i],
+      //              storage->stock_values[i], OL_I_ID % granules_per_partition);
 
       if (context.operation_replication) {
         Encoder encoder(this->operation.data);

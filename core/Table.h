@@ -311,7 +311,28 @@ public:
     static MetaDataType v;
     return v;
   }
+  MetaDataType &search_metadata(const void *key, bool& success) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // success = map_.contains(k);
+    // if(success){
+    //   return std::get<0>(map_[k]);
+    // } else {
+    return null_val;
+    // }
+  }
+  MetaDataType &update_metadata(const void *key, const void *meta_value) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // const auto &m = *static_cast<const MetaDataType *>(meta_value);
 
+    // bool ok = map_.contains(k);
+    // DCHECK(ok == true) << " " << *(int*) key;
+    // auto &meta = std::get<0>(map_[k]);
+    // meta.store(m);
+
+    return null_val;
+  }
   bool contains(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
     return map_.contains(k);
@@ -325,7 +346,23 @@ public:
     auto &row = map_[k];
     row = v;
   }
+  void clear() override {
+    map_.clear();
+  }
+  void insert(const void *key, const void *value, const void *meta_value) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // const auto &v = *static_cast<const ValueType *>(value);
+    // const auto &m = *static_cast<const MetaDataType *>(meta_value);
 
+    // bool ok = map_.contains(k);
+    // // DCHECK(ok == false);
+    // if(ok == false) {
+    //   auto &row = map_[k];
+    //   std::get<0>(row).store(m);
+    //   std::get<1>(row) = v;
+    // }
+  }
   void update(const void *key, const void *value, std::function<void(const void *, const void*)> on_update) override {
     const auto &k = *static_cast<const KeyType *>(key);
     const auto &v = *static_cast<const ValueType *>(value);
@@ -333,7 +370,17 @@ public:
     on_update(key, &row);
     row = v;
   }
-
+  void delete_(const void *key) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // bool ok = map_.contains(k);
+    // DCHECK(ok == true);
+    // ok = map_.remove(k);
+    // DCHECK(ok == true);
+  }
+  std::size_t table_record_num() override {
+    return map_.size();
+  }
   void deserialize_value(const void *key, StringPiece stringPiece) override {
 
     std::size_t size = stringPiece.size();
@@ -370,6 +417,7 @@ private:
   UnsafeHashMap<KeyType, ValueType> map_;
   std::size_t tableID_;
   std::size_t partitionID_;
+  MetaDataType null_val;
 };
 
 
@@ -398,7 +446,34 @@ public:
     static MetaDataType v;
     return v;
   }
+  MetaDataType &search_metadata(const void *key, bool& success) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // success = map_.contains(k);
+    // if(success){
+    //   return std::get<0>(map_[k]);
+    // } else {
+    return null_val;
+    // }
+  }
+  void clear() override {
+    map_.clear();
+  }
+  std::size_t table_record_num() override {
+    return map_.size();
+  }
+  MetaDataType &update_metadata(const void *key, const void *meta_value) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // const auto &m = *static_cast<const MetaDataType *>(meta_value);
 
+    // bool ok = map_.contains(k);
+    // DCHECK(ok == true) << " " << *(int*) key;
+    // auto &meta = std::get<0>(map_[k]);
+    // meta.store(m);
+
+    return null_val; // meta;
+  }
   bool contains(const void *key) override {
     const auto &k = *static_cast<const KeyType *>(key);
     return map_.contains(k);
@@ -412,7 +487,20 @@ public:
     auto &row = map_[k];
     std::get<1>(row) = v;
   }
+  void insert(const void *key, const void *value, const void *meta_value) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // const auto &v = *static_cast<const ValueType *>(value);
+    // const auto &m = *static_cast<const MetaDataType *>(meta_value);
 
+    // bool ok = map_.contains(k);
+    // // DCHECK(ok == false);
+    // if(ok == false) {
+    //   auto &row = map_[k];
+    //   std::get<0>(row).store(m);
+    //   std::get<1>(row) = v;
+    // }
+  }
   void update(const void *key, const void *value, std::function<void(const void *, const void*)> on_update) override {
     const auto &k = *static_cast<const KeyType *>(key);
     const auto &v = *static_cast<const ValueType *>(value);
@@ -426,7 +514,14 @@ public:
     on_update(key, &std::get<1>(row));
     std::get<1>(row) = v;
   }
-
+  void delete_(const void *key) override {
+    DCHECK(false);
+    // const auto &k = *static_cast<const KeyType *>(key);
+    // bool ok = map_.contains(k);
+    // DCHECK(ok == true);
+    // ok = map_.remove(k);
+    // DCHECK(ok == true);
+  }
   void deserialize_value(const void *key, StringPiece stringPiece) override {
 
     std::size_t size = stringPiece.size();
@@ -510,5 +605,6 @@ private:
   std::size_t partitionID_;
   std::atomic<bool> dump_finished{true};
   std::atomic<bool> cow{false};
+  MetaDataType null_val;
 };
 } // namespace star

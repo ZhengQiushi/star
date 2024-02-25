@@ -644,7 +644,7 @@ namespace star
         int64_t get_edge_num(){
             return edge_nums;
         }
-        void my_run_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
+        void lion_run_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
             // LOG(INFO) << "start";
             LOG(INFO) << "history init done";
             auto start_time = std::chrono::steady_clock::now();
@@ -1012,7 +1012,7 @@ namespace star
         }
         
 
-         void metis_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+         void lion_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
             /***
              * 
             */
@@ -1115,7 +1115,7 @@ namespace star
             return ;
         }
 
-        void metis_partiion_read_from_file(const std::string& partition_filename){
+        void lion_partiion_read_from_file(const std::string& partition_filename){
             /***
              * 
             */

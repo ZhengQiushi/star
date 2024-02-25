@@ -644,7 +644,7 @@ namespace star
         int64_t get_edge_num(){
             return edge_nums;
         }
-        void my_run_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
+        void lion_run_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
             // LOG(INFO) << "start";
             LOG(INFO) << "history init done";
             auto start_time = std::chrono::steady_clock::now();
@@ -662,6 +662,36 @@ namespace star
 
             // my_clay->metis_partition_graph("/home/star/data/resultss_partition_30_60.xls");
             my_find_clump(context.data_src_path_dir + dst_file);
+            LOG(INFO) << "done";
+            latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+
+            LOG(INFO) << "[done] take time: " << latency * 1.0 / 1000 << " s";
+
+            clear_graph();
+        }
+
+
+        void metis_run_offline(std::string& src_file, std::string& dst_file, int start_ts, int end_ts){
+            // LOG(INFO) << "start";
+            LOG(INFO) << "history init done";
+            auto start_time = std::chrono::steady_clock::now();
+            init_with_history(context.data_src_path_dir + src_file, start_ts, end_ts - 1);
+            LOG(INFO) << "distributed transations : " << distributed_edges;
+            for(auto& i: distributed_edges_on_coord){
+                LOG(INFO) << i.first << " : " << i.second;
+            }
+
+            auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                        std::chrono::steady_clock::now() - start_time)
+                                        .count();
+
+            LOG(INFO) << "[done] init time: " << latency * 1.0 / 1000 << " s";
+
+            metis_partition_graph(context.data_src_path_dir + dst_file);
+
+            // my_find_clump(context.data_src_path_dir + dst_file);
             LOG(INFO) << "done";
             latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::steady_clock::now() - start_time)
@@ -959,6 +989,10 @@ namespace star
             idx_t nVertices = xadj.size() - 1;      // 节点数
             idx_t nWeights = 1;                     // 节点权重维数
             idx_t nParts = key_coordinator_cache.size() / 50;   // 子图个数≥2
+            if(context.sub_graphs_num != -1){
+                DCHECK(context.sub_graphs_num >= 2);
+                nParts = context.sub_graphs_num;
+            }
             idx_t objval;                           // 目标函数值
             std::vector<idx_t> parts(nVertices, 0); // 划分结果
             std::cout << key_coordinator_cache.size() << " " << key_coordinator_cache.size() / 50 << std::endl;
@@ -1012,7 +1046,7 @@ namespace star
         }
         
 
-         void metis_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
+         void lion_partiion_read_from_file(const std::string& partition_filename, int batch_size, ShareQueue<std::shared_ptr<myMove<WorkloadType>>>& cur_move_plans){
             /***
              * 
             */
@@ -1115,7 +1149,7 @@ namespace star
             return ;
         }
 
-        void metis_partiion_read_from_file(const std::string& partition_filename){
+        void lion_partiion_read_from_file(const std::string& partition_filename){
             /***
              * 
             */

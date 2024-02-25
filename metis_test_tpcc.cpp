@@ -104,25 +104,25 @@ int main(int argc, char *argv[]) {
     dst_file = "resultss_partition_0_30.xls"; 
     int time_start = 0;
     int time_end   = time_start + context.workload_time;
-    my_clay->my_run_offline(src_file, dst_file, time_start, time_end);
+    my_clay->lion_run_offline(src_file, dst_file, time_start, time_end);
 
     time_start += context.workload_time; 
     time_end += context.workload_time;
 
     dst_file = "resultss_partition_30_60.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, time_start + 10, time_end);
+    my_clay->lion_run_offline(src_file, dst_file, time_start + 10, time_end);
 
     time_start += context.workload_time; 
     time_end += context.workload_time;
 
     dst_file = "resultss_partition_60_90.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, time_start + 10, time_end);
+    my_clay->lion_run_offline(src_file, dst_file, time_start + 10, time_end);
 
     time_start += context.workload_time; 
     time_end += context.workload_time;
     
     dst_file = "resultss_partition_90_120.xls"; 
-    my_clay->my_run_offline(src_file, dst_file, time_start + 10, time_end);
+    my_clay->lion_run_offline(src_file, dst_file, time_start + 10, time_end);
   } else {
     std::string src_file = "resultss.xls";
     std::string dst_file = "clay_resultss_partition_0_30.xls"; 
@@ -197,15 +197,15 @@ int main(int argc, char *argv[]) {
   // LOG(INFO) << "done";
 
   // LOG(INFO) << "start read from file";
-  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_20_40.xls");
+  // my_clay->lion_partiion_read_from_file("/home/star/data/resultss_partition_20_40.xls");
   // LOG(INFO) << "read from file done";
 
   // LOG(INFO) << "start read from file";
-  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_40_60.xls");
+  // my_clay->lion_partiion_read_from_file("/home/star/data/resultss_partition_40_60.xls");
   // LOG(INFO) << "read from file done";
 
   // LOG(INFO) << "start read from file";
-  // my_clay->metis_partiion_read_from_file("/home/star/data/resultss_partition_0_20.xls");
+  // my_clay->lion_partiion_read_from_file("/home/star/data/resultss_partition_0_20.xls");
   // LOG(INFO) << "read from file done";
 
   // test done 

@@ -20,7 +20,7 @@ DEFINE_int32(group_time, 10, "group commit frequency");
 DEFINE_int32(batch_flush, 50, "batch flush");
 DEFINE_int32(sleep_time, 1000, "retry sleep time");
 DEFINE_string(protocol, "Scar", "transaction protocol");
-DEFINE_string(replica_group, "1,3", "calvin replica group"); 
+DEFINE_string(replica_group, "1,3", "calvin replica group");
 
 DEFINE_int32(nop_prob, 0, "prob of transactions having nop, out of 10000");
 DEFINE_int64(n_nop, 10000, "total number of nop");
@@ -72,63 +72,63 @@ DEFINE_int32(sample_time_interval, 1, "running time");
 
 DEFINE_int32(cpu_core_id, 0, "cpu core id");
 
-
 DEFINE_int32(skew_factor, 0, "workload skew factor");
 DEFINE_string(repartition_strategy, "lion", "clay / metis / lion");
+DEFINE_int32(sub_graphs_num, -1, "metis sub-graphs");
 
-
-
-#define SETUP_CONTEXT(context)                                                 \
-  boost::algorithm::split(context.peers, FLAGS_servers,                        \
-                          boost::is_any_of(";"));                              \
-  context.coordinator_num = context.peers.size() - 1;                          \
-  context.coordinator_id = FLAGS_id;                                           \
-  context.worker_num = FLAGS_threads;                                          \
-  context.io_thread_num = FLAGS_io;                                            \
-  context.partition_num = context.coordinator_num * FLAGS_partition_num;       \
-  context.partitioner = FLAGS_partitioner;                                     \
-  context.sleep_on_retry = FLAGS_sleep_on_retry;                               \
-  context.batch_size = FLAGS_batch_size;                                       \
-  context.group_time = FLAGS_group_time;                                       \
-  context.batch_flush = FLAGS_batch_flush;                                     \
-  context.sleep_time = FLAGS_sleep_time;                                       \
-  context.protocol = FLAGS_protocol;                                           \
-  context.replica_group = std::to_string(context.coordinator_num);             \
-  context.lock_manager = FLAGS_lock_manager;                                   \
-  context.read_on_replica = FLAGS_read_on_replica;                             \
-  context.lion_self_remaster = FLAGS_lion_self_remaster;                       \
-  context.local_validation = FLAGS_local_validation;                           \
-  context.rts_sync = FLAGS_rts_sync;                                           \
-  context.star_sync_in_single_master_phase = FLAGS_star_sync;                  \
-  context.star_dynamic_batch_size = FLAGS_star_dynamic_batch_size;             \
-  context.parallel_locking_and_validation = FLAGS_plv;                         \
-  context.calvin_same_batch = FLAGS_calvin_same_batch;                         \
-  context.kiva_read_only_optmization = FLAGS_kiva_read_only;                   \
-  context.kiva_reordering_optmization = FLAGS_kiva_reordering;                 \
-  context.kiva_snapshot_isolation = FLAGS_kiva_si;                             \
-  context.delay_time = FLAGS_delay;                                            \
-  context.log_path = FLAGS_log_path;                                           \
-  context.cdf_path = FLAGS_cdf_path;                                           \
-  context.tcp_no_delay = FLAGS_tcp_no_delay;                                   \
-  context.tcp_quick_ack = FLAGS_tcp_quick_ack;                                 \
-  context.cpu_affinity = FLAGS_cpu_affinity;                                   \
-  context.enable_data_transfer = FLAGS_enable_data_transfer;                   \
-  context.migration_only = FLAGS_migration_only;                               \
-  context.nop_prob = FLAGS_nop_prob;                                           \
-  context.n_nop = FLAGS_n_nop;                                                 \
-  context.rn_nop = FLAGS_rn_nop;                                               \  
-  context.time_to_run = FLAGS_time_to_run;                                     \
-  context.workload_time = FLAGS_workload_time;                                 \
-  context.init_time = FLAGS_init_time;                                         \
-  context.sample_time_interval = FLAGS_sample_time_interval;                   \
-  context.data_transform_interval = FLAGS_data_transform_interval;             \
-  context.lion_no_switch = FLAGS_lion_no_switch;                               \
-  context.lion_with_metis_init = FLAGS_lion_with_metis_init;                   \
-  context.data_src_path_dir = FLAGS_data_src_path_dir;                         \
-  context.random_router = FLAGS_random_router;                                 \
-  context.lion_with_trace_log = FLAGS_lion_with_trace_log;                     \
-  context.replica_sync = FLAGS_replica_sync;                                   \
-  context.cpu_core_id = FLAGS_cpu_core_id;                                     \
-  context.skew_factor = FLAGS_skew_factor;                                     \
-  context.repartition_strategy = FLAGS_repartition_strategy;                   \
+#define SETUP_CONTEXT(context)                                           \
+  boost::algorithm::split(context.peers, FLAGS_servers,                  \
+                          boost::is_any_of(";"));                        \
+  context.coordinator_num = context.peers.size() - 1;                    \
+  context.coordinator_id = FLAGS_id;                                     \
+  context.worker_num = FLAGS_threads;                                    \
+  context.io_thread_num = FLAGS_io;                                      \
+  context.partition_num = context.coordinator_num * FLAGS_partition_num; \
+  context.partitioner = FLAGS_partitioner;                               \
+  context.sleep_on_retry = FLAGS_sleep_on_retry;                         \
+  context.batch_size = FLAGS_batch_size;                                 \
+  context.group_time = FLAGS_group_time;                                 \
+  context.batch_flush = FLAGS_batch_flush;                               \
+  context.sleep_time = FLAGS_sleep_time;                                 \
+  context.protocol = FLAGS_protocol;                                     \
+  context.replica_group = std::to_string(context.coordinator_num);       \
+  context.lock_manager = FLAGS_lock_manager;                             \
+  context.read_on_replica = FLAGS_read_on_replica;                       \
+  context.lion_self_remaster = FLAGS_lion_self_remaster;                 \
+  context.local_validation = FLAGS_local_validation;                     \
+  context.rts_sync = FLAGS_rts_sync;                                     \
+  context.star_sync_in_single_master_phase = FLAGS_star_sync;            \
+  context.star_dynamic_batch_size = FLAGS_star_dynamic_batch_size;       \
+  context.parallel_locking_and_validation = FLAGS_plv;                   \
+  context.calvin_same_batch = FLAGS_calvin_same_batch;                   \
+  context.kiva_read_only_optmization = FLAGS_kiva_read_only;             \
+  context.kiva_reordering_optmization = FLAGS_kiva_reordering;           \
+  context.kiva_snapshot_isolation = FLAGS_kiva_si;                       \
+  context.delay_time = FLAGS_delay;                                      \
+  context.log_path = FLAGS_log_path;                                     \
+  context.cdf_path = FLAGS_cdf_path;                                     \
+  context.tcp_no_delay = FLAGS_tcp_no_delay;                             \
+  context.tcp_quick_ack = FLAGS_tcp_quick_ack;                           \
+  context.cpu_affinity = FLAGS_cpu_affinity;                             \
+  context.enable_data_transfer = FLAGS_enable_data_transfer;             \
+  context.migration_only = FLAGS_migration_only;                         \
+  context.nop_prob = FLAGS_nop_prob;                                     \
+  context.n_nop = FLAGS_n_nop;                                           \
+  context.rn_nop = FLAGS_rn_nop;                                         \
+  \  
+  context.time_to_run = FLAGS_time_to_run;                               \
+  context.workload_time = FLAGS_workload_time;                           \
+  context.init_time = FLAGS_init_time;                                   \
+  context.sample_time_interval = FLAGS_sample_time_interval;             \
+  context.data_transform_interval = FLAGS_data_transform_interval;       \
+  context.lion_no_switch = FLAGS_lion_no_switch;                         \
+  context.lion_with_metis_init = FLAGS_lion_with_metis_init;             \
+  context.data_src_path_dir = FLAGS_data_src_path_dir;                   \
+  context.random_router = FLAGS_random_router;                           \
+  context.lion_with_trace_log = FLAGS_lion_with_trace_log;               \
+  context.replica_sync = FLAGS_replica_sync;                             \
+  context.cpu_core_id = FLAGS_cpu_core_id;                               \
+  context.skew_factor = FLAGS_skew_factor;                               \
+  context.repartition_strategy = FLAGS_repartition_strategy;             \
+  context.sub_graphs_num = FLAGS_sub_graphs_num;                         \
   context.set_star_partitioner();

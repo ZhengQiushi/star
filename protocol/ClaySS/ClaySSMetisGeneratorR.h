@@ -208,7 +208,7 @@ void migration(std::string file_name_){
     while(true){
       ShareQueue<std::shared_ptr<myMove<WorkloadType>>> rows;
       if(context.repartition_strategy == "lion"){
-        my_clay->metis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
+        my_clay->lion_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       } else if(context.repartition_strategy == "clay"){
         my_clay->clay_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
       } else if(context.repartition_strategy == "metis"){
@@ -259,7 +259,7 @@ void migration(std::string file_name_){
   //   LOG(INFO) << "start read from file";
     
   //   if(context.repartition_strategy == "lion"){
-  //     my_clay->metis_partiion_read_from_file(file_name_.c_str());
+  //     my_clay->lion_partiion_read_from_file(file_name_.c_str());
   //   } else if(context.repartition_strategy == "clay"){
   //     my_clay->clay_partiion_read_from_file(file_name_.c_str());
   //   } else if(context.repartition_strategy == "metis"){

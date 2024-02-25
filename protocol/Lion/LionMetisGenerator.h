@@ -582,7 +582,7 @@ public:
           while(true){
                 
                 ShareQueue<std::shared_ptr<myMove<WorkloadType>>> rows;
-                my_clay->metis_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
+                my_clay->lion_partiion_read_from_file(file_name_.c_str(), context.batch_size, rows);
 
                 if(rows.size() <= 0){
                   LOG(INFO) << "all metis DONE!!!!!!";

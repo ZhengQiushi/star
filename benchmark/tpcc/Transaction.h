@@ -998,6 +998,7 @@ private:
   bool is_transmit_request;
   int on_replica_num; // only for hermes
   int is_real_distributed; // only for hermes
+  uint64_t cur_timestamp;
 };
 
 template <class Transaction> class Payment : public Transaction {

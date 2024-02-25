@@ -145,10 +145,10 @@ public:
     int32_t partition_count;
     int64_t transaction_id;
     uint64_t straggler_wait_time;
-
+    uint64_t cur_timestamp;
     // std::vector<int32_t> partitions_from_command, granules_from_command;
     // int32_t granule_count = 0;
-    decoder >> transaction_id >> straggler_wait_time >> ith_replica >> seed >> partition_id >> granule_id >> partition_count;
+    decoder >> transaction_id >> straggler_wait_time >> cur_timestamp >> ith_replica >> seed >> partition_id >> granule_id >> partition_count;
     // for (int32_t i = 0; i < partition_count; ++i){
     //   int32_t p;
     //   decoder >> p;
@@ -163,14 +163,11 @@ public:
     RandomType random;
     random.set_seed(seed);
 
-     double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
-                 std::chrono::steady_clock::now() - start_time)
-                 .count() * 1.0 / 1000 / 1000;
-
     std::unique_ptr<TransactionType> p =
         std::make_unique<ReadModifyWrite<Transaction>>(
             coordinator_id, partition_id, granule_id, worker_status, db, context, random, partitioner, ith_replica, cur_timestamp);
     p->txn_random_seed_start = seed;
+    // LOG(INFO) << "decode: " << cur_timestamp << " " << p->get_partition_count() << " " << partition_count;
     DCHECK(p->get_partition_count() == partition_count);
     // std::vector<int32_t> partitions, granules;
     // for (int32_t i = 0; i < partition_count; ++i){

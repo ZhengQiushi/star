@@ -101,6 +101,7 @@ private:
   std::vector<
       std::function<void(MessagePiece, Message &, DatabaseType &, ShareQueue<simpleTransaction>*, std::deque<int>* )>>
       controlMessageHandlers;
+  std::chrono::steady_clock::time_point start_time;
 
   std::vector<bool> cluster_worker_messages_filled_in;
   std::deque<int> cluster_worker_messages_ready;
@@ -4319,6 +4320,9 @@ public:
   void start() override {
     last_mp_arrival = std::chrono::steady_clock::now();
     LOG(INFO) << "Executor " << (is_replica_worker ? "Replica" : "") << this->id << " starts with thread id" << gettid();
+
+    start_time = std::chrono::steady_clock::now();
+    this->workload.start_time = start_time;
 
     last_commit = std::chrono::steady_clock::now();
     uint64_t last_seed = 0;

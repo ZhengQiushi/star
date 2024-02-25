@@ -22,7 +22,7 @@ for id in $(seq 0 $nodes)
     do
         echo "$id ${ips[id]}"
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
-        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"rm -rf /core* \" & "
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "sudo docker exec zqs_0 bash -c \"rm -rf /core* \" & "
     done 
 
 
@@ -33,7 +33,7 @@ for id in $(seq 0 $nodes)
 for id in $(seq 0 $nodes)
     do
         # ssh $user@${ips[id]} "cd /data/zhanhao; ./run.sh &"
-        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"bash /home/star/run.sh\" & "
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "sudo docker exec zqs_0 bash -c \"bash /home/star/run.sh\" & "
         sleep 3s
     done
 
@@ -50,7 +50,7 @@ for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
-        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"rm -rf /core* \" & "
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "sudo docker exec zqs_0 bash -c \"rm -rf /core* \" & "
     done 
 
 

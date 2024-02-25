@@ -64,8 +64,8 @@ public:
     }
   }
   static int get_workload_type(const Context &context, double cur_timestamp){
-    int workload_type_num = 3;
-    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num) + 1;// 
+    int workload_type_num = 4;
+    int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num);// 
     return workload_type;
   }
   static int round(int a, int b){
@@ -250,7 +250,7 @@ public:
     return query;
   }
     YCSBQuery operator()(const Context &context, uint32_t partitionID, uint32_t granuleID,
-                          Random &random, const Partitioner & partitioner, double current_timestamp) const {
+                          Random &random, const Partitioner & partitioner, double cur_timestamp) const {
     const int N = 10;
     YCSBQuery query(N);
     
@@ -262,6 +262,30 @@ public:
     int crossPartition = random.uniform_dist(1, 100);
     //int crossPartitionPartNum = context.crossPartitionPartNum;
     int crossPartitionPartNum = random.uniform_dist(2, context.crossPartitionPartNum);
+
+    int workload_type = get_workload_type(context, cur_timestamp);
+    int cross_partition_probalility = context.crossPartitionProbability;
+    switch (workload_type)
+      {
+      case 0:
+        // context.skew_factor = 0;
+        cross_partition_probalility = 0;
+        break;
+      case 1:
+        // context.skew_factor = 80;
+        cross_partition_probalility = 0;
+        break;
+      case 2:
+        // context.skew_factor = 80;
+        cross_partition_probalility = 100;
+        break;
+      case 3:
+        // context.skew_factor = 80;
+        cross_partition_probalility = 100;
+        break;
+      default:
+        break;
+      }
     for (auto i = 0u; i < N; i++) {
       // read or write
 
@@ -294,7 +318,7 @@ public:
               0, static_cast<int>(context.keysPerGranule) - 1) : Zipf::globalZipf().value(random.next_double());
         }
         int this_partition_idx = 0;
-        if (crossPartition <= context.crossPartitionProbability &&
+        if (crossPartition <= cross_partition_probalility &&
             context.partition_num > 1) {
           if (query.num_parts == 1) {
             query.num_parts = 1;

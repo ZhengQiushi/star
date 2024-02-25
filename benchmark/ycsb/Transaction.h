@@ -53,8 +53,9 @@ public:
       : Transaction(coordinator_id, partition_id, partitioner, ith_replica), 
         worker_status_(worker_status), db(db),
         context(context), random(random),
-        partition_id(partition_id), granule_id(granule_id),
+        partition_id(partition_id), granule_id(granule_id), cur_timestamp(cur_timestamp),
         query(makeYCSBQuery()(context, partition_id, granule_id, random, partitioner, cur_timestamp)) {
+          // LOG(INFO) << "cur_timestamp: " << cur_timestamp;
           storage = get_storage();
   }
 
@@ -535,9 +536,11 @@ public:
   virtual bool is_single_partition() override { return query.number_of_parts() == 1; }
 
   virtual const std::string serialize(std::size_t ith_replica = 0) override {
+    // LOG(INFO) << "serialize cur_timestamp: " << uint64_t(this->cur_timestamp);
+
     std::string res;
     Encoder encoder(res);
-    encoder << this->transaction_id << this->straggler_wait_time << ith_replica << this->txn_random_seed_start << partition_id << granule_id;
+    encoder << this->transaction_id << this->straggler_wait_time  << uint64_t(this->cur_timestamp) << ith_replica << this->txn_random_seed_start << partition_id << granule_id;
     encoder << get_partition_count();
     // int granules_count = 0;
     // for (int32_t i = 0; i < get_partition_count(); ++i)
@@ -562,7 +565,7 @@ private:
   bool is_transmit_request = false;
   int on_replica_id;       // only for hermes
   int is_real_distributed; // only for hermes
-  
+  double cur_timestamp;
 };
 } // namespace ycsb
 

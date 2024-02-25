@@ -35,9 +35,9 @@ public:
   // const int hot_area_size = 6;
   static const double get_thresh(const Context &context){
     if(context.protocol == "MyClay"){
-      return 0.02;
+      return 0.05;
     } else {
-      return 0.02;
+      return 0.05;
     }
   }
   static int get_workload_type(const Context &context, double cur_timestamp){
@@ -103,11 +103,11 @@ public:
       {
       case 0:
         // context.skew_factor = 0;
-        cross_partition_probalility = 0;
+        cross_partition_probalility = 50;
         break;
       case 1:
         // context.skew_factor = 80;
-        cross_partition_probalility = 0;
+        cross_partition_probalility = 50;
         break;
       case 2:
         // context.skew_factor = 80;

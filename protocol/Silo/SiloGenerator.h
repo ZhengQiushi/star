@@ -157,9 +157,18 @@ public:
         hot_area_size = context.coordinator_num;
       }
       std::size_t partition_id = random.uniform_dist(0, context.partition_num - 1); // get_random_partition_id(n, context.coordinator_num);
+      std::size_t partition_id_;
       // 
+
+      double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                  std::chrono::steady_clock::now() - start_time)
+                  .count() * 1.0 / 1000 / 1000;
+
+      int workload_type_num = 4;
+      int workload_type = ((int)cur_timestamp / context.workload_time % workload_type_num);// 
+
       size_t skew_factor = random.uniform_dist(1, 100);
-      if (context.skew_factor >= skew_factor) {
+      if (context.skew_factor >= skew_factor && workload_type % 2 == 0) {
         // 0 >= 50 
         if(WorkloadType::which_workload == myTestSet::YCSB){
           partition_id = 0;
@@ -171,7 +180,6 @@ public:
         //正常
       }
       // 
-      std::size_t partition_id_;
       if(WorkloadType::which_workload == myTestSet::YCSB){
         partition_id_ = partition_id / hot_area_size * hot_area_size + 
                                   partition_id / hot_area_size % context.coordinator_num;

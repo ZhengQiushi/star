@@ -2708,10 +2708,10 @@ public:
     std::size_t cnt = 0;
     while (!to_commit.empty()) {
       auto txn = to_commit.front();
-      auto txnStartTime = std::chrono::steady_clock::now();
-
-
-
+      ScopedTimer z0([&, this](uint64_t us) {
+        txn->b.time_commit += us;
+        record_commit_transactions(*txn);
+      });
       to_commit.pop_front();
       txns_replayed++;
       DCHECK(txn->pendingResponses == 0);
@@ -2724,12 +2724,6 @@ public:
       post_commit(txn);
       cnt ++;
       handle_requests(false);
-
-      int time_commit = std::chrono::duration_cast<std::chrono::microseconds>(
-                                                                    std::chrono::steady_clock::now() - txnStartTime)
-                  .count();
-      txn->b.time_commit += time_commit;
-      record_commit_transactions(*txn);
     }
     return cnt;
   }
@@ -2986,6 +2980,9 @@ public:
   void process_mp_transactions(std::vector<TransactionType*> & mp_txns) {
     {
       for (size_t i = 0; i < mp_txns.size(); ++i) {
+        // ScopedTimer z0([&, this](uint64_t us) {
+        //   mp_txns[i]->b.time_local_locks += us;
+        // });
         auto txnStartTime = std::chrono::steady_clock::now();
         execute_transaction(mp_txns[i]);
 
@@ -3220,6 +3217,7 @@ public:
 
   void post_commit_work(const std::vector<TransactionType*> & txns, uint64_t commit_persistence_us, uint64_t & committed) {
     for (size_t i = 0; i < txns.size(); ++i) {
+      // {
 
         auto txnStartTime = std::chrono::steady_clock::now();
         auto txn = txns[i];
@@ -3235,6 +3233,7 @@ public:
                   .count();
           txn->b.time_commit += commit_time;
           record_commit_transactions(*txn);
+      // }
     }
   }
 
@@ -3248,7 +3247,9 @@ public:
     uint64_t commit_persistence_us = 0;
     uint64_t commit_replication_us = 0;
     uint64_t committed = 0;
+
     handle_requests(false);
+
     if (sp_txns.empty() == false) {
       undo_buffer.clear();
       ScopedTimer t0([&, this](uint64_t us) {
@@ -3260,6 +3261,7 @@ public:
         for (auto txn: sp_txns) {
           txn->reset();
         }
+        // sync?
         write_command_for_sp_group(sp_txns);
         
         std::size_t sp_idx_executed = 0;
@@ -3290,6 +3292,7 @@ public:
           // persist_and_clear_command_buffer(execute_sp);
         }
         while (sp_idx_executed < sp_txns.size()) {
+          // one by one
           execute_sp();
           post_commit_func();
         }
@@ -3324,6 +3327,7 @@ public:
               });
           // persist_and_clear_command_buffer(true);
         }
+        // 
         send_commands_to_replica(true);
         post_commit_work(sp_txns, commit_persistence_us, committed);
         // Return results to clients
@@ -3383,7 +3387,7 @@ public:
     if (this->context.hstore_active_active) {
       execute_transaction_batch_haa(txns, sp_txns, mp_txns);
     } else {
-      execute_transaction_batch(txns, sp_txns, mp_txns);
+      execute_transaction_batch(txns, sp_txns, mp_txns); // in 
     }
     
     DCHECK(active_txns.empty());
@@ -3408,49 +3412,6 @@ public:
   uint64_t scheduling_time = 0;
   void process_new_transactions() {
     scheduling_time = 0;
-    
-// if(this->txn_statics.size() > 0){
-//   LOG(INFO) << " ??? ";
-//                       LOG(INFO)  
-//                         << this->txn_statics.nth(10).time_router << "\t" 
-//                         << this->txn_statics.nth(10).time_scheuler << "\t" 
-//                         << this->txn_statics.nth(10).time_local_locks << "\t" 
-//                         << this->txn_statics.nth(10).time_remote_locks << "\t" 
-//                         << this->txn_statics.nth(10).time_execute << "\t" 
-//                         << this->txn_statics.nth(10).time_commit << "\t" 
-//                         << this->txn_statics.nth(10).time_wait4serivce << "\t" 
-//                         << this->txn_statics.nth(10).time_other_module << "\t" 
-//                         << this->txn_statics.nth(10).time_latency << "\t" 
-//                         << this->total_latency.nth(10) << "\t" 
-
-//                         << this->txn_statics.nth(50).time_router << "\t" 
-//                         << this->txn_statics.nth(50).time_scheuler << "\t" 
-//                         << this->txn_statics.nth(50).time_local_locks << "\t" 
-//                         << this->txn_statics.nth(50).time_remote_locks << "\t" 
-//                         << this->txn_statics.nth(50).time_execute << "\t" 
-//                         << this->txn_statics.nth(50).time_commit << "\t" 
-//                         << this->txn_statics.nth(50).time_wait4serivce << "\t" 
-//                         << this->txn_statics.nth(50).time_other_module << "\t" 
-//                         << this->txn_statics.nth(50).time_latency << "\t" 
-//                         << this->total_latency.nth(50) << "\t" 
-
-//                         << this->txn_statics.nth(95).time_router << "\t" 
-//                         << this->txn_statics.nth(95).time_scheuler << "\t" 
-//                         << this->txn_statics.nth(95).time_local_locks << "\t" 
-//                         << this->txn_statics.nth(95).time_remote_locks << "\t" 
-//                         << this->txn_statics.nth(95).time_execute << "\t" 
-//                         << this->txn_statics.nth(95).time_commit << "\t" 
-//                         << this->txn_statics.nth(95).time_wait4serivce << "\t" 
-//                         << this->txn_statics.nth(95).time_other_module << "\t"
-//                         << this->txn_statics.nth(95).time_latency << "\t"
-//                         << this->total_latency.nth(95) << "\n" ;
-//                         ;
-// }
-    // if(this->clear_status.load() == true){
-        base_type::clear_time_status();
-    //     this->clear_status.store(false);
-    // }
-
     {
       ScopedTimer t([&, this](uint64_t us) {
           scheduling_time += us;

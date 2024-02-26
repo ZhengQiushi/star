@@ -1389,7 +1389,7 @@ public:
 
     if(context.lion_with_metis_init){
       LOG(INFO) << "START INIT! predictor";
-      // migration(map_[3]);
+      migration(map_[3]);
       while(router_fence() == -1){
         std::this_thread::sleep_for(std::chrono::microseconds(5));
       }

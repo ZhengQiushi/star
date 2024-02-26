@@ -35,9 +35,9 @@ public:
   // const int hot_area_size = 6;
   static const double get_thresh(const Context &context){
     if(context.protocol == "MyClay"){
-      return 0.05;
+      return 0.03;
     } else {
-      return 0.05;
+      return 0.03;
     }
   }
   static int get_workload_type(const Context &context, double cur_timestamp){

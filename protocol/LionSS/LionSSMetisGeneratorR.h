@@ -815,6 +815,20 @@ public:
       return -1;
     }
 
+
+    double cur_timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
+                 std::chrono::steady_clock::now() - start_time)
+                 .count() * 1.0 / 1000 / 1000;
+    int workload_type = ((int)cur_timestamp / context.workload_time) + 1;// which_workload_(crossPartition, (int)cur_timestamp);
+    // find minimal cost routing 
+    // LOG(INFO) << "txn_id.load() = " << schedule_meta.txn_id.load() << " " << cur_txn_num;
+
+      if(last_workload_type != workload_type){
+        last_workload_type = workload_type;
+        migrate_times = 0;
+      }
+      
+
     int idx_offset = dispatcher_id * cur_txn_num;
 
     auto & txns              = schedule_meta.node_txns;
@@ -891,10 +905,12 @@ public:
     }
 
 
-    long long threshold = (0.1 * context.batch_size / context.coordinator_num) * (0.1 * context.batch_size / context.coordinator_num); //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
+    long long threshold = threshold = 300 * 300; // (0.1 * context.batch_size / context.coordinator_num) * (0.1 * context.batch_size / context.coordinator_num); //200 / ((context.coordinator_num + 1) / 2) * 200 / ((context.coordinator_num + 1) / 2); // 2200 - 2800
     if(WorkloadType::which_workload == myTestSet::TPCC){
-      threshold = 300 * 300;
+      
     }
+    if(migrate_times >= 5) threshold = 800 * 800;
+
     int aver_val =  cnt * dispatcher_num / context.coordinator_num;
     long long cur_val = cal_load_distribute(aver_val, busy_);
 
@@ -914,7 +930,8 @@ public:
 
     if(cur_val > threshold && context.random_router == 0){ 
       LOG(INFO) << "real_distribute_num: " << real_distribute_num;
-      LOG(INFO) << "busy: ";
+      LOG(INFO) << "busy: " << migrate_times;
+      migrate_times += 1;
       for(size_t i = 0 ; i < context.coordinator_num; i ++ ){
         LOG(INFO) << " busy[" << i   << "] = "   << busy_[i] << " " 
                   << cur_val  << " " << aver_val << " "      << cur_val;
@@ -1069,6 +1086,7 @@ public:
                               busy, aver_val, threshold);
           if(overload_node.size() == 0 || idle_node.size() == 0){
             is_ok = false;
+            LOG(INFO) << "NO OVERLOADED";
             break;
           }
           // std::shared_ptr<simpleTransaction> t = q_.top();
@@ -1081,7 +1099,7 @@ public:
               continue;
             }
             if(min_cost > -150){
-              LOG(INFO) << "NO";
+              // LOG(INFO) << "NO";
             }
             used[cur_idx] = true;
             useClump = true;
@@ -1092,6 +1110,7 @@ public:
               overload_node.erase(cur.dest);
             }
             // 
+            int old = cur.dest;
             cur.UpdateDest(idle_coord_id);
             // 
             busy[idle_coord_id] += cur.hot;
@@ -1099,21 +1118,25 @@ public:
             if(idle_node[idle_coord_id] <= 0){
               idle_node.erase(idle_coord_id);
             }
+            // LOG(INFO) << i << " " << cur.txns[0]->keys[0] << " " << cur.txns[0]->keys[1] << " " << old << " -> " << idle_coord_id;
             // LOG(INFO) << " after move : " << cur.hot;
             // for(size_t j = 0 ; j < context.coordinator_num; j ++ ){
             //   LOG(INFO) <<" busy[" << j << "] = " << busy[j];
             // }
           }
-          if(cal_load_distribute(aver_val, busy) <= threshold) {
-            break;
-          }
+          // if(cal_load_distribute(aver_val, busy) <= threshold) {
+          //   LOG(INFO) << "BALANCED";
+          //   break;
+          // }
           if(overload_node.size() == 0 || idle_node.size() == 0){
+            LOG(INFO) << "NO OVERLOADED";
             break;
           }
 
         }
         if(!useClump){
           is_ok = false;
+          LOG(INFO) << "?? ";
         }
       } while(cal_load_distribute(aver_val, busy) > threshold && is_ok);
   }
@@ -1375,7 +1398,7 @@ public:
     auto last_timestamp_ = start_time;
     int trigger_time_interval = context.workload_time * 1000; // unit sec.
 
-    int start_offset = 30 * 1000; // 10 * 1000 * 2; // debug
+    int start_offset = (context.workload_time - 20) * 1000; // 10 * 1000 * 2; // debug
     // 
     if(context.repartition_strategy == "clay"){
       start_offset = 0 * 1000;
@@ -1720,6 +1743,9 @@ protected:
   int dispatcher_id;// = 0;
   int cur_txn_num;//  = context.batch_size / dispatcher_num; 
   uint64_t global_id = 0;
+
+  int migrate_times = 0;
+  int last_workload_type = -1;
 };
 } // namespace group_commit
 

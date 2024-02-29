@@ -35,9 +35,9 @@ public:
   // const int hot_area_size = 6;
   static const double get_thresh(const Context &context){
     if(context.protocol == "MyClay"){
-      return 0.03;
+      return 0.05;
     } else {
-      return 0.03;
+      return 0.05;
     }
   }
   static int get_workload_type(const Context &context, double cur_timestamp){
@@ -137,7 +137,7 @@ public:
 
       first_key = key_range * static_cast<int32_t>(context.keysPerPartition) + 
                 random.uniform_dist(offset,
-                                    offset + range * 10) / 10 * 10;
+                                    offset + range) / 10 * 10;
     }
 
     int first_key_index = random.uniform_dist(0, query_size - 1);

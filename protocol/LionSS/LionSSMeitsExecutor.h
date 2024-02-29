@@ -249,8 +249,8 @@ public:
         auto debug = transaction->debug_record_keys();
         auto debug_master = transaction->debug_record_keys_master();
 
-        LOG(INFO) << i << "(" << transaction->migrate_cnt << ") : " << debug[0] << " " << debug_master[0] << " | "
-                                << debug[1] << " " << debug_master[1]; 
+        // LOG(INFO) << i << "(" << transaction->migrate_cnt << ") : " << debug[0] << " " << debug_master[0] << " | "
+        //                         << debug[1] << " " << debug_master[1]; 
         }
 
         // }

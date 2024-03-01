@@ -16,7 +16,7 @@
 #define TFSEIO_BASE_TEMPLATE_ARGUMENTS template <typename N>
 #define TFSEIO_BASE_TYPE TfSessionEntityIOBase<N>
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 /**
@@ -76,4 +76,4 @@ TF_Tensor *&TFSEIO_BASE_TYPE::GetTensor() { return tensor_; }
 template class TfSessionEntityIOBase<float>;
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

@@ -9,7 +9,7 @@
 
 #include "brain/workload/base_tf.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 class TimeSeriesEnsemble {
  public:
@@ -66,4 +66,4 @@ BaseForecastModel &TimeSeriesEnsemble::GetModel(size_t idx) {
 size_t TimeSeriesEnsemble::ModelsSize() const { return models_.size(); }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

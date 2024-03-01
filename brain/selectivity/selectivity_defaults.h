@@ -8,7 +8,7 @@
  * associated with the selectivity prediction task
  **/
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 struct AugmentedNNDefaults {
@@ -29,4 +29,4 @@ const int AugmentedNNDefaults::EPOCHS = 600;
 
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

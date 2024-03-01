@@ -11,7 +11,7 @@
 #include "annoy/kissrandom.h"
 #include "brain/cluster.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 //===--------------------------------------------------------------------===//
@@ -145,4 +145,4 @@ void KDTree::Build(std::set<Cluster *> &clusters) {
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

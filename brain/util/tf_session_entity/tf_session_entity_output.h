@@ -10,7 +10,7 @@
 #define TFSEOUT_TEMPLATE_ARGUMENTS template <typename OutputType>
 #define TFSEOUT_TYPE TfSessionEntityOutput<OutputType>
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 /**
@@ -67,4 +67,4 @@ TFSEOUT_TYPE::TfSessionEntityOutput(const std::vector<int64_t> &dims,
 // Explicit template Initialization
 template class TfSessionEntityOutput<float>;
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

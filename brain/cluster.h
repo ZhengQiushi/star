@@ -12,7 +12,7 @@
 #include <vector>
 #include <stdint.h>
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 //===--------------------------------------------------------------------===//
@@ -161,4 +161,4 @@ double Cluster::CosineSimilarity(std::vector<double> &feature) {
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

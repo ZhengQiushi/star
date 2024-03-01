@@ -30,9 +30,9 @@ for protocol in protocols:
   for i in range(len(ratios)):
     ratio = ratios[i]
     cmd = get_cmd(n, i)
-    print('/home/star/zqs_laji --logtostderr=1 --id=%d --servers="%s" --protocol=%s --partition_num=%d --threads=2 --partitioner=hash2 --batch_size=10000 --batch_flush=500 --lion_with_metis_init=0 --time_to_run=120 --workload_time=120 --sample_time_interval=3 --migration_only=1 --cross_ratio=100 --skew_factor=0 --lock_manager=1' % (id, cmd, protocol, partition_num))
+    print('/home/star/bench_ycsb --logtostderr=1 --id=%d --servers="%s" --protocol=%s --partition_num=%d --threads=2 --partitioner=hash2 --batch_size=10000 --batch_flush=500 --lion_with_metis_init=0 --time_to_run=120 --workload_time=120 --sample_time_interval=3 --migration_only=1 --cross_ratio=100 --skew_factor=0 --lock_manager=1' % (id, cmd, protocol, partition_num))
       
-# /home/star/zqs_laji --logtostderr=1 --id=0 --servers="10.77.70.250:10210;10.77.70.251:10211;10.77.70.248:10210;10.77.70.117:10210;10.77.110.147:10212" --protocol=Star --partition_num=12 --partitioner=hash2 --threads=4 --batch_size=10000 --batch_flush=500 --lion_with_metis_init=0 --time_to_run=60 --workload_time=60 --sample_time_interval=3 --migration_only=1 --n_nop=20000 --v=8 
+# /home/star/bench_ycsb --logtostderr=1 --id=0 --servers="10.77.70.250:10210;10.77.70.251:10211;10.77.70.248:10210;10.77.70.117:10210;10.77.110.147:10212" --protocol=Star --partition_num=12 --partitioner=hash2 --threads=4 --batch_size=10000 --batch_flush=500 --lion_with_metis_init=0 --time_to_run=60 --workload_time=60 --sample_time_interval=3 --migration_only=1 --n_nop=20000 --v=8 
 
 # for protocol in protocols: 
 #   for i in range(len(ratios)):

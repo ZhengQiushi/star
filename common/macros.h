@@ -15,7 +15,7 @@
 #include <assert.h>
 #include <stdexcept>
 
-namespace peloton {
+namespace LionBrain {
 
 //===--------------------------------------------------------------------===//
 // branch predictor hints
@@ -186,4 +186,4 @@ namespace peloton {
 #endif
 
 
-}  // namespace peloton
+}  // namespace LionBrain

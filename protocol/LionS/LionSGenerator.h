@@ -138,7 +138,7 @@ public:
   }
 
   bool prepare_transactions_to_run(WorkloadType& workload, StorageType& storage,
-      ShareQueue<simpleTransaction*, 19600>& transactions_queue_self_){
+      ShareQueue<simpleTransaction*, 1960>& transactions_queue_self_){
     /** 
      * @brief 准备需要的txns
      * @note add by truth 22-01-24
@@ -743,7 +743,7 @@ protected:
 
   lions::ScheduleMeta &schedule_meta;
 
-  ShareQueue<simpleTransaction*, 19600> transactions_queue_self[MAX_COORDINATOR_NUM];
+  ShareQueue<simpleTransaction*, 1960> transactions_queue_self[MAX_COORDINATOR_NUM];
   StorageType storages[MAX_COORDINATOR_NUM];
   std::atomic<uint32_t> is_full_signal_self[MAX_COORDINATOR_NUM];
   std::atomic<int> coordinator_send[MAX_COORDINATOR_NUM];

@@ -76,8 +76,8 @@ target_link_libraries(bench_tpcc common
 
 
 
-# add_executable(zqs_laji_metis metis_test.cpp)
-# target_link_libraries(zqs_laji_metis common 
+# add_executable(bench_metis metis_test.cpp)
+# target_link_libraries(bench_metis common 
 #                     ${jemalloc_lib} ${glog} ${gflags} 
 #                     ${TFlowC_LIBRARIES} ${TFlowC_FRAMEWORK_LIBRARIES}
 #                     ${GMOCK_LIBRARIES} ${GTEST_LIBRARIES} 

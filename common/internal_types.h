@@ -20,7 +20,7 @@
 #define EIGEN_DEFAULT_TO_ROW_MAJOR
 #include "eigen3/Eigen/Dense"
 
-namespace peloton {
+namespace LionBrain {
 
 typedef std::vector<float> vector_t;
 typedef std::vector<std::vector<float>> matrix_t;
@@ -28,4 +28,4 @@ typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
     matrix_eig;
 typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::RowMajor> vector_eig;
 
-}  // namespace peloton
+}  // namespace LionBrain

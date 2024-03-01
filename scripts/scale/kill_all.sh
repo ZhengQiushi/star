@@ -23,7 +23,7 @@ nodes=$(( ${#ips[@]} - 2 ))
 for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
-        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep bench_ycsb | awk '{print \$2}' | xargs sudo kill -9"
         ssh  -i ~/.ssh/zzh_cloud $user@${ips[id]} "rm -rf /core*"
     done 
-bash /home/star/scripts/remove.sh # ps aux | grep zqs_laji | awk '{print $2}' | xargs kill -9
+bash /home/star/scripts/remove.sh # ps aux | grep bench_ycsb | awk '{print $2}' | xargs kill -9

@@ -13,7 +13,7 @@
 #include "brain/util/eigen_util.h"
 #include "brain/util/tf_session_entity/tf_session_entity_io.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 /**
@@ -194,9 +194,9 @@ BaseTFModel::BaseTFModel(const std::string &modelgen_path,
                          const std::string &pymodel_path,
                          const std::string &graph_path)
     : // BaseModel(),
-      modelgen_path_(("/home/star/" + modelgen_path)), // peloton::FileUtil::GetRelativeToRootPath
-      pymodel_path_(("/home/star/" + pymodel_path)), // peloton::FileUtil::GetRelativeToRootPath(
-      graph_path_(("/home/star/" + graph_path)) { // peloton::FileUtil::GetRelativeToRootPath
+      modelgen_path_(("/home/star/" + modelgen_path)), // LionBrain::FileUtil::GetRelativeToRootPath
+      pymodel_path_(("/home/star/" + pymodel_path)), // LionBrain::FileUtil::GetRelativeToRootPath(
+      graph_path_(("/home/star/" + graph_path)) { // LionBrain::FileUtil::GetRelativeToRootPath
   tf_session_entity_ = std::unique_ptr<TfSessionEntity<float, float>>(
       new TfSessionEntity<float, float>());
   // PELOTON_ASSERT(FileUtil::Exists(pymodel_path_));
@@ -217,4 +217,4 @@ void BaseTFModel::GenerateModel(const std::string &args_str) {
   // PELOTON_ASSERT(FileUtil::Exists(graph_path_));
 }
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

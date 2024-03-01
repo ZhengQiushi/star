@@ -19,7 +19,7 @@
 #include "common/bitmap.h"
 
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 //===--------------------------------------------------------------------===//
@@ -321,4 +321,4 @@ QueryClusterer::~QueryClusterer() {
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

@@ -9,7 +9,7 @@
 #include <vector>
 #include "common/internal_types.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 class EigenUtil {
@@ -168,4 +168,4 @@ matrix_eig EigenUtil::PadTop(const matrix_eig &mat, float pad_value,
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

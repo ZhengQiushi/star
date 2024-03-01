@@ -20,7 +20,7 @@
 #include "brain/workload/workload_defaults.h"
 
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
     struct workload_data {
         workload_data(){

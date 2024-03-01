@@ -346,23 +346,23 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
   }
 
   void get_cluster(int sample_cnt, double cur_timestamp, 
-                   peloton::brain::QueryClusterer& cluster, 
-                   std::vector<peloton::brain::Cluster*>& top_k, 
+                   LionBrain::brain::QueryClusterer& cluster, 
+                   std::vector<LionBrain::brain::Cluster*>& top_k, 
                    std::map<std::string, std::vector<double>>& raw_features_){
     // 
     double start_timestamp, end_timestamp;
     start_timestamp = std::max(cur_timestamp - sample_period_num * period_duration, 0.0);
     end_timestamp = cur_timestamp;
 
-    peloton::brain::onlineClustering(raw_features_, start_timestamp, end_timestamp, 
+    LionBrain::brain::onlineClustering(raw_features_, start_timestamp, end_timestamp, 
                                      period_duration, sample_interval, cluster, 
                                      data_pack_sampled);
-    top_k = peloton::brain::getTopCoverage(top_cluster_num, cluster);
+    top_k = LionBrain::brain::getTopCoverage(top_cluster_num, cluster);
 
     DCHECK(top_k.size() <= top_cluster_num);
   }
-  void train_and_predict(peloton::brain::my_predictor& predictor_,
-                         std::vector<peloton::brain::Cluster*>& top_k, 
+  void train_and_predict(LionBrain::brain::my_predictor& predictor_,
+                         std::vector<LionBrain::brain::Cluster*>& top_k, 
                          int sample_num,
                          std::map<std::string, std::vector<double>>& raw_features_) {
     /**
@@ -372,7 +372,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     std::vector<std::vector<int> > data_raw(top_cluster_num, std::vector<int>(sample_num, 0)); // keep feats_num = 3
     for(size_t i = 0; i < top_k.size(); i ++ ){
       // 
-      peloton::brain::Cluster* cur = top_k[i];
+      LionBrain::brain::Cluster* cur = top_k[i];
       auto& templates_ = cur->get_templates();
 
       for(auto it = templates_.begin(); it != templates_.end(); it ++ ){
@@ -386,13 +386,13 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
         }
       }
     }
-    peloton::matrix_eig data_mat = peloton::brain::GetWorkload(data_raw); // frequnce[i][j]  0-2 | 0-1600
+    LionBrain::matrix_eig data_mat = LionBrain::brain::GetWorkload(data_raw); // frequnce[i][j]  0-2 | 0-1600
     // LOG(INFO) << data_mat;
 
     predictor_.train(data_mat);
 
     // predict next period
-    peloton::matrix_eig result = predictor_.predict(data_mat);
+    LionBrain::matrix_eig result = predictor_.predict(data_mat);
 
     int feature_nums = period_duration / sample_interval;
 
@@ -415,8 +415,8 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
     auto startTime = std::chrono::steady_clock::now();
 
     int feature_nums = period_duration / sample_interval;
-    peloton::brain::QueryClusterer cluster(feature_nums, threshold);
-    std::vector<peloton::brain::Cluster*> top_k;
+    LionBrain::brain::QueryClusterer cluster(feature_nums, threshold);
+    std::vector<LionBrain::brain::Cluster*> top_k;
 
     // 
     int preiod = feature_nums;
@@ -428,7 +428,7 @@ bool prepare_for_transmit_clay(std::vector<myMove<WorkloadType> >& moves,
 
     float val_split = 0.5;
 
-    peloton::brain::my_predictor predictor_(preiod, bptt, horizon, val_split);
+    LionBrain::brain::my_predictor predictor_(preiod, bptt, horizon, val_split);
 
     while (!stopFlag.load()) {
       // 
@@ -1327,7 +1327,7 @@ public:
   HashMap<9916, std::string, int> data_pack_map;
   // std::unordered_map<std::string, int> data_pack_map;
   std::unordered_map<std::string, int> data_pack_map_name_index;
-  peloton::brain::workload_data data_pack_sampled; // name - timestamp - times 
+  LionBrain::brain::workload_data data_pack_sampled; // name - timestamp - times 
 
   std::atomic<uint32_t>& recorder_status;
   std::atomic<uint32_t>& transmit_status;
@@ -1343,7 +1343,7 @@ public:
   std::unique_ptr<Clay<WorkloadType> > my_clay;
 
   std::mutex predict_res;
-  peloton::matrix_eig cur_predict_for_next_period;
+  LionBrain::matrix_eig cur_predict_for_next_period;
 
 };
 

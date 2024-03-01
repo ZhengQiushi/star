@@ -7,11 +7,11 @@
  * Simple utility functions associated with Tensorflow
  */
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 class TFUtil {
  public:
   static const char *GetTFVersion() { return TF_Version(); }
 };
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

@@ -7,7 +7,7 @@
 
 #include "brain/workload/base_tf.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 class TimeSeriesLinearReg : public virtual BaseForecastModel {
  public:
@@ -85,4 +85,4 @@ float TimeSeriesLinearReg::ValidateEpoch(const matrix_eig &data) {
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

@@ -7,7 +7,7 @@
 
 #include "brain/util/eigen_util.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 // Forward declarations
@@ -254,4 +254,4 @@ bool ModelUtil::EarlyStop(vector_t val_losses, size_t patience, float delta) {
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

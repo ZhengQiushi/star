@@ -9,7 +9,7 @@
  * associated with the workload prediction task
  **/
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 /**
@@ -80,4 +80,4 @@ const int LinearRegWorkloadDefaults::BPTT = 90;
 const int KernelRegWorkloadDefaults::BPTT = 90;
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

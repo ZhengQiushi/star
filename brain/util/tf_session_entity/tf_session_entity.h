@@ -13,7 +13,7 @@
   template <typename InputType, typename OutputType>
 #define TFSE_TYPE TfSessionEntity<InputType, OutputType>
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 // Forward Declarations
@@ -245,4 +245,4 @@ bool TFSE_TYPE::IsStatusOk() { return TF_GetCode(status_) == TF_OK; }
 // Explicit template Initialization
 template class TfSessionEntity<float, float>;
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

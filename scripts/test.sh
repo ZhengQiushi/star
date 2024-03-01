@@ -25,7 +25,7 @@ python3 /home/star/scripts/distribute_script.py $port /home/star/scripts/$worklo
 for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
-        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep bench_ycsb | awk '{print \$2}' | xargs sudo kill -9"
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"rm -rf /core* \" & "
     done 
 
@@ -49,12 +49,12 @@ sleep 3s
 # wait for finishing
 sleep ${run_time}s
 
-bash /home/star/scripts/remove.sh # ps aux | grep zqs_laji | awk '{print $2}' | xargs kill -9
+bash /home/star/scripts/remove.sh # ps aux | grep bench_ycsb | awk '{print $2}' | xargs kill -9
 
 for id in $(seq 0 $nodes)
 #TODO@luoyu: if the process has not finished yet, kill it before copy
     do
-        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep zqs_laji | awk '{print \$2}' | xargs sudo kill -9"
+        ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "ps aux | grep bench_ycsb | awk '{print \$2}' | xargs sudo kill -9"
         ssh -i ~/.ssh/zzh_cloud $user@${ips[id]} "docker exec zqs_0 bash -c \"rm -rf /core* \" & "
     done 
 

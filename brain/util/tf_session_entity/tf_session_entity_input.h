@@ -9,7 +9,7 @@
 #define TFSEIN_TEMPLATE_ARGUMENTS template <typename InputType>
 #define TFSEIN_TYPE TfSessionEntityInput<InputType>
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 /**
@@ -120,4 +120,4 @@ InputType *TFSEIN_TYPE::Flatten(
 template class TfSessionEntityInput<float>;
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain

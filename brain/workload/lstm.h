@@ -13,7 +13,7 @@
 #include <string>
 #include "brain/workload/base_tf.h"
 
-namespace peloton {
+namespace LionBrain {
 namespace brain {
 
 template <typename Type>
@@ -252,4 +252,4 @@ float TimeSeriesLSTM::ValidateEpoch(const matrix_eig &data, matrix_eig &y, matri
 }
 
 }  // namespace brain
-}  // namespace peloton
+}  // namespace LionBrain
